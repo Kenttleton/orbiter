@@ -415,7 +415,40 @@ lint:
 
 clean:
     rm -rf bin/
+
+# Cross-compilation target for CI release builds.
+# Usage: just build-release orbit linux amd64 v1.2.3
+build-release binary goos goarch version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    EXT=""
+    if [ "{{goos}}" = "windows" ]; then EXT=".exe"; fi
+    mkdir -p dist
+    CGO_ENABLED=0 GOOS={{goos}} GOARCH={{goarch}} go build \
+        -ldflags="-s -w -X main.version={{version}}" \
+        -o "dist/{{binary}}-{{goos}}-{{goarch}}${EXT}" \
+        ./cmd/{{binary}}
 ```
+
+### CI/CD Notes
+
+The `build-orbit` and `build-orbiter` targets are for local development only — they output to `bin/` with no cross-compilation flags.
+
+The `build-release` recipe is the CI/CD entrypoint. It accepts four parameters (`binary`, `goos`, `goarch`, `version`) and:
+
+- Outputs to `dist/` with a platform-suffixed filename (e.g. `orbit-linux-amd64`, `orbiter-darwin-arm64.exe`)
+- Injects the version string via `-X main.version`
+- Sets `CGO_ENABLED=0` for portable static binaries
+- Uses a bash shebang so the `.exe` extension logic works on any CI runner
+
+The GitHub release workflows invoke it as:
+
+```bash
+just build-release orbit   $GOOS $GOARCH $VERSION
+just build-release orbiter $GOOS $GOARCH $VERSION
+```
+
+Both `orbit` and `orbiter` are built for every target in the release matrix.
 
 ---
 
