@@ -1,0 +1,119 @@
+name: Pre-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      linux_amd64:
+        description: 'linux/amd64'
+        type: boolean
+        default: true
+      linux_arm64:
+        description: 'linux/arm64'
+        type: boolean
+        default: true
+      darwin_amd64:
+        description: 'darwin/amd64 (macOS Intel)'
+        type: boolean
+        default: true
+      darwin_arm64:
+        description: 'darwin/arm64 (macOS Apple Silicon)'
+        type: boolean
+        default: true
+      windows_amd64:
+        description: 'windows/amd64'
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    name: Resolve target matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - id: build-matrix
+        run: |
+          TARGETS=()
+          if [ "${{ inputs.linux_amd64 }}"  = "true" ]; then TARGETS+=('{"goos":"linux","goarch":"amd64"}');   fi
+          if [ "${{ inputs.linux_arm64 }}"  = "true" ]; then TARGETS+=('{"goos":"linux","goarch":"arm64"}');   fi
+          if [ "${{ inputs.darwin_amd64 }}" = "true" ]; then TARGETS+=('{"goos":"darwin","goarch":"amd64"}');  fi
+          if [ "${{ inputs.darwin_arm64 }}" = "true" ]; then TARGETS+=('{"goos":"darwin","goarch":"arm64"}');  fi
+          if [ "${{ inputs.windows_amd64 }}" = "true" ]; then TARGETS+=('{"goos":"windows","goarch":"amd64"}'); fi
+          JOINED=$(printf '%s,' "${TARGETS[@]}" | sed 's/,$//')
+          echo "matrix={\"include\":[${JOINED}]}" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: extractions/setup-just@v2
+
+      - name: Test
+        run: just test
+
+      - name: Build binaries
+        run: |
+          VERSION="${{ github.ref_name }}"
+          just build-release orbit   ${{ matrix.goos }} ${{ matrix.goarch }} ${VERSION}
+          just build-release orbiter ${{ matrix.goos }} ${{ matrix.goarch }} ${VERSION}
+
+      - name: Archive (Unix)
+        if: matrix.goos != 'windows'
+        run: |
+          SUFFIX="${{ matrix.goos }}-${{ matrix.goarch }}"
+          cd dist
+          tar -czf "orbit-${SUFFIX}.tar.gz"   "orbit-${SUFFIX}"
+          tar -czf "orbiter-${SUFFIX}.tar.gz" "orbiter-${SUFFIX}"
+          rm "orbit-${SUFFIX}" "orbiter-${SUFFIX}"
+
+      - name: Archive (Windows)
+        if: matrix.goos == 'windows'
+        run: |
+          SUFFIX="${{ matrix.goos }}-${{ matrix.goarch }}"
+          cd dist
+          zip "orbit-${SUFFIX}.zip"   "orbit-${SUFFIX}.exe"
+          zip "orbiter-${SUFFIX}.zip" "orbiter-${SUFFIX}.exe"
+          rm "orbit-${SUFFIX}.exe" "orbiter-${SUFFIX}.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          if-no-files-found: error
+
+  prerelease:
+    name: Create Pre-release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: true
+          fail_on_unmatched_files: true
