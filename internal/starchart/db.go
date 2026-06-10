@@ -1,0 +1,62 @@
+package starchart
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	_ "modernc.org/sqlite"
+)
+
+// StarChart wraps the SQLite connection for the Star Chart database.
+type StarChart struct {
+	db *sql.DB
+}
+
+// Open opens or creates the Star Chart database at path, creating parent
+// directories as needed, and applies any pending migrations.
+func Open(path string) (*StarChart, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return nil, fmt.Errorf("create starchart directory: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open starchart: %w", err)
+	}
+
+	// SQLite disables foreign key enforcement by default.
+	if _, err := db.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
+
+	sc := &StarChart{db: db}
+	if err := sc.migrate(context.Background()); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+
+	return sc, nil
+}
+
+// Close closes the underlying database connection.
+func (sc *StarChart) Close() error {
+	return sc.db.Close()
+}
+
+// SchemaVersion returns the highest applied migration version.
+// Returns 0 if no migrations have been applied.
+func (sc *StarChart) SchemaVersion() (int, error) {
+	var version int
+	row := sc.db.QueryRowContext(
+		context.Background(),
+		"SELECT COALESCE(MAX(version), 0) FROM schema_version",
+	)
+	if err := row.Scan(&version); err != nil {
+		return 0, fmt.Errorf("query schema version: %w", err)
+	}
+	return version, nil
+}
