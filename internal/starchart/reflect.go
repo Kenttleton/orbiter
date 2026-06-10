@@ -27,7 +27,14 @@ func reflectInsertFields(record any) (cols, placeholders []string, vals []any) {
 		}
 		cols = append(cols, tag)
 		placeholders = append(placeholders, "?")
-		vals = append(vals, v.Field(i).Interface())
+		// Convert empty strings to nil so nullable FK columns receive NULL
+		// rather than an empty string that would violate referential integrity.
+		fv := v.Field(i)
+		if fv.Kind() == reflect.String && fv.String() == "" {
+			vals = append(vals, nil)
+		} else {
+			vals = append(vals, fv.Interface())
+		}
 	}
 	return
 }
@@ -61,14 +68,35 @@ func reflectScan(row scanner, dest any) error {
 	v = v.Elem()
 	t := v.Type()
 	var ptrs []any
+	// nullableIdx tracks which string fields need post-scan NULL handling.
+	type nullIdx struct {
+		fieldIdx int
+		ns       sql.NullString
+	}
+	var nullables []*nullIdx
+
 	for i := 0; i < t.NumField(); i++ {
 		tag := t.Field(i).Tag.Get("db")
 		if tag == "" || tag == "-" {
 			continue
 		}
-		ptrs = append(ptrs, v.Field(i).Addr().Interface())
+		// Use sql.NullString for string fields so NULL columns don't cause
+		// "converting NULL to string is unsupported" errors.
+		if t.Field(i).Type.Kind() == reflect.String {
+			n := &nullIdx{fieldIdx: i}
+			nullables = append(nullables, n)
+			ptrs = append(ptrs, &n.ns)
+		} else {
+			ptrs = append(ptrs, v.Field(i).Addr().Interface())
+		}
 	}
-	return row.Scan(ptrs...)
+	if err := row.Scan(ptrs...); err != nil {
+		return err
+	}
+	for _, n := range nullables {
+		v.Field(n.fieldIdx).SetString(n.ns.String)
+	}
+	return nil
 }
 
 // buildWhere constructs a WHERE clause and its argument list from filters.
