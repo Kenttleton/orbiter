@@ -22,7 +22,7 @@ The scaffold establishes the project structure, binary separation, Star Chart sc
 | CLI framework | Cobra | Standard Go CLI framework, subcommand tree, flag inheritance |
 | TUI framework | Bubble Tea + Lipgloss | Charmbracelet ecosystem, composable views, styled output |
 | SQLite driver | `modernc.org/sqlite` | Pure Go, no CGo, cross-compiles cleanly to all targets |
-| ID generation | ULID | Readable, sortable, globally unique entity identifiers |
+| ID generation | Custom OrbitID | 16-char snowflake: 8 timestamp + 2 entity type + 6 random, base36, stdlib only |
 | Build tooling | Just (Justfile) | Cross-platform task runner |
 | Migrations | Embedded SQL via `go:embed` | Simple integer versioning, no external migration tooling |
 
@@ -33,11 +33,13 @@ The scaffold establishes the project structure, binary separation, Star Chart sc
 Two binaries are produced from one Go module:
 
 ### `orbit` — CLI
+
 - All actionable commands (CRUD, Six Commands)
 - Source of truth for all Star Chart operations
 - Supports styled output (default) and JSON output (flag or config)
 
 ### `orbiter` — TUI
+
 - Read-only viewer for the universe and Beacons (Phase 1–4)
 - CRUD and Calibration via TUI deferred to Phase 5
 - Shells out to `orbit` subprocesses and parses JSON output
@@ -53,7 +55,7 @@ Two binaries are produced from one Go module:
 
 ## Project Structure
 
-```
+```text
 orbiter/
 ├── cmd/
 │   ├── orbit/
@@ -62,9 +64,9 @@ orbiter/
 │       └── main.go          ← TUI entry point
 ├── internal/
 │   ├── starchart/           ← SQLite connection, migrations, transactions
-│   ├── models/              ← Domain structs with ULID + JSON tags
+│   ├── models/              ← Domain structs with ID + JSON tags
 │   ├── commands/            ← Cobra command tree + DI wiring
-│   ├── resolver/            ← Alias → ULID middleware layer
+│   ├── resolver/            ← Alias → ID middleware layer
 │   ├── output/              ← Styled + JSON renderer interface and impls
 │   └── tui/                 ← Bubble Tea views + orbit subprocess runner
 ├── migrations/              ← Embedded SQL migration files
@@ -89,27 +91,81 @@ The Star Chart is a SQLite database at `~/.orbiter/starchart.db` by default.
 1. `ORBIT_STARCHART` environment variable
 2. `~/.orbiter/starchart.db`
 
-### The Alias Table as Global ULID Registry
+### OrbitID Format
 
-The `aliases` table is the single registry for all entity ULIDs. Every entity — regardless of type — is registered here when created. This guarantees:
+Every entity is assigned an **OrbitID** — a 16-character, time-sortable, self-describing identifier generated entirely from stdlib.
 
-- No ULID collisions across entity tables
-- Entity type is stored once, in one place
-- Cross-table references use only `entity_id` (the ULID) — no `entity_type` column needed elsewhere
+```text
+[8 chars timestamp][2 chars entity type][6 chars random]
+ 0k3m2r4a           pl                   7b2c1f
+```
+
+**Structure:**
+
+|Segment|Length|Encoding|Source|
+|---|---|---|---|
+|Timestamp|8 chars|base36, ms since 2025-01-01 epoch|`time.Now().UnixMilli()`|
+|Entity type|2 chars|fixed prefix per type|see table below|
+|Random|6 chars|base36|`math/rand/v2` (non-crypto)|
+
+**Entity type prefixes:**
+
+|Entity|Prefix|
+|---|---|
+|vessel|`vs`|
+|galaxy|`gx`|
+|solar_system|`sy`|
+|planet|`pl`|
+|callsign|`cs`|
+|transponder|`tp`|
+|resource|`rs`|
+|default|`df`|
+|beacon|`bk`|
+|navigation_history|`nh`|
+
+**Properties:**
+
+- Lexicographically sortable by creation time
+- Entity type filterable without a JOIN: `WHERE id LIKE '__________pl%'`
+- `ParseID(id)` extracts entity type and timestamp from the ID directly
+- Resolver can infer entity type from ID format, skipping a DB round-trip
+- No external dependency — pure stdlib (`math/rand/v2`, `time`, `strconv`)
+- `math/rand/v2` is appropriate: physical machine access = Star Chart access
+
+**API in `internal/models/id.go`:**
+
+```go
+type OrbitID struct {
+    Raw        string
+    EntityType string
+    Timestamp  time.Time
+}
+
+func NewID(entityType string) string       // generate a new OrbitID string
+func ParseID(id string) (OrbitID, error)  // extract type + timestamp from ID
+func IsID(s string) bool                  // true if s matches OrbitID format
+```
+
+### The Alias Table as Global ID Registry
+
+The `aliases` table is the single registry for all entity IDs. Every entity — regardless of type — is registered here when created. This guarantees:
+
+- No ID collisions across entity tables
+- Entity type is stored once, in one place (also derivable from the ID itself)
+- Cross-table references use only `entity_id` — no `entity_type` column needed elsewhere
 
 ```sql
 CREATE TABLE aliases (
-    ulid        TEXT PRIMARY KEY,   -- globally unique entity identifier
-    name        TEXT UNIQUE,        -- human-readable name (optional but encouraged)
+    id          TEXT PRIMARY KEY,   -- OrbitID: 16-char snowflake
+    name        TEXT UNIQUE NOT NULL, -- defaults to id when no alias given
     entity_type TEXT NOT NULL,      -- 'vessel'|'galaxy'|'solar_system'|'planet'|
                                     -- 'callsign'|'transponder'|'resource'
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX aliases_name_idx ON aliases(name) WHERE name IS NOT NULL;
 ```
 
-**CLI resolution:** input → check `aliases.name` → return `ulid` → operate on record.
-**ULID fallback:** if input matches a ULID directly, skip alias lookup.
+**CLI resolution:** input → check `aliases.name` → return `id` → operate on record.
+**ID fallback:** if input matches an OrbitID directly, skip alias lookup.
 **Alias ownership:** aliases are created, updated, and removed exclusively through CRUD operations — never by the Six Commands.
 
 ### Entity Tables
@@ -122,7 +178,7 @@ Single-row. Represents the local workstation.
 
 ```sql
 CREATE TABLE vessel (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -133,7 +189,7 @@ One row inserted on first run. Single-row enforced by application logic in `orbi
 
 ```sql
 CREATE TABLE galaxies (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -142,8 +198,8 @@ CREATE TABLE galaxies (
 
 ```sql
 CREATE TABLE solar_systems (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    galaxy_id  TEXT NOT NULL REFERENCES aliases(ulid),
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
+    galaxy_id  TEXT NOT NULL REFERENCES aliases(id),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -152,9 +208,9 @@ CREATE TABLE solar_systems (
 
 ```sql
 CREATE TABLE planets (
-    ulid            TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    galaxy_id       TEXT NOT NULL REFERENCES aliases(ulid),
-    solar_system_id TEXT REFERENCES aliases(ulid),  -- optional
+    id              TEXT PRIMARY KEY REFERENCES aliases(id),
+    galaxy_id       TEXT NOT NULL REFERENCES aliases(id),
+    solar_system_id TEXT REFERENCES aliases(id),  -- optional
     repo_url        TEXT,
     repo_path       TEXT,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -162,12 +218,13 @@ CREATE TABLE planets (
 ```
 
 #### `callsigns`
+
 Represents the Captain's active identity. Scoped to vessel or galaxy.
 
 ```sql
 CREATE TABLE callsigns (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    entity_id  TEXT NOT NULL REFERENCES aliases(ulid),  -- vessel or galaxy
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
+    entity_id  TEXT NOT NULL REFERENCES aliases(id),  -- vessel or galaxy
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -180,9 +237,9 @@ credential pointers that activates alongside a callsign for a given context.
 
 ```sql
 CREATE TABLE transponders (
-    ulid         TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    callsign_id  TEXT NOT NULL REFERENCES aliases(ulid),  -- required, always callsign-scoped
-    entity_id    TEXT REFERENCES aliases(ulid),            -- optional: narrows to planet/system
+    id           TEXT PRIMARY KEY REFERENCES aliases(id),
+    callsign_id  TEXT NOT NULL REFERENCES aliases(id),  -- required, always callsign-scoped
+    entity_id    TEXT REFERENCES aliases(id),            -- optional: narrows to planet/system
     service      TEXT NOT NULL,     -- e.g. 'github' | '1password' | 'aws'
     location     TEXT NOT NULL,     -- pointer to credential (never the credential itself)
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -195,8 +252,8 @@ Tooling, runtimes, and capabilities. Scoped to any entity via `entity_id`.
 
 ```sql
 CREATE TABLE resources (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    entity_id  TEXT NOT NULL REFERENCES aliases(ulid),
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
+    entity_id  TEXT NOT NULL REFERENCES aliases(id),
     kind       TEXT NOT NULL,    -- e.g. 'node' | 'python' | 'docker'
     manager    TEXT,             -- e.g. 'nvm' | 'uv' | 'rustup'
     version    TEXT,
@@ -205,12 +262,13 @@ CREATE TABLE resources (
 ```
 
 #### `defaults`
+
 Configuration defaults scoped to any entity. Vessel-level defaults include output format.
 
 ```sql
 CREATE TABLE defaults (
-    ulid       TEXT PRIMARY KEY REFERENCES aliases(ulid),
-    entity_id  TEXT NOT NULL REFERENCES aliases(ulid),
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
+    entity_id  TEXT NOT NULL REFERENCES aliases(id),
     key        TEXT NOT NULL,
     value      TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -221,28 +279,31 @@ CREATE TABLE defaults (
 **Output format default:** stored as `key='output_format'`, `value='styled'|'json'` on the vessel record. Exact CRUD command syntax defined in Phase 2.
 
 #### `navigation_history`
+
 Immutable log of navigation events. Subject to retention cleanup (see below).
 
 ```sql
 CREATE TABLE navigation_history (
-    ulid             TEXT PRIMARY KEY,
-    from_entity_id   TEXT REFERENCES aliases(ulid),  -- null on first jump
-    to_entity_id     TEXT NOT NULL REFERENCES aliases(ulid),
+    id               TEXT PRIMARY KEY,
+    from_entity_id   TEXT REFERENCES aliases(id),  -- null on first jump
+    to_entity_id     TEXT NOT NULL REFERENCES aliases(id),
     command          TEXT NOT NULL,
     occurred_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE INDEX navigation_history_occurred_idx ON navigation_history(occurred_at);
 ```
 
 **Retention:** navigation history is cleaned on a configurable cycle. Default retention is 90 days. The cleanup operation is an explicit `orbit vessel history clean` command and also runs automatically during `orbit scan`. Retention period is stored as a vessel-level default (`key='history_retention_days'`).
 
 #### `beacons`
+
 Most recent verified observation of an entity. One beacon per entity.
 
 ```sql
 CREATE TABLE beacons (
-    ulid         TEXT PRIMARY KEY,
-    entity_id    TEXT NOT NULL REFERENCES aliases(ulid),
+    id           TEXT PRIMARY KEY,
+    entity_id    TEXT NOT NULL REFERENCES aliases(id),
     status       TEXT NOT NULL,       -- 'healthy' | 'drifted' | 'unknown'
     observations TEXT NOT NULL,       -- JSON array of observation strings
     verified_at  DATETIME NOT NULL,
@@ -272,38 +333,40 @@ Hybrid approach: generic CRUD methods for simple entity operations, full transac
 **Generic CRUD methods** (used by Phase 2 CRUD commands):
 
 - `Insert(ctx, table string, record any) error` — insert a model by table name
-- `Get(ctx, table, ulid string, dest any) error` — fetch single record by ULID
+- `Get(ctx, table, id string, dest any) error` — fetch single record by ID
 - `List(ctx, table string, dest any, filters ...Filter) error` — list records with optional filters
-- `Update(ctx, table, ulid string, fields map[string]any) error` — partial update by ULID
-- `Delete(ctx, table, ulid string) error` — delete by ULID
+- `Update(ctx, table, id string, fields map[string]any) error` — partial update by ID
+- `Delete(ctx, table, id string) error` — delete by ID
 
 These cover the straightforward CRUD path without hand-writing queries per entity type.
 
 **Transaction pipeline** (used by Six Commands and resolver):
 
 - `(*StarChart).Tx(fn func(*Tx) error) error` — full Prepare → Validate → Execute → Verify → Commit wrapper for operations that touch multiple tables or require side-effect coordination
-- `(*StarChart).Resolve(input string) (Alias, error)` — optimized single query: checks `aliases.name` first, falls back to ULID match
+- `(*StarChart).Resolve(input string) (Alias, error)` — optimized single query: checks `aliases.name` first, falls back to direct ID match
 
 ### `internal/models`
 
-- One struct per entity with ULID field and JSON tags
+- One struct per entity with `ID` field and JSON tags
 - `Vessel`, `Galaxy`, `SolarSystem`, `Planet`, `Callsign`, `Transponder`, `Resource`, `Alias`, `Default`, `Beacon`, `NavigationHistory`
 - Pure data structures — no database logic
 
 ### `internal/resolver`
-Alias → ULID resolution as a standalone middleware layer, dependency-injected into all commands.
+
+Alias → ID resolution as a standalone middleware layer, dependency-injected into all commands.
 
 ```go
 type Resolver interface {
-    Resolve(input string) (ulid string, entityType string, err error)
+    Resolve(input string) (id string, entityType string, err error)
 }
 ```
 
-- Checks `aliases.name` first, falls back to direct ULID if input matches ULID format
+- Checks `aliases.name` first, falls back to direct ID match if input matches OrbitID format
 - Returns a typed result so callers know what kind of entity they're operating on
 - Consumed by commands via DI — no command duplicates this logic
 
 ### `internal/output`
+
 Output renderer as a dependency-injected resource at the command interface.
 
 ```go
@@ -376,7 +439,7 @@ Each step shows: fraction counter + thematic label (primary) + plain operational
 
 All state-changing operations follow the pipeline from the constitution:
 
-```
+```text
 Prepare   → validate inputs, resolve aliases, check preconditions
 Validate  → check Star Chart consistency (no clash, no orphan)
 Execute   → perform external side effects (if any)
