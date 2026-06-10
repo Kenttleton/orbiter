@@ -81,19 +81,36 @@ orbit calibrate payment-api
 
 ## Building the Universe
 
-Separate CRUD commands construct the Star Chart:
+Three build verbs construct the Star Chart:
+
+| Verb | Purpose | Beacon result |
+|---|---|---|
+| `add` | Register an entity (metadata only) | `unverified` |
+| `init` | Provision an entity in the real world | `verified` or `failed` |
+| `attach` | Wire two entities together in the graph | — |
 
 ```bash
+# Hierarchy
 orbit galaxy add acme
-orbit planet add payment-api --galaxy acme --repo https://github.com/acme/payment-api
+orbit system add backend --galaxy acme
 
-orbit callsign add kent-acme --galaxy acme
-orbit transponder add acme-github --callsign kent-acme --service github --location ~/.ssh/id_ed25519_acme
+# Identity and credentials
+orbit callsign add kent-acme
+orbit transponder add acme-github --role file --brand github --location ~/.ssh/id_ed25519_acme
+orbit attach acme-github kent-acme
+orbit attach kent-acme acme
 
-orbit resource add --planet payment-api --kind node --manager nvm --version 20
+# Tooling (at vessel level — available everywhere)
+orbit resource add nvm --role manager --brand nvm --manages '["node"]'
+orbit attach nvm vessel
+
+# Project
+orbit planet init payment-api https://github.com/acme/payment-api
 ```
 
-Context is inferred from current navigation state where possible — you don't need to specify `--galaxy` if you're already in that galaxy.
+`planet init` runs detection — integrations scan the project directory and suggest resources to attach based on file patterns and sync folder detection. The Captain confirms before anything is provisioned.
+
+Context is inferred from current navigation state where possible.
 
 ---
 
@@ -163,14 +180,22 @@ Failed operations roll back. The Star Chart is never left in an invalid state.
 
 **Orbiter coordinates ecosystem tooling — it does not replace it.**
 
-| Ecosystem | Manager |
+Each tool has an integration (`role + brand`) that knows how to install, verify, and configure it. Default integrations include:
+
+| Ecosystem | Integration |
 |---|---|
-| Node.js | nvm |
-| Python | uv |
-| Ruby | rbenv |
-| Rust | rustup |
-| .NET | official SDK tooling |
-| Go | native tooling |
+| Node.js | manager + nvm |
+| Python | manager + uv |
+| Ruby | manager + rbenv |
+| Rust | manager + rustup |
+| .NET | manager + dotnet |
+| Go | runtime + go |
+
+New integrations are compiled Go packages. Drop a package into `internal/integrations/`, run `just build`.
+
+**Orbiter manages environment configuration state — not data state.**
+
+Drift means: a tool is not installed, a credential is expired, a remote is unreachable, a manager is misconfigured. It does not mean files are out of sync, a database has stale data, or an upstream repo has new commits.
 
 ---
 

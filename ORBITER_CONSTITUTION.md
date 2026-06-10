@@ -172,20 +172,28 @@ Galaxy transitions may automatically suggest Callsign changes.
 
 # Transponders
 
-Transponders represent credentials, secrets, and authentication material. 
+Transponders point to credential locations and authentication services. They never store secrets.
 
-Storing keys and secrets is strictly prohibited. 
+Storing keys and secrets is strictly prohibited.
 
-Instead Orbiter stores locations and services that contain this information to integrate with.
+Orbiter stores where credentials live and how to access them — not the credentials themselves.
+
+Every transponder has a `role` (access mechanism) and a `brand` (the service it grants access to):
+
+| Role | Represents |
+| --- | --- |
+| `file` | Path to a key or cert file on disk |
+| `env` | Environment variable name |
+| `keychain` | OS keychain or credential store reference |
+| `vault` | External secret manager (1Password, Doppler, HashiCorp Vault) |
+| `agent` | Auth agent socket (SSH agent, GPG agent) |
 
 Examples:
 
-* GitHub credentials
-* AWS credentials
-* Azure credentials
-* SSH keys
-* API tokens
-* 1Password
+* `file + github` → SSH key file for GitHub access
+* `vault + aws` → AWS credentials in 1Password
+* `env + claude` → Claude API key in an environment variable
+* `agent + github` → GitHub access via SSH agent
 
 Galaxy transitions may automatically suggest Transponder changes.
 
@@ -195,77 +203,30 @@ Galaxy transitions may automatically suggest Transponder changes.
 
 Resources describe tooling, dependencies, runtimes, and capabilities.
 
-Resources may exist at multiple scopes.
+Every resource has a `role` (classification) and a `brand` (specific implementation). The combination drives behavior.
 
-Resources are not part of the navigation hierarchy.
+Resources are standalone entities. Scope is determined by attachments to hierarchy nodes via the Star Chart graph.
 
-They form a separate inheritance hierarchy.
+**Resource roles:**
 
-## Orbiter Resources
+| Role | Represents | Example brands |
+| --- | --- | --- |
+| `manager` | Installs and manages other resources | nvm, volta, homebrew, apt, uv |
+| `runtime` | Application that runs on the machine | node, python, ruby, postgres, figma |
+| `tool` | CLI tool or command-line application | git, docker, kubectl, make |
+| `remote` | Remote sync target accessed via protocol | github, dropbox, s3, onedrive |
+| `filesystem` | Local path or directory | (config-driven) |
 
-Machine-wide tooling.
+Examples of role+brand combinations:
 
-Examples:
+* `manager + nvm` = nvm version manager
+* `runtime + node` = Node.js runtime
+* `runtime + figma` = Figma desktop application
+* `tool + git` = git CLI
+* `remote + github` = a GitHub repository
+* `remote + dropbox` = a Dropbox sync folder
 
-* Git
-* Docker
-* VSCode
-* Rider
-* Homebrew
-
-## Callsign Resources
-
-Resources associated with a Callsign.
-
-Examples:
-
-* identity-specific tooling
-* account-specific configuration
-
-## Transponder Resources
-
-Resources associated with authentication systems.
-
-Examples:
-
-* credential providers
-* secret managers
-* certificate locations
-* Environment Variables
-
-## Galaxy Resources
-
-Organization-wide requirements.
-
-Examples:
-
-* VPN clients
-* approved IDEs
-* security tooling
-
-## Solar System Resources
-
-Team-specific requirements.
-
-Examples:
-
-* shared tooling
-* internal utilities
-
-## Planet Resources
-
-Project-specific requirements and where to manage them. 
-
-Some planets may require management outside of the global default.
-
-Examples:
-
-* Node.js managed by nvm
-* Python managed by uv
-* Rust managed by rustup
-* .NET
-* pnpm
-* cargo
+Resources at the vessel level are available to all branches. Resources at galaxy or planet level are scoped to that branch. Lower-level resources override higher-level resources of the same role+brand.
 
 ---
 
@@ -275,60 +236,54 @@ Orbiter coordinates existing ecosystem tooling.
 
 Orbiter does not replace ecosystem tooling.
 
-Preferred version managers:
+Orbiter orchestrates tools via the Integration Registry — a set of compiled packages (one per role+brand) that know how to install, verify, and configure each tool. The Captain chooses which integrations apply to each branch of their universe.
 
-| Ecosystem | Manager              |
-| --------- | -------------------- |
-| Node.js   | nvm                  |
-| Python    | uv                   |
-| Ruby      | rbenv                |
-| Rust      | rustup               |
-| .NET      | official SDK tooling |
-| Go        | native tooling       |
+Default integrations:
 
-Orbiter orchestrates these tools.
+| Ecosystem | Manager role+brand |
+| --------- | ------------------ |
+| Node.js   | manager + nvm      |
+| Python    | manager + uv       |
+| Ruby      | manager + rbenv    |
+| Rust      | manager + rustup   |
+| .NET      | manager + dotnet   |
+| Go        | runtime + go       |
 
-Orbiter should not reimplement them.
+Orbiter should not reimplement what these tools already do well.
+
+# Integrations
+
+Integrations are the behavior layer for Orbiter. Every resource and transponder role+brand pair that Orbiter can manage has a corresponding integration.
+
+Integrations are stateless. They receive a resolved context describing their dependencies, interact with the real world, and report current observed state back to Orbiter.
+
+Orbiter owns all state management. Integrations own all interaction with external tools, services, and the local environment.
+
+Integrations have four responsibilities:
+
+* **Detect** — identify whether this integration is relevant to the current directory
+* **Init** — provision the resource or transponder in the real world
+* **Scan** — observe and report current state without modifying anything
+* **Calibrate** — bring reality into alignment with desired state
+
+New integrations can be added by dropping a package into the integrations directory and rebuilding. Integrations are compiled Go packages. Phase 3 will support WASM-based integrations that can be dropped next to the binary without recompiling.
 
 ---
 
 # Discovery
 
-Orbiter should support automatic discovery whenever possible.
+Orbiter supports automatic discovery during `planet init` and `resource init`. Discovery is owned entirely by integrations — Orbiter core has no awareness of specific file types, binary names, or sync conventions.
 
-Examples:
+Each integration declares what it looks for:
 
-Node.js
+* **File-pattern integrations** (runtime, manager, tool): declare file patterns like `.nvmrc`, `pyproject.toml`, `Cargo.toml`. Discovery runs when those files are present in the project directory.
+* **Always-run integrations** (remote, filesystem): always run during discovery. These check whether the current directory falls within their sync scope (e.g., inside a Dropbox folder) using the sync client's own configuration.
 
-* package.json
-* .nvmrc
+When discovery finds a match, the integration suggests resources to attach. The Captain confirms before anything is attached or initialized.
 
-Python
+When discovery finds nothing:
 
-* pyproject.toml
-
-Rust
-
-* Cargo.toml
-
-Go
-
-* go.mod
-
-.NET
-
-* global.json
-* project files
-
-When discovery succeeds:
-
-* infer dependencies
-* infer versions
-* infer tooling
-
-When discovery fails:
-
-* allow manual registration
+* Manual registration is always available via `orbit resource add`
 
 Manual configuration must always be available.
 
@@ -373,15 +328,23 @@ Beacons may exist for:
 
 # Drift
 
-Drift occurs when observed reality differs from desired state.
+Drift occurs when observed reality differs from desired environment configuration state.
 
-Examples:
+Drift is strictly about environment configuration — installed tools, configured credentials, accessible remotes, authenticated services. Drift is not about file contents, data state, sync completeness, or runtime behavior.
 
-* repository unavailable
-* credential expired
-* resource missing
-* renamed repository
-* renamed identity
+Examples of drift:
+
+* tool not installed or wrong version
+* credential expired or pointing to the wrong service
+* remote unreachable
+* manager not configured for the right runtime
+
+Examples that are NOT drift:
+
+* files inside a sync folder are out of date
+* a database has stale data
+* an upstream repository has new commits
+* an application is producing unexpected output
 
 Drift should be recorded in Beacons.
 
@@ -575,27 +538,35 @@ Retro is lifecycle management, not drift management.
 
 The six lifecycle commands operate the universe.
 
-Separate CRUD operations build the universe.
+Separate build commands construct the Star Chart.
+
+There are three build verbs:
+
+* `add` — register an entity in the Star Chart (Beacon: unverified)
+* `init` — provision an entity in the real world (Beacon: verified or failed)
+* `attach` — wire two entities together in the graph
+
+Update and removal are handled by the lifecycle commands:
+
+* `orbit calibrate <alias>` — reconcile and update
+* `orbit retro <alias>` — retire and remove
 
 Examples:
 
 ```bash
-orbit galaxy add
-orbit galaxy edit
-orbit galaxy remove
+orbit galaxy add acme
+orbit galaxy init acme
 
-orbit system add
-orbit system edit
-orbit system remove
+orbit planet init payment-api
+orbit planet init payment-api https://github.com/acme/payment-api
 
-orbit planet add
-orbit planet init
-orbit planet edit
-orbit planet remove
+orbit callsign add kent-acme
+orbit transponder add acme-github --role file --brand github --location ~/.ssh/id_ed25519_acme
+orbit resource add nvm --role manager --brand nvm --manages '["node"]'
 
-orbit callsign add
-orbit transponder add
-orbit resource add
+orbit attach kent-acme acme
+orbit attach acme-github kent-acme
+orbit attach nvm vessel
 ```
 
 ---
