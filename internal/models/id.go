@@ -22,6 +22,7 @@ const (
 	EntityTypeDefault     = "df"
 	EntityTypeBeacon      = "bk"
 	EntityTypeNavHistory  = "nh"
+	EntityTypeAttachment  = "at"
 )
 
 // OrbitID is the parsed form of a 16-character OrbitID string.

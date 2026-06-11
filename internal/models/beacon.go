@@ -2,16 +2,19 @@ package models
 
 import "time"
 
-// Beacon status values.
 const (
-	BeaconStatusHealthy = "healthy"
-	BeaconStatusDrifted = "drifted"
-	BeaconStatusUnknown = "unknown"
+	BeaconStatusHealthy    = "healthy"
+	BeaconStatusDrifted    = "drifted"
+	BeaconStatusUnknown    = "unknown"
+	BeaconStatusUnverified = "unverified"
+	BeaconStatusVerified   = "verified"
+	BeaconStatusFailed     = "failed"
+	BeaconStatusDegraded   = "degraded"
+	BeaconStatusRetired    = "retired"
 )
 
 // Beacon is the most recent verified observation of an entity.
-// One beacon exists per entity. Updated by Scan and Jump.
-// Observations is a JSON array of observation strings.
+// One beacon exists per entity. Observations is a JSON array of strings.
 type Beacon struct {
 	ID           string    `db:"id"           json:"id"`
 	EntityID     string    `db:"entity_id"    json:"entity_id"`

@@ -71,3 +71,19 @@ func TestEntityTypeConstants(t *testing.T) {
 		require.Len(t, et, 2, "entity type prefix must be 2 chars: %q", et)
 	}
 }
+
+func TestBeaconStatusConstants(t *testing.T) {
+	require.Equal(t, "unverified", models.BeaconStatusUnverified)
+	require.Equal(t, "verified",   models.BeaconStatusVerified)
+	require.Equal(t, "failed",     models.BeaconStatusFailed)
+	require.Equal(t, "degraded",   models.BeaconStatusDegraded)
+	require.Equal(t, "retired",    models.BeaconStatusRetired)
+}
+
+func TestEntityTypeAttachment(t *testing.T) {
+	require.Equal(t, "at", models.EntityTypeAttachment)
+	id := models.NewID(models.EntityTypeAttachment)
+	parsed, err := models.ParseID(id)
+	require.NoError(t, err)
+	require.Equal(t, "at", parsed.EntityType)
+}
