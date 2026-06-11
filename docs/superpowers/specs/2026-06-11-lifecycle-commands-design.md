@@ -16,9 +16,9 @@ Integrations are stateless WASM modules — the only mechanism by which Orbiter 
 
 **Integration manifests are stored in the Star Chart.** When an integration is loaded, its manifest metadata (role, brand, declared file detection patterns, dependencies) is written to the database. This cache enables efficient pre-filtering during discovery and allows the lifecycle system to reason about registered integrations without re-reading WASM binaries on every operation. Manifests are not the integration itself — they are its declared contract with Orbiter.
 
-**Manifests are refreshed during lifecycle operations**, alongside beacon updates. When `scan`, `calibrate`, or `jump` runs, registered integration manifests are compared against what is stored and updated if stale. This ensures the Star Chart reflects the current integration registry as integrations are added, updated, or removed.
-
 Integration manifests are never touched by `retro`. The manifest cache reflects the integration registry, not the Star Chart graph.
+
+**Phase 3 scope:** The lifecycle commands call the integration layer as registered at startup. Manifest refresh, integration scanning, and runtime integration registration are Phase 4 concerns.
 
 ### Inside-out operations (discovery)
 
@@ -376,11 +376,12 @@ No new TUI functionality is in scope for Phase 3 — just wiring `orbiter starch
 | Retro cascade with shared node detection | ✓ | |
 | `jump` confirmation prompt | ✓ | |
 | `retro` confirmation prompt | ✓ | |
+| `remote/github` integration (Rust, WASM) | | Phase 3.5 |
+| Manifest refresh during lifecycle | | Phase 4 |
+| Runtime integration scanning and registration | | Phase 4 |
 | Integration instance pooling | | Phase 4 |
 | Runtime plugin directories | | Phase 4 |
 | 64 KB payload enforcement | | Phase 4 |
-| `remote/github` integration (Rust, WASM) | | Phase 3.5 |
-| Integration instance pooling | | Phase 4 |
 | Multi-language integration testing | | Phase 4 |
 | TUI feature work | | Phase 5 |
 
