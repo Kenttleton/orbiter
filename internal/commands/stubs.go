@@ -6,17 +6,6 @@ import (
 
 // --- Six Lifecycle Commands ---
 
-func newSurveyCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "survey [target]",
-		Short: "Inspect metadata — \"What is this thing?\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("survey: not yet implemented")
-			return nil
-		},
-	}
-}
-
 func newChartCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "chart [target]",
