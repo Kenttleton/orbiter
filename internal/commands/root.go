@@ -90,6 +90,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 		newResourceCmd(&d),
 		newVesselCmd(&d),
 		newAttachCmd(&d),
+		newCompletionsCmd(root),
 	)
 
 	return root
