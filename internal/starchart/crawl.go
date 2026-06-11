@@ -92,6 +92,144 @@ func brandAccepted(brand string, whitelist []string) bool {
 	return false
 }
 
+// BranchLevel is one level in the FILO hierarchy for a branch crawl.
+type BranchLevel struct {
+	EntityID     string
+	Resources    []models.Resource
+	Callsign     *models.Callsign
+	Transponders []models.Transponder
+}
+
+// LeveledBranch is the result of a full FILO hierarchy walk.
+// Levels are ordered target-entity-first (index 0), vessel-last.
+type LeveledBranch struct {
+	Platform integrations.Platform
+	Levels   []BranchLevel
+}
+
+// LeveledBranchCrawl walks from entityID up to vessel in FILO order.
+// Two passes:
+//
+//	Pass 1 (root→leaf): compute effective callsign at each level. A level's
+//	effective callsign is its own directly-attached callsign. Ancestors do not
+//	pass their callsigns down — auth stays where attached.
+//	Pass 2 (FILO): build dispatch levels, skipping levels with no resources.
+func (sc *StarChart) LeveledBranchCrawl(ctx context.Context, entityID string) (LeveledBranch, error) {
+	chain, err := sc.hierarchyChain(ctx, entityID)
+	if err != nil {
+		return LeveledBranch{}, fmt.Errorf("hierarchy chain for %s: %w", entityID, err)
+	}
+
+	// Pass 1: resolve the callsign and transponders for each level.
+	type callsignEntry struct {
+		cs  models.Callsign
+		tps []models.Transponder
+	}
+	effectiveCallsign := make(map[string]*callsignEntry, len(chain))
+	for _, levelID := range chain {
+		callsigns, err := sc.callsignsAttachedTo(ctx, levelID)
+		if err != nil {
+			return LeveledBranch{}, fmt.Errorf("callsigns at level %s: %w", levelID, err)
+		}
+		if len(callsigns) == 0 {
+			effectiveCallsign[levelID] = nil
+			continue
+		}
+		cs := callsigns[0]
+		tps, err := sc.transpondersAttachedTo(ctx, cs.ID)
+		if err != nil {
+			return LeveledBranch{}, fmt.Errorf("transponders for callsign %s: %w", cs.ID, err)
+		}
+		effectiveCallsign[levelID] = &callsignEntry{cs: cs, tps: tps}
+	}
+
+	// Pass 2: FILO — target first, vessel last. Skip levels with no resources.
+	lb := LeveledBranch{Platform: currentPlatform()}
+	for _, levelID := range chain {
+		resources, err := sc.resourcesAttachedTo(ctx, levelID)
+		if err != nil {
+			return LeveledBranch{}, fmt.Errorf("resources at level %s: %w", levelID, err)
+		}
+		if len(resources) == 0 {
+			continue
+		}
+		level := BranchLevel{EntityID: levelID, Resources: resources}
+		if ce := effectiveCallsign[levelID]; ce != nil {
+			level.Callsign = &ce.cs
+			level.Transponders = ce.tps
+		}
+		lb.Levels = append(lb.Levels, level)
+	}
+	return lb, nil
+}
+
+// hierarchyChain returns IDs from entityID up to vessel in FILO order (target first).
+// Uses the entity type bits in the OrbitID (chars 8-9) to navigate the hierarchy.
+func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]string, error) {
+	chain := []string{entityID}
+	if len(entityID) < 10 {
+		return chain, nil
+	}
+	switch entityID[8:10] {
+	case "pl":
+		var p models.Planet
+		if err := sc.Get(ctx, "planets", entityID, &p); err != nil {
+			return nil, fmt.Errorf("load planet %s: %w", entityID, err)
+		}
+		if p.SolarSystemID != "" {
+			chain = append(chain, p.SolarSystemID)
+		}
+		chain = append(chain, p.GalaxyID)
+	case "sy":
+		var sys models.SolarSystem
+		if err := sc.Get(ctx, "solar_systems", entityID, &sys); err != nil {
+			return nil, fmt.Errorf("load system %s: %w", entityID, err)
+		}
+		chain = append(chain, sys.GalaxyID)
+	case "gx":
+		// falls through to vessel append
+	case "vs":
+		return chain, nil
+	}
+	var vesselID string
+	if err := sc.db.QueryRowContext(ctx, `SELECT id FROM vessel LIMIT 1`).Scan(&vesselID); err != nil {
+		return nil, fmt.Errorf("load vessel: %w", err)
+	}
+	chain = append(chain, vesselID)
+	return chain, nil
+}
+
+// BuildResolvedContextForResource builds the ResolvedContext for a single resource dispatch.
+// Resources: searched across ALL branch levels FILO order — first match per role+brand wins (superseding).
+// Transponders: ONLY from the resource's own level — auth isolation.
+func BuildResolvedContextForResource(level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
+	rc := integrations.ResolvedContext{
+		Platform:     lb.Platform,
+		Resources:    make(map[string][]integrations.ResolvedResource),
+		Transponders: make(map[string][]integrations.ResolvedTransponder),
+	}
+	seenResource := make(map[string]bool)
+	for role, brands := range manifest.Dependencies.Resources {
+		for _, l := range lb.Levels {
+			for _, r := range l.Resources {
+				key := r.Role + "/" + r.Brand
+				if r.Role == role && brandAccepted(r.Brand, brands) && !seenResource[key] {
+					seenResource[key] = true
+					rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
+				}
+			}
+		}
+	}
+	for role, brands := range manifest.Dependencies.Transponders {
+		for _, tp := range level.Transponders {
+			if tp.Role == role && brandAccepted(tp.Brand, brands) {
+				rc.Transponders[role] = append(rc.Transponders[role], integrations.ResolvedTransponder{Transponder: tp})
+			}
+		}
+	}
+	return rc
+}
+
 func (sc *StarChart) resourcesAttachedTo(ctx context.Context, nodeID string) ([]models.Resource, error) {
 	const q = `
         SELECT r.id, r.role, r.brand, r.manages, r.config, r.created_at
