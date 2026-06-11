@@ -195,9 +195,10 @@ func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]str
 // BuildResolvedContextForResource builds the ResolvedContext for a single resource dispatch.
 // Resources: searched across ALL branch levels FILO order — first match per role+brand wins (superseding).
 // Transponders: ONLY from the resource's own level — auth isolation.
-func BuildResolvedContextForResource(level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
+func BuildResolvedContextForResource(self models.Resource, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
 	rc := integrations.ResolvedContext{
 		Platform:     lb.Platform,
+		Self:         &self,
 		Resources:    make(map[string][]integrations.ResolvedResource),
 		Transponders: make(map[string][]integrations.ResolvedTransponder),
 	}

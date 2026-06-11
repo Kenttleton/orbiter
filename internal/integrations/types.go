@@ -37,6 +37,7 @@ type SuggestedResource struct {
 // All fields are JSON-serializable for Phase 3 WASM compatibility.
 type ResolvedContext struct {
 	Platform     Platform                         `json:"platform"`
+	Self         *models.Resource                 `json:"self,omitempty"`
 	Resources    map[string][]ResolvedResource    `json:"resources"`
 	Transponders map[string][]ResolvedTransponder `json:"transponders"`
 }
