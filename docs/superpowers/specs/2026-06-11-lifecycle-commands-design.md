@@ -10,6 +10,16 @@
 
 ---
 
+## Integration Contract
+
+Every resource and transponder in the Star Chart requires a registered integration for its `role + brand` pair. Integrations are the **only** mechanism by which Orbiter interacts with resources and transponders — there is no fallback, no built-in behavior, and no direct interaction outside of integration dispatch.
+
+Integrations are stateless WASM modules. They receive context describing their dependencies, interact with the real world, and report observed state back to Orbiter. Orbiter owns all state management. This mirrors the AWS Lambda model: each handler call is independently invokable, idempotent, and side-effect-free from Orbiter's perspective.
+
+If no integration is registered for a resource or transponder's `role + brand`, Orbiter skips it and records the resource as `unknown` in its beacon. The lifecycle commands (`jump`, `scan`, `calibrate`) operate only on resources and transponders for which an integration exists.
+
+---
+
 ## Binary Rename
 
 `orbit` → `orbiter`. The previous `orbiter` TUI binary is replaced by `orbiter starchart`.
@@ -355,17 +365,20 @@ No new TUI functionality is in scope for Phase 3 — just wiring `orbiter starch
 | Integration instance pooling | | Phase 4 |
 | Runtime plugin directories | | Phase 4 |
 | 64 KB payload enforcement | | Phase 4 |
-| `remote/github` integration (Rust, WASM) | | Phase 4 |
+| `remote/github` integration (Rust, WASM) | | Phase 3.5 |
+| Integration instance pooling | | Phase 4 |
 | Multi-language integration testing | | Phase 4 |
 | TUI feature work | | Phase 5 |
 
-### Phase 4 note: `remote/github` integration
+### Phase 3.5: `remote/github` integration
 
-Phase 4 will add a `role=remote, brand=github` integration written in Rust (compiled to WASM) as the first non-Go integration. It will implement:
+Phase 3.5 adds a `role=remote, brand=github` integration written in Rust (compiled to WASM). This is the first integration required to exercise the full lifecycle — without it, `jump` cannot clone repositories and `scan` cannot verify remote reachability.
+
+It implements all four handlers:
 
 - `detect` — check for `.git/config` with a github.com remote URL in the project directory
-- `initialize` — clone the repository to the planet's configured local path
+- `initialize` — clone the repository to the planet's configured local path (idempotent — no-op if already cloned)
 - `scan` — verify the repository exists locally and the remote is reachable
 - `calibrate` — re-establish the remote if missing, update the origin URL if it has changed
 
-This integration exercises the full `jump` → `scan` → `calibrate` lifecycle and serves as the empirical test for the Rust WASM guest ABI documented in `docs/integrations.md`.
+Phase 3.5 also serves as the empirical test for the Rust WASM guest ABI documented in `docs/integrations.md`.
