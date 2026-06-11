@@ -383,9 +383,298 @@ git commit -m "feat: add starchart.ResolveCWD via filesystem/orbiter resource at
 
 ---
 
+## Task 3: starchart.LeveledBranchCrawl — full FILO hierarchy walk with level pairing
+
+`BranchCrawl` is a Phase 2 stub that only queries direct attachments on a single entity. Phase 3 lifecycle commands need the full branch — from the target entity up to vessel — with resources and transponders scoped to their own level. A level with no resources is skipped entirely (its transponders have nothing to authenticate). A resource at a level without a callsign/transponder gets an empty transponder slice and the integration reports success (public) or failure (needs auth).
+
+`BuildResolvedContextForLevel` replaces `BuildResolvedContext` for lifecycle dispatch: it scopes transponders to only those from the resource's own level, not the entire branch pool.
+
+**Files:**
+
+- Modify: `internal/starchart/crawl.go`
+
+- [ ] **Step 1: Write failing tests**
+
+Create `internal/starchart/leveled_crawl_test.go`:
+
+```go
+package starchart_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestLeveledBranchCrawl_PlanetLevel(t *testing.T) {
+    sc := openTestChart(t)
+    ctx := context.Background()
+
+    g, _ := sc.CreateGalaxy(ctx, "acme")
+    p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+
+    // Resource at planet level
+    _, _ = sc.CreateResource(ctx, "node", "runtime", "node", "", "")
+    _, _ = sc.Attach(ctx, "node", "payment-api")
+
+    // Callsign + transponder at planet level
+    cs, _ := sc.CreateCallsign(ctx, "kent-acme")
+    _, _ = sc.CreateTransponder(ctx, "acme-gh", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+    _, _ = sc.Attach(ctx, "acme-gh", "kent-acme")
+    _, _ = sc.Attach(ctx, "kent-acme", "payment-api")
+
+    lb, err := sc.LeveledBranchCrawl(ctx, p.ID)
+    require.NoError(t, err)
+
+    // Should have the planet level (and vessel — but vessel has no resources by default)
+    require.Len(t, lb.Levels, 1)
+    assert.Len(t, lb.Levels[0].Resources, 1)
+    assert.Equal(t, "runtime", lb.Levels[0].Resources[0].Role)
+    require.NotNil(t, lb.Levels[0].Callsign)
+    assert.Equal(t, cs.ID, lb.Levels[0].Callsign.ID)
+    assert.Len(t, lb.Levels[0].Transponders, 1)
+    assert.Equal(t, "file", lb.Levels[0].Transponders[0].Role)
+}
+
+func TestLeveledBranchCrawl_SkipsEmptyLevels(t *testing.T) {
+    sc := openTestChart(t)
+    ctx := context.Background()
+
+    g, _ := sc.CreateGalaxy(ctx, "acme")
+    p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+
+    // Callsign + transponder at GALAXY level but no resource there
+    cs, _ := sc.CreateCallsign(ctx, "kent-acme-galaxy")
+    _, _ = sc.CreateTransponder(ctx, "acme-gh-galaxy", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+    _, _ = sc.Attach(ctx, "acme-gh-galaxy", "kent-acme-galaxy")
+    _, _ = sc.Attach(ctx, "kent-acme-galaxy", "acme")
+
+    // Resource at planet level, no callsign
+    _, _ = sc.CreateResource(ctx, "node", "runtime", "node", "", "")
+    _, _ = sc.Attach(ctx, "node", "payment-api")
+
+    lb, err := sc.LeveledBranchCrawl(ctx, p.ID)
+    require.NoError(t, err)
+
+    // Galaxy level: has callsign/transponder but no resource — skipped
+    // Planet level: has resource but no callsign — included with empty transponders
+    require.Len(t, lb.Levels, 1)
+    assert.Equal(t, p.ID, lb.Levels[0].EntityID)
+    assert.Nil(t, lb.Levels[0].Callsign)
+    assert.Empty(t, lb.Levels[0].Transponders)
+
+    _ = cs // galaxy callsign is correctly excluded
+}
+
+func TestLeveledBranchCrawl_TwoLevels(t *testing.T) {
+    sc := openTestChart(t)
+    ctx := context.Background()
+
+    g, _ := sc.CreateGalaxy(ctx, "acme")
+    p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+
+    // Galaxy level: resource + callsign (e.g. shared node version manager)
+    _, _ = sc.CreateResource(ctx, "nvm", "manager", "nvm", `["node"]`, "")
+    _, _ = sc.Attach(ctx, "nvm", "acme")
+    csGalaxy, _ := sc.CreateCallsign(ctx, "kent-acme-galaxy")
+    _, _ = sc.CreateTransponder(ctx, "acme-npm-token", "env", "npm", "NPM_TOKEN")
+    _, _ = sc.Attach(ctx, "acme-npm-token", "kent-acme-galaxy")
+    _, _ = sc.Attach(ctx, "kent-acme-galaxy", "acme")
+
+    // Planet level: resource + callsign (e.g. project-specific github resource)
+    _, _ = sc.CreateResource(ctx, "github-remote", "remote", "github", "", "")
+    _, _ = sc.Attach(ctx, "github-remote", "payment-api")
+    csPlanet, _ := sc.CreateCallsign(ctx, "kent-acme-planet")
+    _, _ = sc.CreateTransponder(ctx, "acme-gh-key", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+    _, _ = sc.Attach(ctx, "acme-gh-key", "kent-acme-planet")
+    _, _ = sc.Attach(ctx, "kent-acme-planet", "payment-api")
+
+    lb, err := sc.LeveledBranchCrawl(ctx, p.ID)
+    require.NoError(t, err)
+
+    // FILO: planet first, galaxy second
+    require.Len(t, lb.Levels, 2)
+    assert.Equal(t, p.ID, lb.Levels[0].EntityID, "planet level first (FILO)")
+    assert.Equal(t, csPlanet.ID, lb.Levels[0].Callsign.ID)
+    assert.Equal(t, g.ID, lb.Levels[1].EntityID, "galaxy level second")
+    assert.Equal(t, csGalaxy.ID, lb.Levels[1].Callsign.ID)
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+go test ./internal/starchart/... -run TestLeveledBranchCrawl -v
+```
+
+Expected: compile errors — `LeveledBranchCrawl` undefined, `BranchLevel` undefined.
+
+- [ ] **Step 3: Add types and `LeveledBranchCrawl` to `internal/starchart/crawl.go`**
+
+Add after the existing `BranchCrawl` function:
+
+```go
+// BranchLevel is one level in the FILO hierarchy for a branch crawl.
+// Only levels that have at least one resource are included —
+// a callsign/transponder without a co-located resource is orphaned and skipped.
+type BranchLevel struct {
+    EntityID     string
+    Resources    []models.Resource
+    Callsign     *models.Callsign     // nil if no callsign at this level
+    Transponders []models.Transponder // from Callsign; empty if Callsign is nil
+}
+
+// LeveledBranch is the result of a full FILO hierarchy walk.
+// Levels are ordered target-entity-first, vessel-last.
+// Use this for lifecycle dispatch (scan, calibrate, jump) where resource/transponder
+// pairing by level is required.
+type LeveledBranch struct {
+    Platform integrations.Platform
+    Levels   []BranchLevel
+}
+
+// LeveledBranchCrawl walks from entityID up to the vessel, collecting resources,
+// callsigns, and transponders at each level. Levels with no resources are skipped.
+// The resulting Levels slice is in FILO order: target entity first, vessel last.
+func (sc *StarChart) LeveledBranchCrawl(ctx context.Context, entityID string) (LeveledBranch, error) {
+    chain, err := sc.hierarchyChain(ctx, entityID)
+    if err != nil {
+        return LeveledBranch{}, fmt.Errorf("hierarchy chain for %s: %w", entityID, err)
+    }
+
+    lb := LeveledBranch{Platform: currentPlatform()}
+
+    for _, levelID := range chain {
+        resources, err := sc.resourcesAttachedTo(ctx, levelID)
+        if err != nil {
+            return LeveledBranch{}, fmt.Errorf("resources at level %s: %w", levelID, err)
+        }
+        // Skip levels with no resources — their transponders have nothing to authenticate.
+        if len(resources) == 0 {
+            continue
+        }
+
+        callsigns, err := sc.callsignsAttachedTo(ctx, levelID)
+        if err != nil {
+            return LeveledBranch{}, fmt.Errorf("callsigns at level %s: %w", levelID, err)
+        }
+
+        level := BranchLevel{
+            EntityID:  levelID,
+            Resources: resources,
+        }
+        if len(callsigns) > 0 {
+            // At most one active callsign per level.
+            cs := callsigns[0]
+            level.Callsign = &cs
+            tps, err := sc.transpondersAttachedTo(ctx, cs.ID)
+            if err != nil {
+                return LeveledBranch{}, fmt.Errorf("transponders for callsign %s: %w", cs.ID, err)
+            }
+            level.Transponders = tps
+        }
+
+        lb.Levels = append(lb.Levels, level)
+    }
+
+    return lb, nil
+}
+
+// hierarchyChain returns the entity IDs from entityID up to the vessel in FILO order.
+// For a planet (with system): [planetID, systemID, galaxyID, vesselID]
+// For a planet (no system):   [planetID, galaxyID, vesselID]
+// For a galaxy:               [galaxyID, vesselID]
+// For vessel:                 [vesselID]
+func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]string, error) {
+    chain := []string{entityID}
+
+    if len(entityID) < 10 {
+        return chain, nil
+    }
+
+    switch entityID[8:10] {
+    case "pl":
+        var p models.Planet
+        if err := sc.Get(ctx, "planets", entityID, &p); err != nil {
+            return nil, fmt.Errorf("load planet %s: %w", entityID, err)
+        }
+        if p.SolarSystemID != "" {
+            chain = append(chain, p.SolarSystemID)
+        }
+        chain = append(chain, p.GalaxyID)
+
+    case "sy":
+        var sys models.SolarSystem
+        if err := sc.Get(ctx, "solar_systems", entityID, &sys); err != nil {
+            return nil, fmt.Errorf("load system %s: %w", entityID, err)
+        }
+        chain = append(chain, sys.GalaxyID)
+
+    case "gx":
+        // galaxy: falls through to vessel append below
+
+    case "vs":
+        return chain, nil // already at vessel; vessel has no parent
+    }
+
+    // Every non-vessel entity terminates at the vessel.
+    var vesselID string
+    if err := sc.db.QueryRowContext(ctx, `SELECT id FROM vessel LIMIT 1`).Scan(&vesselID); err != nil {
+        return nil, fmt.Errorf("load vessel: %w", err)
+    }
+    chain = append(chain, vesselID)
+    return chain, nil
+}
+
+// BuildResolvedContextForLevel filters a BranchLevel using the integration's manifest
+// dependency declarations, passing only the level's own transponders to the integration.
+// This replaces BuildResolvedContext for lifecycle dispatch.
+func BuildResolvedContextForLevel(level BranchLevel, platform integrations.Platform, manifest integrations.Manifest) integrations.ResolvedContext {
+    rc := integrations.ResolvedContext{
+        Platform:     platform,
+        Resources:    make(map[string][]integrations.ResolvedResource),
+        Transponders: make(map[string][]integrations.ResolvedTransponder),
+    }
+    for role, brands := range manifest.Dependencies.Resources {
+        for _, r := range level.Resources {
+            if r.Role == role && brandAccepted(r.Brand, brands) {
+                rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
+            }
+        }
+    }
+    for role, brands := range manifest.Dependencies.Transponders {
+        for _, tp := range level.Transponders {
+            if tp.Role == role && brandAccepted(tp.Brand, brands) {
+                rc.Transponders[role] = append(rc.Transponders[role], integrations.ResolvedTransponder{Transponder: tp})
+            }
+        }
+    }
+    return rc
+}
+```
+
+- [ ] **Step 4: Run tests**
+
+```bash
+go test ./internal/starchart/... -run TestLeveledBranchCrawl -v
+```
+
+Expected: PASS. Fix any issues with the `sc.Get` helper signature — check how `Get` is called elsewhere in the starchart package to confirm the table name convention matches.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add internal/starchart/crawl.go internal/starchart/leveled_crawl_test.go
+git commit -m "feat: add LeveledBranchCrawl with FILO hierarchy walk and level-scoped resource/transponder pairing"
+```
+
+---
+
 ## Task 4: starchart.ScanBranch and CalibrateBranch
 
-These parallel `InitPlanet`/`InitResource` from `internal/starchart/init.go` but call `Scan`/`Calibrate` instead of `Init`. They return structured results for the Executor to render.
+These parallel `InitPlanet`/`InitResource` from `internal/starchart/init.go` but call `Scan`/`Calibrate` instead of `Init`. They return structured results for the Executor to render. They use `LeveledBranchCrawl` (not the Phase 2 `BranchCrawl`) so each resource gets only its level's transponders in its integration context.
 
 **Files:**
 - Create: `internal/starchart/lifecycle.go`
@@ -505,63 +794,65 @@ type BranchCalibrateResult struct {
     Transponders []TransponderCalibrateResult
 }
 
-// ScanBranch scans all resources and transponders attached to entityID.
-// Writes beacon updates as a side effect. Returns the scan results for rendering.
+// ScanBranch scans all resources and transponders in the full FILO hierarchy for entityID.
+// Each resource receives only the transponders from its own level as integration context.
+// Levels with no resources are skipped. Writes beacon updates as a side effect.
 func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchScanResult, error) {
-    branch, err := sc.BranchCrawl(ctx, entityID)
+    lb, err := sc.LeveledBranchCrawl(ctx, entityID)
     if err != nil {
         return BranchScanResult{}, fmt.Errorf("crawl %s: %w", entityID, err)
     }
 
     var result BranchScanResult
-
-    for _, r := range branch.Resources {
-        rr, err := sc.scanResource(ctx, r, branch)
-        if err != nil {
-            return BranchScanResult{}, err
+    for _, level := range lb.Levels {
+        for _, r := range level.Resources {
+            rr, err := sc.scanResourceAtLevel(ctx, r, level, lb.Platform)
+            if err != nil {
+                return BranchScanResult{}, err
+            }
+            result.Resources = append(result.Resources, rr)
         }
-        result.Resources = append(result.Resources, rr)
-    }
-    for _, tp := range branch.Transponders {
-        tr, err := sc.scanTransponder(ctx, tp, branch)
-        if err != nil {
-            return BranchScanResult{}, err
+        for _, tp := range level.Transponders {
+            tr, err := sc.scanTransponderAtLevel(ctx, tp, level, lb.Platform)
+            if err != nil {
+                return BranchScanResult{}, err
+            }
+            result.Transponders = append(result.Transponders, tr)
         }
-        result.Transponders = append(result.Transponders, tr)
     }
-
     return result, nil
 }
 
-// CalibrateBranch scans all resources/transponders, then calibrates any that are drifted or failed.
-// Writes beacon updates as a side effect. Returns results for rendering.
+// CalibrateBranch scans the full FILO hierarchy, then calibrates drifted/failed entities.
+// Each resource receives only the transponders from its own level as integration context.
+// Writes beacon updates as a side effect.
 func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (BranchCalibrateResult, error) {
-    branch, err := sc.BranchCrawl(ctx, entityID)
+    lb, err := sc.LeveledBranchCrawl(ctx, entityID)
     if err != nil {
         return BranchCalibrateResult{}, fmt.Errorf("crawl %s: %w", entityID, err)
     }
 
     var result BranchCalibrateResult
-
-    for _, r := range branch.Resources {
-        cr, err := sc.calibrateResource(ctx, r, branch)
-        if err != nil {
-            return BranchCalibrateResult{}, err
+    for _, level := range lb.Levels {
+        for _, r := range level.Resources {
+            cr, err := sc.calibrateResourceAtLevel(ctx, r, level, lb.Platform)
+            if err != nil {
+                return BranchCalibrateResult{}, err
+            }
+            result.Resources = append(result.Resources, cr)
         }
-        result.Resources = append(result.Resources, cr)
-    }
-    for _, tp := range branch.Transponders {
-        ct, err := sc.calibrateTransponder(ctx, tp, branch)
-        if err != nil {
-            return BranchCalibrateResult{}, err
+        for _, tp := range level.Transponders {
+            ct, err := sc.calibrateTransponderAtLevel(ctx, tp, level, lb.Platform)
+            if err != nil {
+                return BranchCalibrateResult{}, err
+            }
+            result.Transponders = append(result.Transponders, ct)
         }
-        result.Transponders = append(result.Transponders, ct)
     }
-
     return result, nil
 }
 
-func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, branch BranchContext) (ResourceScanResult, error) {
+func (sc *StarChart) scanResourceAtLevel(ctx context.Context, r models.Resource, level BranchLevel, platform integrations.Platform) (ResourceScanResult, error) {
     integration, ok := sc.integrations.Get(r.Role, r.Brand)
     if !ok {
         status := models.BeaconStatusFailed
@@ -571,7 +862,7 @@ func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, branch
         }
         return ResourceScanResult{Resource: r, BeaconStatus: status}, nil
     }
-    rc := BuildResolvedContext(branch, integration.Meta())
+    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
     report := integration.Scan(rc)
     status := scanBeaconStatus(report)
     if err := sc.setBeaconStatus(ctx, r.ID, status, report.Observations); err != nil {
@@ -580,7 +871,7 @@ func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, branch
     return ResourceScanResult{Resource: r, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder, branch BranchContext) (TransponderScanResult, error) {
+func (sc *StarChart) scanTransponderAtLevel(ctx context.Context, tp models.Transponder, level BranchLevel, platform integrations.Platform) (TransponderScanResult, error) {
     integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
     if !ok {
         status := models.BeaconStatusFailed
@@ -590,7 +881,9 @@ func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder,
         }
         return TransponderScanResult{Transponder: tp, BeaconStatus: status}, nil
     }
-    rc := BuildResolvedContext(branch, integration.Meta())
+    // Transponder integrations receive a minimal level context — just the platform
+    // and the transponder's own level data (no peer resources needed for credential checks).
+    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
     report := integration.Scan(rc)
     status := scanBeaconStatus(report)
     if err := sc.setBeaconStatus(ctx, tp.ID, status, report.Observations); err != nil {
@@ -599,20 +892,19 @@ func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder,
     return TransponderScanResult{Transponder: tp, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, branch BranchContext) (ResourceCalibrateResult, error) {
-    scanResult, err := sc.scanResource(ctx, r, branch)
+func (sc *StarChart) calibrateResourceAtLevel(ctx context.Context, r models.Resource, level BranchLevel, platform integrations.Platform) (ResourceCalibrateResult, error) {
+    scanResult, err := sc.scanResourceAtLevel(ctx, r, level, platform)
     if err != nil {
         return ResourceCalibrateResult{}, err
     }
     if scanResult.BeaconStatus == models.BeaconStatusHealthy {
         return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, Action: "healthy"}, nil
     }
-
     integration, ok := sc.integrations.Get(r.Role, r.Brand)
     if !ok {
         return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, Action: "failed"}, nil
     }
-    rc := BuildResolvedContext(branch, integration.Meta())
+    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
     after := integration.Calibrate(rc)
     afterStatus := scanBeaconStatus(after)
     if err := sc.setBeaconStatus(ctx, r.ID, afterStatus, after.Observations); err != nil {
@@ -625,20 +917,19 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, b
     return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, After: after, Action: action}, nil
 }
 
-func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transponder, branch BranchContext) (TransponderCalibrateResult, error) {
-    scanResult, err := sc.scanTransponder(ctx, tp, branch)
+func (sc *StarChart) calibrateTransponderAtLevel(ctx context.Context, tp models.Transponder, level BranchLevel, platform integrations.Platform) (TransponderCalibrateResult, error) {
+    scanResult, err := sc.scanTransponderAtLevel(ctx, tp, level, platform)
     if err != nil {
         return TransponderCalibrateResult{}, err
     }
     if scanResult.BeaconStatus == models.BeaconStatusHealthy {
         return TransponderCalibrateResult{Transponder: tp, Before: scanResult.Report, Action: "healthy"}, nil
     }
-
     integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
     if !ok {
         return TransponderCalibrateResult{Transponder: tp, Before: scanResult.Report, Action: "failed"}, nil
     }
-    rc := BuildResolvedContext(branch, integration.Meta())
+    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
     after := integration.Calibrate(rc)
     afterStatus := scanBeaconStatus(after)
     if err := sc.setBeaconStatus(ctx, tp.ID, afterStatus, after.Observations); err != nil {
