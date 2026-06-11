@@ -17,17 +17,6 @@ func newJumpCmd(d *deps) *cobra.Command {
 	}
 }
 
-func newCalibrateCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "calibrate [target]",
-		Short: "Reconcile drift — \"Bring reality and the Star Chart back into alignment.\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("calibrate: not yet implemented")
-			return nil
-		},
-	}
-}
-
 func newRetroCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "retro [target]",

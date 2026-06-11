@@ -172,3 +172,36 @@ func beaconToAction(status string) string {
 		return "change"
 	}
 }
+
+// Calibrate reconciles drift for the target entity.
+func (e *Executor) Calibrate(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.CalibrateBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("calibrate %s: %w", alias.Name, err)
+	}
+
+	if len(result.Resources) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
+		return nil
+	}
+
+	var rows [][]string
+	for _, r := range result.Resources {
+		obs := ""
+		if r.After.Error != "" {
+			obs = r.After.Error
+		} else if len(r.After.Observations) > 0 {
+			obs = r.After.Observations[0]
+		} else if len(r.Before.Observations) > 0 {
+			obs = r.Before.Observations[0]
+		}
+		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action, obs})
+	}
+	e.renderer.Table([]string{"resource", "action", "observation"}, rows)
+	return nil
+}

@@ -63,3 +63,14 @@ func TestExecutor_Chart(t *testing.T) {
 	err := exec.Chart(ctx, "payment-api")
 	require.NoError(t, err)
 }
+
+func TestExecutor_Calibrate(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	err := exec.Calibrate(ctx, "payment-api")
+	require.NoError(t, err)
+}
