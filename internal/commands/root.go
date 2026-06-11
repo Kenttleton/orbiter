@@ -75,6 +75,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 
 	// Register all subcommands.
 	root.AddCommand(
+		newInitCmd(),
 		newSurveyCmd(&d),
 		newChartCmd(&d),
 		newJumpCmd(&d),
