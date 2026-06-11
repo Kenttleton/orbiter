@@ -15,6 +15,7 @@ import (
 // Defined here, at the consumer (idiomatic Go — not in the integrations package).
 type integrationProvider interface {
 	Get(role, brand string) (integrations.Integration, bool)
+	All() []integrations.Integration
 	AllForRole(role string) []integrations.Integration
 }
 
@@ -139,7 +140,7 @@ func (sc *StarChart) InitResource(ctx context.Context, resourceID string) error 
 		return fmt.Errorf("branch crawl for resource %s: %w", resourceID, err)
 	}
 
-	report := integration.Init(BuildResolvedContext(branch, integrations.Manifest{}))
+	report := integration.Init(BuildResolvedContext(branch, integration.Meta()))
 	return sc.applyStateReport(ctx, resourceID, report)
 }
 
@@ -162,7 +163,7 @@ func (sc *StarChart) InitTransponder(ctx context.Context, transponderID string) 
 		return fmt.Errorf("branch crawl for transponder %s: %w", transponderID, err)
 	}
 
-	report := integration.Init(BuildResolvedContext(branch, integrations.Manifest{}))
+	report := integration.Init(BuildResolvedContext(branch, integration.Meta()))
 	return sc.applyStateReport(ctx, transponderID, report)
 }
 

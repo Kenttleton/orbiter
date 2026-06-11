@@ -266,7 +266,7 @@ Integrations have four responsibilities:
 * **Scan** — observe and report current state without modifying anything
 * **Calibrate** — bring reality into alignment with desired state
 
-New integrations can be added by dropping a package into the integrations directory and rebuilding. Integrations are compiled Go packages. Phase 3 will support WASM-based integrations that can be dropped next to the binary without recompiling.
+New integrations can be added by dropping a package into the integrations directory and rebuilding. Integrations are compiled WASM modules (Phase 2.5+). Phase 4 will add runtime plugin directories so integrations can be dropped next to the binary without recompiling.
 
 ---
 

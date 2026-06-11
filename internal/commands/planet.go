@@ -3,6 +3,7 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/spf13/cobra"
@@ -56,6 +57,7 @@ func newPlanetAddCmd(d *deps) *cobra.Command {
 
 func newPlanetInitCmd(d *deps) *cobra.Command {
 	var galaxy, system string
+	var discover bool
 	cmd := &cobra.Command{
 		Use:   "init <name>",
 		Short: "Register and initialize a planet, cascading to all attached resources",
@@ -85,6 +87,30 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 				}
 				alias.ID = p.ID
 			}
+
+			if discover {
+				cwd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("discover: get cwd: %w", err)
+				}
+				suggestions, err := d.sc.DiscoverPlanet(ctx, cwd)
+				if err != nil {
+					return fmt.Errorf("discover: %w", err)
+				}
+				for _, s := range suggestions {
+					r, err := d.sc.CreateResource(ctx, s.Brand, s.Role, s.Brand, "[]", "{}")
+					if err != nil {
+						d.renderer.Success(fmt.Sprintf("  skip %s/%s: %v", s.Role, s.Brand, err))
+						continue
+					}
+					if _, err := d.sc.Attach(ctx, r.ID, alias.ID); err != nil {
+						d.renderer.Success(fmt.Sprintf("  registered %s/%s but attach failed: %v", s.Role, s.Brand, err))
+					} else {
+						d.renderer.Success(fmt.Sprintf("  discovered and attached %s/%s", s.Role, s.Brand))
+					}
+				}
+			}
+
 			if err := d.sc.InitPlanet(ctx, alias.ID); err != nil {
 				return err
 			}
@@ -95,5 +121,6 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&galaxy, "galaxy", "", "galaxy this planet belongs to (required when creating)")
 	cmd.Flags().StringVar(&system, "system", "", "solar system this planet belongs to (optional)")
+	cmd.Flags().BoolVar(&discover, "discover", false, "run integration detection to auto-attach resources")
 	return cmd
 }

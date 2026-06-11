@@ -20,11 +20,10 @@ func testSC(t *testing.T) *starchart.StarChart {
 	return sc
 }
 
-func seedAlias(t *testing.T, sc *starchart.StarChart, id, name, entityType string) {
+func seedAlias(t *testing.T, sc *starchart.StarChart, name, entity string) {
 	t.Helper()
-	err := sc.Insert(context.Background(), "aliases", models.Alias{
-		ID: id, Name: name, EntityType: entityType,
-		CreatedAt: time.Now().UTC(),
+	err := sc.Insert(context.Background(), "aliases", models.AliasInsert{
+		Name: name, Entity: entity, CreatedAt: time.Now().UTC(),
 	})
 	require.NoError(t, err)
 }
@@ -33,20 +32,23 @@ func TestResolverByName(t *testing.T) {
 	ctx := context.Background()
 	sc := testSC(t)
 	id := models.NewID(models.EntityTypePlanet)
-	seedAlias(t, sc, id, "payment-api", models.EntityTypePlanet)
+	seedAlias(t, sc, "payment-api", id)
 
 	r := resolver.New(sc)
 	alias, err := r.Resolve(ctx, "payment-api")
 	require.NoError(t, err)
 	require.Equal(t, id, alias.ID)
-	require.Equal(t, models.EntityTypePlanet, alias.EntityType)
+
+	parsed, err := models.ParseID(alias.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.EntityTypePlanet, parsed.EntityType)
 }
 
 func TestResolverByID(t *testing.T) {
 	ctx := context.Background()
 	sc := testSC(t)
 	id := models.NewID(models.EntityTypePlanet)
-	seedAlias(t, sc, id, id, models.EntityTypePlanet)
+	seedAlias(t, sc, id, id)
 
 	r := resolver.New(sc)
 	alias, err := r.Resolve(ctx, id)

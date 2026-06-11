@@ -191,7 +191,7 @@ Each tool has an integration (`role + brand`) that knows how to install, verify,
 | .NET | manager + dotnet |
 | Go | runtime + go |
 
-New integrations are compiled Go packages. Drop a package into `internal/integrations/`, run `just build`.
+New integrations are WASM modules compiled with TinyGo. See [docs/integrations.md](docs/integrations.md) for the full guest ABI, known TinyGo restrictions, and a step-by-step guide to building and wiring a new integration.
 
 **Orbiter manages environment configuration state — not data state.**
 

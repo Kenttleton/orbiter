@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
+	_ "github.com/Kenttleton/orbiter/internal/integrations/golang"
 )
 
 func main() {

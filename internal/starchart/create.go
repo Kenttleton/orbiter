@@ -21,11 +21,11 @@ func (sc *StarChart) GetBeacon(ctx context.Context, entityID string) (models.Bea
 
 // createEntity inserts alias + entity + beacon atomically.
 // entityFn inserts the entity row within the transaction.
-func (sc *StarChart) createEntity(ctx context.Context, id, name, entityType string, entityFn func(*Tx) error) error {
+func (sc *StarChart) createEntity(ctx context.Context, id, name string, entityFn func(*Tx) error) error {
 	now := time.Now().UTC()
 	return sc.Tx(ctx, func(t *Tx) error {
-		if err := t.Insert(ctx, "aliases", models.Alias{
-			ID: id, Name: name, EntityType: entityType, CreatedAt: now,
+		if err := t.Insert(ctx, "aliases", models.AliasInsert{
+			Name: name, Entity: id, CreatedAt: now,
 		}); err != nil {
 			return err
 		}
@@ -46,7 +46,7 @@ func (sc *StarChart) createEntity(ctx context.Context, id, name, entityType stri
 func (sc *StarChart) CreateGalaxy(ctx context.Context, name string) (models.Galaxy, error) {
 	id := models.NewID(models.EntityTypeGalaxy)
 	g := models.Galaxy{ID: id, CreatedAt: time.Now().UTC()}
-	return g, sc.createEntity(ctx, id, name, models.EntityTypeGalaxy, func(t *Tx) error {
+	return g, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "galaxies", g)
 	})
 }
@@ -55,7 +55,7 @@ func (sc *StarChart) CreateGalaxy(ctx context.Context, name string) (models.Gala
 func (sc *StarChart) CreateSolarSystem(ctx context.Context, name, galaxyID string) (models.SolarSystem, error) {
 	id := models.NewID(models.EntityTypeSolarSystem)
 	sys := models.SolarSystem{ID: id, GalaxyID: galaxyID, CreatedAt: time.Now().UTC()}
-	return sys, sc.createEntity(ctx, id, name, models.EntityTypeSolarSystem, func(t *Tx) error {
+	return sys, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "solar_systems", sys)
 	})
 }
@@ -64,7 +64,7 @@ func (sc *StarChart) CreateSolarSystem(ctx context.Context, name, galaxyID strin
 func (sc *StarChart) CreatePlanet(ctx context.Context, name, galaxyID, solarSystemID string) (models.Planet, error) {
 	id := models.NewID(models.EntityTypePlanet)
 	p := models.Planet{ID: id, GalaxyID: galaxyID, SolarSystemID: solarSystemID, CreatedAt: time.Now().UTC()}
-	return p, sc.createEntity(ctx, id, name, models.EntityTypePlanet, func(t *Tx) error {
+	return p, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "planets", p)
 	})
 }
@@ -73,7 +73,7 @@ func (sc *StarChart) CreatePlanet(ctx context.Context, name, galaxyID, solarSyst
 func (sc *StarChart) CreateCallsign(ctx context.Context, name string) (models.Callsign, error) {
 	id := models.NewID(models.EntityTypeCallsign)
 	cs := models.Callsign{ID: id, CreatedAt: time.Now().UTC()}
-	return cs, sc.createEntity(ctx, id, name, models.EntityTypeCallsign, func(t *Tx) error {
+	return cs, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "callsigns", cs)
 	})
 }
@@ -84,7 +84,7 @@ func (sc *StarChart) CreateCallsign(ctx context.Context, name string) (models.Ca
 func (sc *StarChart) CreateTransponder(ctx context.Context, name, role, brand, location string) (models.Transponder, error) {
 	id := models.NewID(models.EntityTypeTransponder)
 	tp := models.Transponder{ID: id, Role: role, Brand: brand, Location: location, CreatedAt: time.Now().UTC()}
-	return tp, sc.createEntity(ctx, id, name, models.EntityTypeTransponder, func(t *Tx) error {
+	return tp, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "transponders", tp)
 	})
 }
@@ -96,7 +96,7 @@ func (sc *StarChart) CreateTransponder(ctx context.Context, name, role, brand, l
 func (sc *StarChart) CreateResource(ctx context.Context, name, role, brand, manages, config string) (models.Resource, error) {
 	id := models.NewID(models.EntityTypeResource)
 	r := models.Resource{ID: id, Role: role, Brand: brand, Manages: manages, Config: config, CreatedAt: time.Now().UTC()}
-	return r, sc.createEntity(ctx, id, name, models.EntityTypeResource, func(t *Tx) error {
+	return r, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "resources", r)
 	})
 }

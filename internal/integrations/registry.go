@@ -6,6 +6,7 @@ import "strings"
 // The interface is defined here so implementors have a single import target.
 // Consumers (starchart) define their own narrower interface for what they call.
 type Integration interface {
+	Meta() Manifest
 	Detect(ctx DetectContext) DetectReport
 	Init(ctx ResolvedContext) StateReport
 	Scan(ctx ResolvedContext) StateReport
@@ -32,6 +33,16 @@ func (r *Registry) Register(role, brand string, i Integration) {
 func (r *Registry) Get(role, brand string) (Integration, bool) {
 	i, ok := r.entries[role+"/"+brand]
 	return i, ok
+}
+
+// All returns every registered integration.
+// Used by DiscoverPlanet to run detection across all integrations.
+func (r *Registry) All() []Integration {
+	result := make([]Integration, 0, len(r.entries))
+	for _, i := range r.entries {
+		result = append(result, i)
+	}
+	return result
 }
 
 // AllForRole returns all integrations registered for a given role.

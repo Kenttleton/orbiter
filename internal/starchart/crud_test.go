@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/starchart"
@@ -19,37 +18,24 @@ func testDB(t *testing.T) *starchart.StarChart {
 	return sc
 }
 
-func testAlias(id, name, entityType string) models.Alias {
-	return models.Alias{
-		ID:         id,
-		Name:       name,
-		EntityType: entityType,
-		CreatedAt:  time.Now().UTC().Truncate(time.Second),
-	}
-}
-
 func TestInsertAndGet(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	id := models.NewID(models.EntityTypePlanet)
-	a := testAlias(id, "payment-api", models.EntityTypePlanet)
+	g, err := sc.CreateGalaxy(ctx, "stride-build")
+	require.NoError(t, err)
 
-	require.NoError(t, sc.Insert(ctx, "aliases", a))
-
-	var got models.Alias
-	require.NoError(t, sc.Get(ctx, "aliases", id, &got))
-	require.Equal(t, id, got.ID)
-	require.Equal(t, "payment-api", got.Name)
-	require.Equal(t, models.EntityTypePlanet, got.EntityType)
+	var got models.Galaxy
+	require.NoError(t, sc.Get(ctx, "galaxies", g.ID, &got))
+	require.Equal(t, g.ID, got.ID)
 }
 
 func TestGetNotFound(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	var got models.Alias
-	err := sc.Get(ctx, "aliases", "nonexistent-id", &got)
+	var got models.Galaxy
+	err := sc.Get(ctx, "galaxies", "nonexistent-id", &got)
 	require.ErrorIs(t, err, starchart.ErrNotFound)
 }
 
@@ -57,18 +43,14 @@ func TestList(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	ids := []string{
-		models.NewID(models.EntityTypePlanet),
-		models.NewID(models.EntityTypePlanet),
-		models.NewID(models.EntityTypePlanet),
-	}
-	for _, id := range ids {
-		require.NoError(t, sc.Insert(ctx, "aliases", testAlias(id, id, models.EntityTypePlanet)))
-	}
+	g, _ := sc.CreateGalaxy(ctx, "stride-build")
+	_, _ = sc.CreatePlanet(ctx, "payments-api", g.ID, "")
+	_, _ = sc.CreatePlanet(ctx, "auth-service", g.ID, "")
+	_, _ = sc.CreatePlanet(ctx, "notifications", g.ID, "")
 
-	var results []models.Alias
-	require.NoError(t, sc.List(ctx, "aliases", &results,
-		starchart.Filter{Column: "entity_type", Op: "=", Value: models.EntityTypePlanet},
+	var results []models.Planet
+	require.NoError(t, sc.List(ctx, "planets", &results,
+		starchart.Filter{Column: "galaxy_id", Op: "=", Value: g.ID},
 	))
 	require.Len(t, results, 3)
 }
@@ -77,11 +59,11 @@ func TestListEmpty(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	// A fresh DB contains only the seeded vessel alias; filtering by a
-	// non-vessel entity type must return an empty slice.
-	var results []models.Alias
-	require.NoError(t, sc.List(ctx, "aliases", &results,
-		starchart.Filter{Column: "entity_type", Op: "=", Value: models.EntityTypePlanet},
+	g, _ := sc.CreateGalaxy(ctx, "stride-build")
+
+	var results []models.Planet
+	require.NoError(t, sc.List(ctx, "planets", &results,
+		starchart.Filter{Column: "galaxy_id", Op: "=", Value: g.ID},
 	))
 	require.Empty(t, results)
 }
@@ -90,27 +72,29 @@ func TestUpdate(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	id := models.NewID(models.EntityTypePlanet)
-	require.NoError(t, sc.Insert(ctx, "aliases", testAlias(id, "old-name", models.EntityTypePlanet)))
+	g, _ := sc.CreateGalaxy(ctx, "stride-build")
+	r, err := sc.CreateResource(ctx, "nvm-mgr", "manager", "nvm", `["node"]`, `{}`)
+	require.NoError(t, err)
 
-	require.NoError(t, sc.Update(ctx, "aliases", id, map[string]any{"name": "new-name"}))
+	require.NoError(t, sc.Update(ctx, "resources", r.ID, map[string]any{"brand": "volta"}))
 
-	var got models.Alias
-	require.NoError(t, sc.Get(ctx, "aliases", id, &got))
-	require.Equal(t, "new-name", got.Name)
+	var got models.Resource
+	require.NoError(t, sc.Get(ctx, "resources", r.ID, &got))
+	require.Equal(t, "volta", got.Brand)
+	_ = g
 }
 
 func TestDelete(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	id := models.NewID(models.EntityTypePlanet)
-	require.NoError(t, sc.Insert(ctx, "aliases", testAlias(id, id, models.EntityTypePlanet)))
+	r, err := sc.CreateResource(ctx, "nvm-mgr", "manager", "nvm", `["node"]`, `{}`)
+	require.NoError(t, err)
 
-	require.NoError(t, sc.Delete(ctx, "aliases", id))
+	require.NoError(t, sc.Delete(ctx, "resources", r.ID))
 
-	var got models.Alias
-	err := sc.Get(ctx, "aliases", id, &got)
+	var got models.Resource
+	err = sc.Get(ctx, "resources", r.ID, &got)
 	require.ErrorIs(t, err, starchart.ErrNotFound)
 }
 
@@ -118,10 +102,8 @@ func TestInsertDuplicateNameFails(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	id1 := models.NewID(models.EntityTypePlanet)
-	id2 := models.NewID(models.EntityTypeGalaxy)
-	require.NoError(t, sc.Insert(ctx, "aliases", testAlias(id1, "payment-api", models.EntityTypePlanet)))
-
-	err := sc.Insert(ctx, "aliases", testAlias(id2, "payment-api", models.EntityTypeGalaxy))
+	_, err := sc.CreateGalaxy(ctx, "stride-build")
+	require.NoError(t, err)
+	_, err = sc.CreatePlanet(ctx, "stride-build", "nonexistent-galaxy", "")
 	require.Error(t, err, "duplicate alias name must fail")
 }

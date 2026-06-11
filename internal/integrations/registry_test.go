@@ -9,6 +9,7 @@ import (
 
 type stubIntegration struct{}
 
+func (s *stubIntegration) Meta() integrations.Manifest { return integrations.Manifest{} }
 func (s *stubIntegration) Detect(ctx integrations.DetectContext) integrations.DetectReport {
 	return integrations.DetectReport{Detected: true}
 }

@@ -19,7 +19,10 @@ func TestCreateGalaxy(t *testing.T) {
 	alias, err := sc.Resolve(ctx, "stride-build")
 	require.NoError(t, err)
 	require.Equal(t, g.ID, alias.ID)
-	require.Equal(t, models.EntityTypeGalaxy, alias.EntityType)
+
+	parsed, err := models.ParseID(alias.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.EntityTypeGalaxy, parsed.EntityType)
 
 	beacon, err := sc.GetBeacon(ctx, g.ID)
 	require.NoError(t, err)

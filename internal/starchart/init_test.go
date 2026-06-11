@@ -14,6 +14,7 @@ import (
 // successIntegration always reports the entity as present and healthy.
 type successIntegration struct{}
 
+func (s *successIntegration) Meta() integrations.Manifest { return integrations.Manifest{} }
 func (s *successIntegration) Detect(ctx integrations.DetectContext) integrations.DetectReport {
 	return integrations.DetectReport{Detected: true}
 }

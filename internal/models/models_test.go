@@ -39,10 +39,10 @@ func TestParseID(t *testing.T) {
 }
 
 func TestAliasJSONRoundtrip(t *testing.T) {
+	id := models.NewID(models.EntityTypePlanet)
 	a := models.Alias{
-		ID:         models.NewID(models.EntityTypePlanet),
-		Name:       "payment-api",
-		EntityType: models.EntityTypePlanet,
+		ID:   id,
+		Name: "payment-api",
 	}
 	data, err := json.Marshal(a)
 	require.NoError(t, err)
@@ -51,7 +51,10 @@ func TestAliasJSONRoundtrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &got))
 	require.Equal(t, a.ID, got.ID)
 	require.Equal(t, a.Name, got.Name)
-	require.Equal(t, a.EntityType, got.EntityType)
+
+	parsed, err := models.ParseID(got.ID)
+	require.NoError(t, err)
+	require.Equal(t, models.EntityTypePlanet, parsed.EntityType)
 }
 
 func TestEntityTypeConstants(t *testing.T) {

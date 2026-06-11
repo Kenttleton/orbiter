@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/starchart"
@@ -20,13 +21,16 @@ func TestTxCommitsOnSuccess(t *testing.T) {
 	id := models.NewID(models.EntityTypeGalaxy)
 
 	err = sc.Tx(ctx, func(tx *starchart.Tx) error {
-		return tx.Insert(ctx, "aliases", testAlias(id, "my-galaxy", models.EntityTypeGalaxy))
+		return tx.Insert(ctx, "aliases", models.AliasInsert{
+			Name: "my-galaxy", Entity: id, CreatedAt: time.Now().UTC(),
+		})
 	})
 	require.NoError(t, err)
 
-	var got models.Alias
-	require.NoError(t, sc.Get(ctx, "aliases", id, &got))
-	require.Equal(t, "my-galaxy", got.Name)
+	alias, err := sc.Resolve(ctx, "my-galaxy")
+	require.NoError(t, err)
+	require.Equal(t, id, alias.ID)
+	require.Equal(t, "my-galaxy", alias.Name)
 }
 
 func TestTxRollsBackOnError(t *testing.T) {
@@ -39,15 +43,17 @@ func TestTxRollsBackOnError(t *testing.T) {
 	intentionalErr := errors.New("intentional failure")
 
 	err = sc.Tx(ctx, func(tx *starchart.Tx) error {
-		if err := tx.Insert(ctx, "aliases", testAlias(id, "should-rollback", models.EntityTypeGalaxy)); err != nil {
+		if err := tx.Insert(ctx, "aliases", models.AliasInsert{
+			Name: "should-rollback", Entity: id, CreatedAt: time.Now().UTC(),
+		}); err != nil {
 			return err
 		}
 		return intentionalErr
 	})
 	require.ErrorIs(t, err, intentionalErr)
 
-	var got models.Alias
-	require.ErrorIs(t, sc.Get(ctx, "aliases", id, &got), starchart.ErrNotFound)
+	_, err = sc.Resolve(ctx, "should-rollback")
+	require.ErrorIs(t, err, starchart.ErrNotFound)
 }
 
 func TestTxNestedInsert(t *testing.T) {
@@ -60,13 +66,17 @@ func TestTxNestedInsert(t *testing.T) {
 	planetID := models.NewID(models.EntityTypePlanet)
 
 	err = sc.Tx(ctx, func(tx *starchart.Tx) error {
-		if err := tx.Insert(ctx, "aliases", testAlias(galaxyID, "acme", models.EntityTypeGalaxy)); err != nil {
+		if err := tx.Insert(ctx, "aliases", models.AliasInsert{
+			Name: "acme", Entity: galaxyID, CreatedAt: time.Now().UTC(),
+		}); err != nil {
 			return err
 		}
 		if err := tx.Insert(ctx, "galaxies", models.Galaxy{ID: galaxyID}); err != nil {
 			return err
 		}
-		if err := tx.Insert(ctx, "aliases", testAlias(planetID, "payment-api", models.EntityTypePlanet)); err != nil {
+		if err := tx.Insert(ctx, "aliases", models.AliasInsert{
+			Name: "payment-api", Entity: planetID, CreatedAt: time.Now().UTC(),
+		}); err != nil {
 			return err
 		}
 		return tx.Insert(ctx, "planets", models.Planet{

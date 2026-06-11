@@ -36,7 +36,9 @@ func (sc *StarChart) Attach(ctx context.Context, fromName, toName string) (model
 		return models.Attachment{}, fmt.Errorf("resolve %q: %w", toName, err)
 	}
 
-	if from.EntityType == models.EntityTypeCallsign {
+	// Entity type is encoded in the orbit ID at chars 9-10.
+	parsed, _ := models.ParseID(from.ID)
+	if parsed.EntityType == models.EntityTypeCallsign {
 		if err := sc.guardOneCallsign(ctx, toID); err != nil {
 			return models.Attachment{}, err
 		}
@@ -72,12 +74,12 @@ func (sc *StarChart) resolveAttachTarget(ctx context.Context, name string) (stri
 }
 
 // guardOneCallsign returns an error if toID already has a callsign attached.
+// Entity type is checked via SUBSTR on the orbit ID (chars 9-10) — no join needed.
 func (sc *StarChart) guardOneCallsign(ctx context.Context, toID string) error {
 	const q = `
-        SELECT COUNT(*) FROM attachments a
-        JOIN aliases al ON al.id = a.from_id
-        WHERE a.to_id = ? AND al.entity_type = ?
-    `
+		SELECT COUNT(*) FROM attachments
+		WHERE to_id = ? AND SUBSTR(from_id, 9, 2) = ?
+	`
 	row := sc.db.QueryRowContext(ctx, q, toID, models.EntityTypeCallsign)
 	var count int
 	if err := row.Scan(&count); err != nil {

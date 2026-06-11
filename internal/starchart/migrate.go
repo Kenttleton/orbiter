@@ -72,8 +72,8 @@ func (sc *StarChart) seedVessel(ctx context.Context) error {
 		return fmt.Errorf("begin vessel seed: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		"INSERT INTO aliases (id, name, entity_type, created_at) VALUES (?, ?, ?, ?)",
-		id, "vessel", models.EntityTypeVessel, now,
+		"INSERT INTO aliases (name, entity, created_at) VALUES (?, ?, ?)",
+		"vessel", id, now,
 	); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("seed vessel alias: %w", err)
