@@ -75,7 +75,7 @@ func TestExecuteRetro(t *testing.T) {
 	require.NoError(t, err)
 	p, err := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
 	require.NoError(t, err)
-	_, err = sc.CreateResource(ctx, "node", "runtime", "node", "[]", "{}")
+	r, err := sc.CreateResource(ctx, "node", "runtime", "node", "[]", "{}")
 	require.NoError(t, err)
 	_, err = sc.Attach(ctx, "node", "payment-api")
 	require.NoError(t, err)
@@ -86,5 +86,10 @@ func TestExecuteRetro(t *testing.T) {
 
 	var planet models.Planet
 	err = sc.Get(ctx, "planets", p.ID, &planet)
-	assert.ErrorIs(t, err, starchart.ErrNotFound)
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "planet should have been retired")
+
+	// Resource should also be gone (unshared, retired along with planet).
+	var resource models.Resource
+	err = sc.Get(ctx, "resources", r.ID, &resource)
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "resource should have been retired")
 }

@@ -81,7 +81,13 @@ func (sc *StarChart) ExecuteRetro(ctx context.Context, plan RetroPlan) error {
 					return fmt.Errorf("delete attachments for %s: %w", node.EntityID, err)
 				}
 
-				// 2. Delete the beacon row for this entity.
+				// 2. Mark beacon as retired, then delete its row.
+				if _, err := t.tx.ExecContext(ctx,
+					`UPDATE beacons SET status = 'retired' WHERE entity_id = ?`,
+					node.EntityID,
+				); err != nil {
+					return fmt.Errorf("mark beacon retired for %s: %w", node.EntityID, err)
+				}
 				if _, err := t.tx.ExecContext(ctx,
 					`DELETE FROM beacons WHERE entity_id = ?`,
 					node.EntityID,
