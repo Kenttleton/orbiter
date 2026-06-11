@@ -19,6 +19,21 @@ func newScanCmd(d *deps) *cobra.Command {
 	}
 }
 
+func newChartCmd(d *deps) *cobra.Command {
+	return &cobra.Command{
+		Use:   "chart [target]",
+		Short: "Preview a transition — \"What would happen if I went there?\"",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := ""
+			if len(args) > 0 {
+				target = args[0]
+			}
+			return NewExecutor(d.sc, d.renderer).Chart(cmd.Context(), target)
+		},
+	}
+}
+
 func newSurveyCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "survey [target]",

@@ -123,3 +123,52 @@ func (e *Executor) Scan(ctx context.Context, target string) error {
 	e.renderer.Table([]string{"resource", "status", "observation"}, rows)
 	return nil
 }
+
+// Chart computes and renders the terraform-style plan for the target entity.
+// Calls ScanBranch — beacons are updated as a side effect.
+func (e *Executor) Chart(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("chart %s: %w", alias.Name, err)
+	}
+
+	if len(result.Resources) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: no resources to chart", alias.Name))
+		return nil
+	}
+
+	var steps []output.PlanStep
+	for _, r := range result.Resources {
+		desc := ""
+		if r.Report.Error != "" {
+			desc = r.Report.Error
+		}
+		steps = append(steps, output.PlanStep{
+			Action:      beaconToAction(r.BeaconStatus),
+			EntityType:  r.Resource.Role,
+			Name:        r.Resource.Role + "/" + r.Resource.Brand,
+			Description: desc,
+		})
+	}
+	e.renderer.Plan(steps)
+	return nil
+}
+
+// beaconToAction maps beacon status to a PlanStep action verb.
+func beaconToAction(status string) string {
+	switch status {
+	case "healthy":
+		return "no-op"
+	case "drifted", "unverified":
+		return "change"
+	case "failed":
+		return "add"
+	default:
+		return "change"
+	}
+}

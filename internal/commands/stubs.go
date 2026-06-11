@@ -6,17 +6,6 @@ import (
 
 // --- Six Lifecycle Commands ---
 
-func newChartCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "chart [target]",
-		Short: "Preview a transition — \"What would happen if I went there?\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("chart: not yet implemented")
-			return nil
-		},
-	}
-}
-
 func newJumpCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "jump [target]",
