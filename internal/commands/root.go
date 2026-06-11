@@ -89,6 +89,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 		newTransponderCmd(&d),
 		newResourceCmd(&d),
 		newVesselCmd(&d),
+		newStarChartCmd(&d),
 		newAttachCmd(&d),
 		newCompletionsCmd(root),
 	)
