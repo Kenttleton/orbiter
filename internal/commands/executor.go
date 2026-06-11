@@ -92,3 +92,116 @@ func (e *Executor) Survey(ctx context.Context, target string) error {
 	}
 	return nil
 }
+
+// Scan verifies current reality for the target entity and updates beacons.
+func (e *Executor) Scan(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", alias.Name, err)
+	}
+
+	var rows [][]string
+	for _, r := range result.Resources {
+		obs := ""
+		if r.Report.Error != "" {
+			obs = r.Report.Error
+		} else if len(r.Report.Observations) > 0 {
+			obs = r.Report.Observations[0]
+		}
+		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.BeaconStatus, obs})
+	}
+
+	if len(rows) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: no resources attached", alias.Name))
+		return nil
+	}
+	e.renderer.Table([]string{"resource", "status", "observation"}, rows)
+	return nil
+}
+
+// Chart computes and renders the terraform-style plan for the target entity.
+// Calls ScanBranch — beacons are updated as a side effect.
+func (e *Executor) Chart(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("chart %s: %w", alias.Name, err)
+	}
+
+	if len(result.Resources) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: no resources to chart", alias.Name))
+		return nil
+	}
+
+	var steps []output.PlanStep
+	for _, r := range result.Resources {
+		desc := ""
+		if r.Report.Error != "" {
+			desc = r.Report.Error
+		}
+		steps = append(steps, output.PlanStep{
+			Action:      beaconToAction(r.BeaconStatus),
+			EntityType:  r.Resource.Role,
+			Name:        r.Resource.Role + "/" + r.Resource.Brand,
+			Description: desc,
+		})
+	}
+	e.renderer.Plan(steps)
+	return nil
+}
+
+// beaconToAction maps beacon status to a PlanStep action verb.
+func beaconToAction(status string) string {
+	switch status {
+	case "healthy":
+		return "no-op"
+	case "drifted", "unverified":
+		return "change"
+	case "failed":
+		return "add"
+	default:
+		return "change"
+	}
+}
+
+// Calibrate reconciles drift for the target entity.
+func (e *Executor) Calibrate(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.CalibrateBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("calibrate %s: %w", alias.Name, err)
+	}
+
+	if len(result.Resources) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
+		return nil
+	}
+
+	var rows [][]string
+	for _, r := range result.Resources {
+		obs := ""
+		if r.After.Error != "" {
+			obs = r.After.Error
+		} else if len(r.After.Observations) > 0 {
+			obs = r.After.Observations[0]
+		} else if len(r.Before.Observations) > 0 {
+			obs = r.Before.Observations[0]
+		}
+		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action, obs})
+	}
+	e.renderer.Table([]string{"resource", "action", "observation"}, rows)
+	return nil
+}

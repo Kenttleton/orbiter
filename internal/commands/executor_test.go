@@ -39,3 +39,38 @@ func TestExecutor_Survey_WithTarget(t *testing.T) {
 	err = exec.Survey(ctx, "acme")
 	require.NoError(t, err)
 }
+
+func TestExecutor_Scan_NoIntegration(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+	_, _ = exec.SC().CreateResource(ctx, "go", "runtime", "go", "[]", "{}")
+	_, _ = exec.SC().Attach(ctx, "go", "payment-api")
+
+	err := exec.Scan(ctx, "payment-api")
+	require.NoError(t, err)
+}
+
+func TestExecutor_Chart(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	err := exec.Chart(ctx, "payment-api")
+	require.NoError(t, err)
+}
+
+func TestExecutor_Calibrate(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	err := exec.Calibrate(ctx, "payment-api")
+	require.NoError(t, err)
+}

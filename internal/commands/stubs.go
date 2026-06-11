@@ -6,45 +6,12 @@ import (
 
 // --- Six Lifecycle Commands ---
 
-func newChartCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "chart [target]",
-		Short: "Preview a transition — \"What would happen if I went there?\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("chart: not yet implemented")
-			return nil
-		},
-	}
-}
-
 func newJumpCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "jump [target]",
 		Short: "Execute a transition — \"Take me there.\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			d.renderer.Info("jump: not yet implemented")
-			return nil
-		},
-	}
-}
-
-func newScanCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "scan [target]",
-		Short: "Verify reality — \"What does reality currently look like?\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("scan: not yet implemented")
-			return nil
-		},
-	}
-}
-
-func newCalibrateCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "calibrate [target]",
-		Short: "Reconcile drift — \"Bring reality and the Star Chart back into alignment.\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("calibrate: not yet implemented")
 			return nil
 		},
 	}
