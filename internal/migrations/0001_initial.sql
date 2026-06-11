@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 -- Global OrbitID registry and alias table.
 -- Every entity is registered here when created.
--- name defaults to id when no human-readable alias is given.
 -- Uniqueness of name is enforced globally across all entity types.
 CREATE TABLE IF NOT EXISTS aliases (
     id          TEXT PRIMARY KEY,
@@ -37,38 +36,38 @@ CREATE TABLE IF NOT EXISTS planets (
     id              TEXT PRIMARY KEY REFERENCES aliases(id),
     galaxy_id       TEXT NOT NULL REFERENCES aliases(id),
     solar_system_id TEXT REFERENCES aliases(id),
-    repo_url        TEXT,
-    repo_path       TEXT,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Callsigns represent the Captain's active identity.
--- Scoped to a vessel or galaxy via entity_id.
+-- Scope is determined by attachments to hierarchy nodes.
 CREATE TABLE IF NOT EXISTS callsigns (
     id         TEXT PRIMARY KEY REFERENCES aliases(id),
-    entity_id  TEXT NOT NULL REFERENCES aliases(id),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Transponders are pointers to credential locations — never the credentials themselves.
--- Always linked to a callsign. Optionally narrowed to a specific entity.
+-- role is Orbiter-owned (file, env, keychain, vault, agent).
+-- brand is integration-owned (any string; validated at init time).
 CREATE TABLE IF NOT EXISTS transponders (
-    id           TEXT PRIMARY KEY REFERENCES aliases(id),
-    callsign_id  TEXT NOT NULL REFERENCES aliases(id),
-    entity_id    TEXT REFERENCES aliases(id),
-    service      TEXT NOT NULL,
-    location     TEXT NOT NULL,
-    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id         TEXT PRIMARY KEY REFERENCES aliases(id),
+    role       TEXT NOT NULL,
+    brand      TEXT NOT NULL,
+    location   TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Resources represent tooling, runtimes, and capabilities.
--- Scoped to any entity via entity_id.
+-- role is Orbiter-owned (manager, runtime, tool, remote, filesystem).
+-- brand is integration-owned (any string; validated at init time).
+-- manages is a JSON array of brands this manager controls.
+-- config is a JSON object for integration-specific configuration.
 CREATE TABLE IF NOT EXISTS resources (
     id         TEXT PRIMARY KEY REFERENCES aliases(id),
-    entity_id  TEXT NOT NULL REFERENCES aliases(id),
-    kind       TEXT NOT NULL,
-    manager    TEXT,
-    version    TEXT,
+    role       TEXT NOT NULL,
+    brand      TEXT NOT NULL,
+    manages    TEXT NOT NULL DEFAULT '[]',
+    config     TEXT NOT NULL DEFAULT '{}',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -105,6 +104,18 @@ CREATE TABLE IF NOT EXISTS beacons (
     observations TEXT NOT NULL,
     verified_at  DATETIME NOT NULL,
     UNIQUE(entity_id)
+);
+
+-- Attachment graph: directed edges wiring entities together.
+-- from_id is the child entity (resource, callsign, transponder).
+-- to_id is the parent entity (vessel, galaxy, system, planet, or callsign).
+-- IDs here are NOT in the aliases registry.
+CREATE TABLE IF NOT EXISTS attachments (
+    id         TEXT PRIMARY KEY,
+    from_id    TEXT NOT NULL REFERENCES aliases(id),
+    to_id      TEXT NOT NULL REFERENCES aliases(id),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(from_id, to_id)
 );
 
 INSERT INTO schema_version (version) VALUES (1);
