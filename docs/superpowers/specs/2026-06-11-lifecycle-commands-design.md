@@ -12,11 +12,17 @@
 
 ## Integration Contract
 
-Every resource and transponder in the Star Chart requires a registered integration for its `role + brand` pair. Integrations are the **only** mechanism by which Orbiter interacts with resources and transponders — there is no fallback, no built-in behavior, and no direct interaction outside of integration dispatch.
+Integrations are stateless WASM modules — the only mechanism by which Orbiter interacts with the real world. There is no fallback, no built-in behavior, and no direct interaction outside of integration dispatch. Orbiter owns all state management; integrations own all interaction with external tools, services, and the local environment. Each handler call is independently invokable, idempotent, and side-effect-free from Orbiter's perspective — mirroring the AWS Lambda model.
 
-Integrations are stateless WASM modules. They receive context describing their dependencies, interact with the real world, and report observed state back to Orbiter. Orbiter owns all state management. This mirrors the AWS Lambda model: each handler call is independently invokable, idempotent, and side-effect-free from Orbiter's perspective.
+Integrations exist independently of the Star Chart. They are not entities, not registered in the database, and not subject to lifecycle operations. `retro` is explicitly forbidden from touching integrations.
 
-If no integration is registered for a resource or transponder's `role + brand`, Orbiter skips it and records the resource as `unknown` in its beacon. The lifecycle commands (`jump`, `scan`, `calibrate`) operate only on resources and transponders for which an integration exists.
+### Inside-out operations (discovery)
+
+Integrations can be called without any attached resources or transponders. During `planet init --discover`, Orbiter calls `integration.Detect()` against the CWD across all registered integrations. This surfaces what should be attached — the Captain confirms before anything is written to the Star Chart. No prior Star Chart registration is required for discovery to function.
+
+### Outside-in operations (lifecycle)
+
+Once resources and transponders are attached to the Star Chart graph, the lifecycle commands (`jump`, `scan`, `calibrate`, `chart`) dispatch through them. Each attached resource's `role + brand` identifies which integration to call. If no integration is registered for a resource or transponder's `role + brand`, Orbiter skips it and records the entity as `unknown` in its beacon.
 
 ---
 
@@ -286,6 +292,8 @@ There is no special clone step. Repository cloning is owned entirely by whicheve
 ### `orbiter retro [target]`
 
 **Purpose:** "Remove what no longer belongs."
+
+`retro` operates exclusively on Star Chart entities and their graph relationships — galaxies, solar systems, planets, callsigns, resources, transponders, and attachments. **Integrations are not Star Chart entities and are never touched by `retro`.** The integration registry is unaffected by any retro operation.
 
 - Resolve target (explicit or CWD)
 - Deep crawl entire subtree from target node (all descendants)
