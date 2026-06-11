@@ -14,11 +14,17 @@
 
 Integrations are stateless WASM modules — the only mechanism by which Orbiter interacts with the real world. There is no fallback, no built-in behavior, and no direct interaction outside of integration dispatch. Orbiter owns all state management; integrations own all interaction with external tools, services, and the local environment. Each handler call is independently invokable, idempotent, and side-effect-free from Orbiter's perspective — mirroring the AWS Lambda model.
 
-Integrations exist independently of the Star Chart. They are not entities, not registered in the database, and not subject to lifecycle operations. `retro` is explicitly forbidden from touching integrations.
+**Integration manifests are stored in the Star Chart.** When an integration is loaded, its manifest metadata (role, brand, declared file detection patterns, dependencies) is written to the database. This cache enables efficient pre-filtering during discovery and allows the lifecycle system to reason about registered integrations without re-reading WASM binaries on every operation. Manifests are not the integration itself — they are its declared contract with Orbiter.
+
+**Manifests are refreshed during lifecycle operations**, alongside beacon updates. When `scan`, `calibrate`, or `jump` runs, registered integration manifests are compared against what is stored and updated if stale. This ensures the Star Chart reflects the current integration registry as integrations are added, updated, or removed.
+
+Integration manifests are never touched by `retro`. The manifest cache reflects the integration registry, not the Star Chart graph.
 
 ### Inside-out operations (discovery)
 
-Integrations can be called without any attached resources or transponders. During `planet init --discover`, Orbiter calls `integration.Detect()` against the CWD across all registered integrations. This surfaces what should be attached — the Captain confirms before anything is written to the Star Chart. No prior Star Chart registration is required for discovery to function.
+During `planet init --discover`, Orbiter pre-filters the registered integrations using the **stored manifest file patterns** — only integrations whose declared patterns match files present in the CWD are candidates. Matched integrations then have their `detect` handler called to confirm relevance and suggest resources to attach. This avoids calling every integration on every discovery pass.
+
+No prior Star Chart resource or transponder registration is required for discovery. Integrations can surface suggestions entirely from the environment.
 
 ### Outside-in operations (lifecycle)
 
