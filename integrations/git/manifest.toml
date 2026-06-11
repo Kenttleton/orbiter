@@ -1,0 +1,7 @@
+[integration]
+type = "resource"
+role = "tool"
+brand = "git"
+
+[detection]
+files = [".git/config"]

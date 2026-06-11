@@ -12,7 +12,7 @@ import (
 	"github.com/Kenttleton/orbiter/internal/wasm"
 )
 
-//go:embed golang/golang.wasm golang/manifest.toml
+//go:embed golang/golang.wasm golang/manifest.toml git/git.wasm git/manifest.toml
 var bundleFS embed.FS
 
 func init() {
