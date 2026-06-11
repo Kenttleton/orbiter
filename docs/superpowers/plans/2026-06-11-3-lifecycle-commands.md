@@ -536,7 +536,13 @@ type LeveledBranch struct {
 }
 
 // LeveledBranchCrawl walks from entityID up to the vessel, collecting resources,
-// callsigns, and transponders at each level. Levels with no resources are skipped.
+// callsigns, and transponders at each level. Levels with no resources are skipped
+// for dispatch, but their callsigns still participate in passthrough.
+//
+// Callsign passthrough: walk root→leaf (vessel→target) carrying the last-seen
+// callsign forward. A level with no local callsign inherits the nearest ancestor's.
+// A more granular callsign supersedes a coarser one when it exists.
+//
 // The resulting Levels slice is in FILO order: target entity first, vessel last.
 func (sc *StarChart) LeveledBranchCrawl(ctx context.Context, entityID string) (LeveledBranch, error) {
     chain, err := sc.hierarchyChain(ctx, entityID)
@@ -544,38 +550,48 @@ func (sc *StarChart) LeveledBranchCrawl(ctx context.Context, entityID string) (L
         return LeveledBranch{}, fmt.Errorf("hierarchy chain for %s: %w", entityID, err)
     }
 
-    lb := LeveledBranch{Platform: currentPlatform()}
+    // Pass 1 (root→leaf): determine the effective callsign at each level.
+    // Each level uses its own callsign if present; otherwise inherits from ancestor.
+    type callsignEntry struct {
+        cs  models.Callsign
+        tps []models.Transponder
+    }
+    effectiveCallsign := make(map[string]*callsignEntry, len(chain))
+    var carried *callsignEntry
+    for i := len(chain) - 1; i >= 0; i-- {
+        levelID := chain[i]
+        callsigns, err := sc.callsignsAttachedTo(ctx, levelID)
+        if err != nil {
+            return LeveledBranch{}, fmt.Errorf("callsigns at level %s: %w", levelID, err)
+        }
+        if len(callsigns) > 0 {
+            cs := callsigns[0]
+            tps, err := sc.transpondersAttachedTo(ctx, cs.ID)
+            if err != nil {
+                return LeveledBranch{}, fmt.Errorf("transponders for callsign %s: %w", cs.ID, err)
+            }
+            carried = &callsignEntry{cs: cs, tps: tps}
+        }
+        effectiveCallsign[levelID] = carried // nil if no callsign anywhere in the ancestor chain
+    }
 
+    // Pass 2 (FILO): build levels for dispatch — target entity first, vessel last.
+    lb := LeveledBranch{Platform: currentPlatform()}
     for _, levelID := range chain {
         resources, err := sc.resourcesAttachedTo(ctx, levelID)
         if err != nil {
             return LeveledBranch{}, fmt.Errorf("resources at level %s: %w", levelID, err)
         }
-        // Skip levels with no resources — their transponders have nothing to authenticate.
+        // Skip levels with no resources — nothing to dispatch through integrations.
         if len(resources) == 0 {
             continue
         }
 
-        callsigns, err := sc.callsignsAttachedTo(ctx, levelID)
-        if err != nil {
-            return LeveledBranch{}, fmt.Errorf("callsigns at level %s: %w", levelID, err)
+        level := BranchLevel{EntityID: levelID, Resources: resources}
+        if ce := effectiveCallsign[levelID]; ce != nil {
+            level.Callsign = &ce.cs
+            level.Transponders = ce.tps
         }
-
-        level := BranchLevel{
-            EntityID:  levelID,
-            Resources: resources,
-        }
-        if len(callsigns) > 0 {
-            // At most one active callsign per level.
-            cs := callsigns[0]
-            level.Callsign = &cs
-            tps, err := sc.transpondersAttachedTo(ctx, cs.ID)
-            if err != nil {
-                return LeveledBranch{}, fmt.Errorf("transponders for callsign %s: %w", cs.ID, err)
-            }
-            level.Transponders = tps
-        }
-
         lb.Levels = append(lb.Levels, level)
     }
 
@@ -630,8 +646,10 @@ func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]str
 
 // BuildResolvedContextForResource builds the ResolvedContext passed to an integration.
 //
-// Resources are searched across ALL levels of the branch (lb) — a planet resource can
-// declare a dependency on a vessel-level manager and find it. The branch gives context.
+// Resources are searched across all branch levels in FILO order (target first = most
+// specific first). Superseding by role+brand: the first match per role+brand wins.
+// A planet-level manager/nvm supersedes a vessel-level manager/nvm. If no resource of
+// a given role+brand exists at a more specific level, the higher-level one passes through.
 //
 // Transponders are scoped strictly to the resource's own level — auth/access isolation
 // is maintained per level. A system-level credential never appears in a planet-level
@@ -644,11 +662,15 @@ func BuildResolvedContextForResource(level BranchLevel, lb LeveledBranch, manife
         Resources:    make(map[string][]integrations.ResolvedResource),
         Transponders: make(map[string][]integrations.ResolvedTransponder),
     }
-    // Resources: search the full branch — resource dependencies can be at any level.
+    // Resources: FILO order means lb.Levels[0] is most specific (target entity).
+    // Track seen role+brand pairs — first match wins (more specific supersedes coarser).
+    seenResource := make(map[string]bool) // "role/brand" → already found
     for role, brands := range manifest.Dependencies.Resources {
         for _, l := range lb.Levels {
             for _, r := range l.Resources {
-                if r.Role == role && brandAccepted(r.Brand, brands) {
+                key := r.Role + "/" + r.Brand
+                if r.Role == role && brandAccepted(r.Brand, brands) && !seenResource[key] {
+                    seenResource[key] = true
                     rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
                 }
             }
