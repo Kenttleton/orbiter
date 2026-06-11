@@ -1,20 +1,10 @@
 # Orbiter build tasks
 
-build-orbit:
-    go build -o bin/orbit ./cmd/orbit
-
-build-orbiter:
+build:
     go build -o bin/orbiter ./cmd/orbiter
 
-build: build-orbit build-orbiter
-
-install-orbit:
-    go install ./cmd/orbit
-
-install-orbiter:
+install:
     go install ./cmd/orbiter
-
-install: install-orbit install-orbiter
 
 test:
     go test ./...
@@ -26,10 +16,10 @@ lint:
     golangci-lint run
 
 clean:
-    rm -f bin/orbit bin/orbiter
+    rm -f bin/orbiter
 
 # Cross-compilation target for CI release builds.
-# Usage: just build-release orbit linux amd64 v1.2.3
+# Usage: just build-release orbiter linux amd64 v1.2.3
 build-release binary goos goarch version:
     #!/usr/bin/env bash
     set -euo pipefail

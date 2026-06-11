@@ -18,7 +18,7 @@ type deps struct {
 	resolver resolver.Resolver
 }
 
-// NewRootCommand builds and returns the orbit root Cobra command with DI wiring.
+// NewRootCommand builds and returns the orbiter root Cobra command with DI wiring.
 func NewRootCommand() *cobra.Command {
 	var outputFormat string
 	var verbose bool
@@ -26,15 +26,15 @@ func NewRootCommand() *cobra.Command {
 	var d deps
 
 	root := &cobra.Command{
-		Use:   "orbit",
+		Use:   "orbiter",
 		Short: "Orbiter CLI — navigate and orchestrate your development universe",
-		Long: `orbit is the command interface for Orbiter, a state-driven navigation
+		Long: `orbiter is the command interface for Orbiter, a state-driven navigation
 and environment orchestration platform for freelance and contract engineers.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve Star Chart path.
-			chartPath := os.Getenv("ORBIT_STARCHART")
+			chartPath := os.Getenv("ORBITER_STARCHART")
 			if chartPath == "" {
 				home, err := os.UserHomeDir()
 				if err != nil {
@@ -53,7 +53,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 			// Resolve output format: flag > env > default.
 			format := outputFormat
 			if format == "" {
-				format = os.Getenv("ORBIT_OUTPUT")
+				format = os.Getenv("ORBITER_OUTPUT")
 			}
 			if format == "" {
 				format = output.FormatStyled
@@ -61,7 +61,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 
 			// Resolve verbose: flag > env.
 			if !verbose {
-				verbose = os.Getenv("ORBIT_VERBOSE") == "1"
+				verbose = os.Getenv("ORBITER_VERBOSE") == "1"
 			}
 
 			d.renderer = output.NewRenderer(format, verbose)

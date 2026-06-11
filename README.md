@@ -14,7 +14,7 @@
 A cross-platform CLI/TUI for freelance and contract software engineers who regularly move between organizations, teams, projects, identities, credentials, and development environments.
 
 <!-- Demo: replace with docs/assets/demo.gif when ready -->
-<!-- ![orbit jump demo](docs/assets/demo.gif) -->
+<!-- ![orbiter jump demo](docs/assets/demo.gif) -->
 
 ---
 
@@ -52,29 +52,29 @@ The **Star Chart** is the source of truth. It describes desired state. The files
 Orbiter operations revolve around six primary commands:
 
 ```
-orbit survey    — inspect desired state          "What is this thing?"
-orbit chart     — preview a transition           "What would happen if I went there?"
-orbit jump      — execute a transition           "Take me there."
+orbiter survey    — inspect desired state          "What is this thing?"
+orbiter chart     — preview a transition           "What would happen if I went there?"
+orbiter jump      — execute a transition           "Take me there."
 
-orbit scan      — verify reality                 "What does reality currently look like?"
-orbit calibrate — reconcile drift                "Bring reality back into alignment."
-orbit retro     — retire obsolete entities       "Remove what no longer belongs."
+orbiter scan      — verify reality                 "What does reality currently look like?"
+orbiter calibrate — reconcile drift                "Bring reality back into alignment."
+orbiter retro     — retire obsolete entities       "Remove what no longer belongs."
 ```
 
 ### Example workflow
 
 ```bash
 # Preview what switching to a new client project would require
-orbit chart payment-api
+orbiter chart payment-api
 
 # Execute the transition — clones the repo, activates credentials, installs tooling
-orbit jump payment-api
+orbiter jump payment-api
 
 # Later: verify everything is still healthy
-orbit scan payment-api
+orbiter scan payment-api
 
 # After a period away: reconcile any drift (expired credentials, missing tools)
-orbit calibrate payment-api
+orbiter calibrate payment-api
 ```
 
 ---
@@ -91,21 +91,21 @@ Three build verbs construct the Star Chart:
 
 ```bash
 # Hierarchy
-orbit galaxy add acme
-orbit system add backend --galaxy acme
+orbiter galaxy add acme
+orbiter system add backend --galaxy acme
 
 # Identity and credentials
-orbit callsign add kent-acme
-orbit transponder add acme-github --role file --brand github --location ~/.ssh/id_ed25519_acme
-orbit attach acme-github kent-acme
-orbit attach kent-acme acme
+orbiter callsign add kent-acme
+orbiter transponder add acme-github --role file --brand github --location ~/.ssh/id_ed25519_acme
+orbiter attach acme-github kent-acme
+orbiter attach kent-acme acme
 
 # Tooling (at vessel level — available everywhere)
-orbit resource add nvm --role manager --brand nvm --manages '["node"]'
-orbit attach nvm vessel
+orbiter resource add nvm --role manager --brand nvm --manages '["node"]'
+orbiter attach nvm vessel
 
 # Project
-orbit planet init payment-api https://github.com/acme/payment-api
+orbiter planet init payment-api https://github.com/acme/payment-api
 ```
 
 `planet init` runs detection — integrations scan the project directory and suggest resources to attach based on file patterns and sync folder detection. The Captain confirms before anything is provisioned.
@@ -122,11 +122,11 @@ The Star Chart is portable. Moving to a new machine:
 # 1. Copy ~/.orbiter/starchart.db to the new machine
 # 2. Install Orbiter
 # 3. Verify current state
-orbit scan
+orbiter scan
 # 4. Reconcile any drift
-orbit calibrate
+orbiter calibrate
 # 5. Navigate to your project
-orbit jump payment-api
+orbiter jump payment-api
 ```
 
 Orbiter reconstructs your working environment from the Star Chart with minimal manual intervention.
@@ -135,14 +135,11 @@ Orbiter reconstructs your working environment from the Star Chart with minimal m
 
 ## Architecture
 
-### Two Binaries
+### One Binary
 
 | Binary | Role |
 |---|---|
-| `orbit` | CLI — all commands, Star Chart operations, source of truth |
-| `orbiter` | TUI — visual universe and Beacon viewer, shells out to `orbit` |
-
-`orbiter` requires `orbit` in PATH. Installing `orbiter` without `orbit` is not supported.
+| `orbiter` | CLI and TUI — all commands, Star Chart operations, source of truth |
 
 ### Technology
 
@@ -159,7 +156,7 @@ Orbiter reconstructs your working environment from the Star Chart with minimal m
 
 | Priority | Location |
 |---|---|
-| 1 | `ORBIT_STARCHART` environment variable |
+| 1 | `ORBITER_STARCHART` environment variable |
 | 2 | `~/.orbiter/starchart.db` |
 
 ---
@@ -204,12 +201,12 @@ Drift means: a tool is not installed, a credential is expired, a remote is unrea
 Orbiter outputs styled, Terraform-inspired terminal output by default. JSON output is available for scripting and TUI integration.
 
 ```bash
-orbit survey payment-api           # styled (default)
-orbit survey payment-api --output json
-ORBIT_OUTPUT=json orbit scan       # env override
+orbiter survey payment-api           # styled (default)
+orbiter survey payment-api --output json
+ORBITER_OUTPUT=json orbiter scan     # env override
 ```
 
-Progress during multi-step operations (like `orbit jump`) shows a persistent step list with live status:
+Progress during multi-step operations (like `orbiter jump`) shows a persistent step list with live status:
 
 ```
 Executing maneuver...
@@ -221,7 +218,7 @@ Executing maneuver...
   [5/5]   Sweeping sector...          Scanning payment-api
 ```
 
-Add `--verbose` (or `ORBIT_VERBOSE=1`) to replace thematic labels with plain operational output and stream raw tool output inline — useful for CI and debugging stalled steps.
+Add `--verbose` (or `ORBITER_VERBOSE=1`) to replace thematic labels with plain operational output and stream raw tool output inline — useful for CI and debugging stalled steps.
 
 ---
 
