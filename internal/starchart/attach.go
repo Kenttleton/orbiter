@@ -86,7 +86,7 @@ func (sc *StarChart) guardOneCallsign(ctx context.Context, toID string) error {
 		return fmt.Errorf("check existing callsigns: %w", err)
 	}
 	if count > 0 {
-		return fmt.Errorf("node already has a callsign attached — detach it first via orbit retro")
+		return fmt.Errorf("node already has a callsign attached — detach it first via orbiter retro")
 	}
 	return nil
 }
