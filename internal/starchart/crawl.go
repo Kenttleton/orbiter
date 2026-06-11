@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
@@ -81,15 +82,7 @@ func currentPlatform() integrations.Platform {
 
 // brandAccepted returns true if brand is in the whitelist or the whitelist is empty.
 func brandAccepted(brand string, whitelist []string) bool {
-	if len(whitelist) == 0 {
-		return true
-	}
-	for _, b := range whitelist {
-		if b == brand {
-			return true
-		}
-	}
-	return false
+	return len(whitelist) == 0 || slices.Contains(whitelist, brand)
 }
 
 // BranchLevel is one level in the FILO hierarchy for a branch crawl.
