@@ -219,8 +219,10 @@ export GITHUB_SSH_KEY=/Users/kent/.ssh/id_ed25519_acme
 ```text
 ✓  runtime/go        present, reachable, v1.25.1
 +  manager/nvm       not installed — will install
-~  remote/github     reachable but key mismatch — will reconfigure
+~  remote/github     repository not cloned — will clone
 ```
+
+Each line represents a resource (`role/brand` display format) with the action its integration will take.
 
 ---
 
@@ -234,15 +236,15 @@ export GITHUB_SSH_KEY=/Users/kent/.ssh/id_ed25519_acme
 - **Render delta plan** (same terraform-style output)
 - **Prompt confirmation:** `Execute maneuver? [y/N]`
 - On confirm:
-  - Clone repository if not present (via the planet's attached `remote` resource integration, if one is registered)
-  - Call `integration.Init()` for unverified/failed resources
-  - Call `integration.Calibrate()` for drifted resources
+  - For each attached resource: call `integration.Init()` (unverified/failed) or `integration.Calibrate()` (drifted) — this includes `role=remote` resources such as a github integration, which handles clone idempotently like any other resource
   - Activate callsign (build env export directives)
   - Load transponders (build env export directives)
   - Write beacons
 - Return `[]ShellDirective` for shell function to `eval` (`cd` + env exports)
 
 `jump` without the shell function still executes everything — it just prints the directives as plain output rather than having them `eval`'d.
+
+There is no special clone step. Repository cloning is owned entirely by whichever `role=remote` integration is registered for the planet's remote resource. If no such integration is registered, `jump` skips that resource.
 
 ---
 
@@ -353,5 +355,17 @@ No new TUI functionality is in scope for Phase 3 — just wiring `orbiter starch
 | Integration instance pooling | | Phase 4 |
 | Runtime plugin directories | | Phase 4 |
 | 64 KB payload enforcement | | Phase 4 |
+| `remote/github` integration (Rust, WASM) | | Phase 4 |
 | Multi-language integration testing | | Phase 4 |
 | TUI feature work | | Phase 5 |
+
+### Phase 4 note: `remote/github` integration
+
+Phase 4 will add a `role=remote, brand=github` integration written in Rust (compiled to WASM) as the first non-Go integration. It will implement:
+
+- `detect` — check for `.git/config` with a github.com remote URL in the project directory
+- `initialize` — clone the repository to the planet's configured local path
+- `scan` — verify the repository exists locally and the remote is reachable
+- `calibrate` — re-establish the remote if missing, update the origin URL if it has changed
+
+This integration exercises the full `jump` → `scan` → `calibrate` lifecycle and serves as the empirical test for the Rust WASM guest ABI documented in `docs/integrations.md`.
