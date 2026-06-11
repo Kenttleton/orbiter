@@ -1,1 +1,0 @@
-/Users/utterback/Documents/personal/orbiter/internal/integrations/git/guest/target/wasm32-unknown-unknown/release/git.wasm: /Users/utterback/Documents/personal/orbiter/internal/integrations/git/guest/src/lib.rs
