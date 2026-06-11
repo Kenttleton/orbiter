@@ -705,6 +705,277 @@ git commit -m "feat: add LeveledBranchCrawl with FILO hierarchy walk and level-s
 
 ---
 
+## Task 3.5: Native `filesystem/orbiter` integration
+
+`filesystem/orbiter` resources store a path in their `config` JSON (`{"path": "/home/kent/acme/project"}`). Rather than special-casing the `orbiter` brand in the executor, Orbiter ships a native Go implementation of `integrations.Integration` for this role+brand pair. The engine calls it identically to any WASM integration — no special branch for `orbiter` brand anywhere in the dispatch path.
+
+**The native integration pattern:** any Go struct that satisfies `integrations.Integration` can be registered with `integrations.Register`. Native and WASM integrations are indistinguishable to the registry and executor. This means: if a Captain attaches `filesystem/dropbox` instead, the WASM integration for that brand handles everything automatically — just a Star Chart change, no engine change.
+
+**`Self` field on `ResolvedContext`:** The integration needs to read its own resource's `Config` (not a dependency config). `ResolvedContext` gains `Self *models.Resource` — the resource being dispatched to. Hosts set it when building the context. WASM integrations receive it in the JSON payload and ignore it unless they use it; no breaking change.
+
+**`InstallDir` in `StateReport`:** The filesystem integration returns the directory path in `StateReport.InstallDir`. Jump reads this field from the scan results to build the `cd` directive — no manual JSON parsing in the executor.
+
+**Files:**
+
+- Modify: `internal/integrations/types.go` — add `Self *models.Resource` to `ResolvedContext`
+- Modify: `internal/starchart/crawl.go` — `BuildResolvedContextForResource` takes `self models.Resource`, sets `rc.Self`
+- Create: `internal/integrations/native/filesystem.go` — native integration + registration `init()`
+- Modify: `cmd/orbiter/main.go` — blank-import `internal/integrations/native` for side-effect registration
+
+- [ ] **Step 1: Write failing test**
+
+Create `internal/integrations/native/filesystem_test.go`:
+
+```go
+package native_test
+
+import (
+    "context"
+    "os"
+    "path/filepath"
+    "testing"
+
+    "github.com/Kenttleton/orbiter/internal/integrations"
+    "github.com/Kenttleton/orbiter/internal/integrations/native"
+    "github.com/Kenttleton/orbiter/internal/models"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+func TestFilesystemOrbiter_Scan_Present(t *testing.T) {
+    dir := t.TempDir()
+    r := models.Resource{
+        ID:    "r-fs-01",
+        Role:  "filesystem",
+        Brand: "orbiter",
+        Config: `{"path":"` + dir + `"}`,
+    }
+    rc := integrations.ResolvedContext{
+        Platform:     integrations.Platform{OS: "linux", Arch: "amd64"},
+        Self:         &r,
+        Resources:    map[string][]integrations.ResolvedResource{},
+        Transponders: map[string][]integrations.ResolvedTransponder{},
+    }
+    fi := native.NewFilesystemOrbiter()
+    report := fi.Scan(rc)
+    assert.True(t, report.Present)
+    assert.True(t, report.Reachable)
+    assert.Equal(t, dir, report.InstallDir)
+}
+
+func TestFilesystemOrbiter_Scan_Missing(t *testing.T) {
+    r := models.Resource{
+        ID:     "r-fs-02",
+        Role:   "filesystem",
+        Brand:  "orbiter",
+        Config: `{"path":"/tmp/orbiter-does-not-exist-xyz"}`,
+    }
+    rc := integrations.ResolvedContext{
+        Platform:     integrations.Platform{OS: "linux", Arch: "amd64"},
+        Self:         &r,
+        Resources:    map[string][]integrations.ResolvedResource{},
+        Transponders: map[string][]integrations.ResolvedTransponder{},
+    }
+    fi := native.NewFilesystemOrbiter()
+    report := fi.Scan(rc)
+    assert.False(t, report.Present)
+    assert.Equal(t, "/tmp/orbiter-does-not-exist-xyz", report.InstallDir)
+}
+
+func TestFilesystemOrbiter_Init_CreatesDir(t *testing.T) {
+    dir := filepath.Join(t.TempDir(), "newproject")
+    r := models.Resource{
+        ID:     "r-fs-03",
+        Role:   "filesystem",
+        Brand:  "orbiter",
+        Config: `{"path":"` + dir + `"}`,
+    }
+    rc := integrations.ResolvedContext{
+        Platform:     integrations.Platform{OS: "linux", Arch: "amd64"},
+        Self:         &r,
+        Resources:    map[string][]integrations.ResolvedResource{},
+        Transponders: map[string][]integrations.ResolvedTransponder{},
+    }
+    fi := native.NewFilesystemOrbiter()
+    report := fi.Init(rc)
+    require.True(t, report.Present)
+    assert.Equal(t, dir, report.InstallDir)
+    _, err := os.Stat(dir)
+    assert.NoError(t, err, "Init should have created the directory")
+}
+
+func TestFilesystemOrbiter_Registered(t *testing.T) {
+    // init() in native package registers under filesystem/orbiter
+    i, ok := integrations.Default.Get("filesystem", "orbiter")
+    require.True(t, ok, "filesystem/orbiter should be registered")
+    m := i.Meta()
+    assert.Equal(t, "filesystem", m.Integration.Role)
+    assert.Equal(t, "orbiter", m.Integration.Brand)
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+go test ./internal/integrations/native/... -v
+```
+
+Expected: package not found (directory does not exist yet).
+
+- [ ] **Step 3: Add `Self` to `ResolvedContext` and update `BuildResolvedContextForResource`**
+
+In `internal/integrations/types.go`, add the `Self` field to `ResolvedContext`:
+
+```go
+// ResolvedContext is the boundary struct passed to Init, Scan, and Calibrate.
+// Assembled by the starchart branch crawl, filtered by manifest dependencies.
+// All fields are JSON-serializable for Phase 3 WASM compatibility.
+type ResolvedContext struct {
+    Platform     Platform                         `json:"platform"`
+    Self         *models.Resource                 `json:"self,omitempty"`
+    Resources    map[string][]ResolvedResource    `json:"resources"`
+    Transponders map[string][]ResolvedTransponder `json:"transponders"`
+}
+```
+
+In `internal/starchart/crawl.go`, add `self models.Resource` as the first parameter to `BuildResolvedContextForResource` and set `rc.Self`:
+
+```go
+func BuildResolvedContextForResource(self models.Resource, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
+    rc := integrations.ResolvedContext{
+        Platform:     lb.Platform,
+        Self:         &self,
+        Resources:    make(map[string][]integrations.ResolvedResource),
+        Transponders: make(map[string][]integrations.ResolvedTransponder),
+    }
+    // ... rest unchanged
+```
+
+Update every call site of `BuildResolvedContextForResource` in `lifecycle.go` (Task 4) to pass the resource as the first argument: `BuildResolvedContextForResource(r, level, lb, manifest)`.
+
+- [ ] **Step 4: Implement `filesystemOrbiter`**
+
+Create `internal/integrations/native/filesystem.go`:
+
+```go
+package native
+
+import (
+    "encoding/json"
+    "os"
+
+    "github.com/Kenttleton/orbiter/internal/integrations"
+)
+
+var filesystemOrbiterManifest = integrations.Manifest{
+    Integration: integrations.ManifestIntegration{
+        Type:  "resource",
+        Role:  "filesystem",
+        Brand: "orbiter",
+    },
+}
+
+// filesystemOrbiter is the native implementation of the filesystem/orbiter integration.
+// It reads {"path": "..."} from Self.Config and manages the directory on disk.
+type filesystemOrbiter struct{}
+
+// NewFilesystemOrbiter returns a new filesystemOrbiter for testing.
+// Normal code gets the instance registered by init().
+func NewFilesystemOrbiter() integrations.Integration {
+    return &filesystemOrbiter{}
+}
+
+func (f *filesystemOrbiter) Meta() integrations.Manifest {
+    return filesystemOrbiterManifest
+}
+
+func (f *filesystemOrbiter) Detect(ctx integrations.DetectContext) integrations.DetectReport {
+    // filesystem/orbiter resources are added explicitly via `orbiter resource add`.
+    return integrations.DetectReport{Detected: false}
+}
+
+func (f *filesystemOrbiter) Init(ctx integrations.ResolvedContext) integrations.StateReport {
+    path := pathFromSelf(ctx)
+    if path == "" {
+        return integrations.StateReport{Error: "no path in resource config"}
+    }
+    if err := os.MkdirAll(path, 0755); err != nil {
+        return integrations.StateReport{InstallDir: path, Error: err.Error()}
+    }
+    return integrations.StateReport{Present: true, Reachable: true, InstallDir: path}
+}
+
+func (f *filesystemOrbiter) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
+    path := pathFromSelf(ctx)
+    if path == "" {
+        return integrations.StateReport{Error: "no path in resource config"}
+    }
+    info, err := os.Stat(path)
+    if err != nil {
+        return integrations.StateReport{Present: false, InstallDir: path}
+    }
+    return integrations.StateReport{
+        Present:      true,
+        Reachable:    info.IsDir(),
+        InstallDir:   path,
+        Observations: []string{path},
+    }
+}
+
+func (f *filesystemOrbiter) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
+    return f.Init(ctx) // mkdir -p is idempotent
+}
+
+// pathFromSelf reads {"path": "..."} from ctx.Self.Config.
+func pathFromSelf(ctx integrations.ResolvedContext) string {
+    if ctx.Self == nil {
+        return ""
+    }
+    var cfg struct {
+        Path string `json:"path"`
+    }
+    if err := json.Unmarshal([]byte(ctx.Self.Config), &cfg); err != nil {
+        return ""
+    }
+    return cfg.Path
+}
+
+func init() {
+    integrations.Register("filesystem", "orbiter", &filesystemOrbiter{})
+}
+```
+
+- [ ] **Step 5: Blank-import the native package**
+
+In `cmd/orbiter/main.go`, add the import alongside the existing WASM integration imports:
+
+```go
+import (
+    // ...existing imports...
+    _ "github.com/Kenttleton/orbiter/internal/integrations/native"   // registers filesystem/orbiter
+    _ "github.com/Kenttleton/orbiter/internal/integrations/golang"   // registers runtime/go
+)
+```
+
+- [ ] **Step 6: Run tests**
+
+```bash
+go test ./internal/integrations/native/... -v
+go test ./internal/integrations/... -v
+```
+
+Expected: all PASS. The `TestFilesystemOrbiter_Registered` test confirms `init()` fired.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add internal/integrations/types.go internal/starchart/crawl.go \
+        internal/integrations/native/ cmd/orbiter/main.go
+git commit -m "feat: add native filesystem/orbiter integration with Self context field"
+```
+
+---
+
 ## Task 4: starchart.ScanBranch and CalibrateBranch
 
 These parallel `InitPlanet`/`InitResource` from `internal/starchart/init.go` but call `Scan`/`Calibrate` instead of `Init`. They return structured results for the Executor to render. They use `LeveledBranchCrawl` (not the Phase 2 `BranchCrawl`) so each resource gets only its level's transponders in its integration context.
@@ -2064,30 +2335,25 @@ func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]S
     }
     stderrRenderer.Table([]string{"resource", "action"}, execRows)
 
-    // Phase 4: build shell directives.
-    // Re-crawl to pick up any resources created by init (e.g. filesystem resource
-    // written by the remote integration after a clone).
-    branch, _ := e.sc.BranchCrawl(ctx, alias.ID)
-
+    // Phase 4: build shell directives from calibration results.
+    // The filesystem/orbiter integration populates StateReport.InstallDir;
+    // reading it here avoids any special-casing for the orbiter brand.
     var directives []ShellDirective
 
-    // cd directive: read path from the first attached filesystem/orbiter resource.
-    for _, r := range branch.Resources {
-        if r.Role == "filesystem" && r.Brand == "orbiter" {
-            var cfg struct {
-                Path string `json:"path"`
-            }
-            if err := json.Unmarshal([]byte(r.Config), &cfg); err == nil && cfg.Path != "" {
-                directives = append(directives, ShellDirective{Op: "cd", Value: cfg.Path})
-                break
-            }
+    // cd directive: first filesystem resource whose InstallDir is set.
+    for _, r := range calibResult.Resources {
+        if r.Resource.Role == "filesystem" && r.Report.InstallDir != "" {
+            directives = append(directives, ShellDirective{Op: "cd", Value: r.Report.InstallDir})
+            break
         }
     }
 
-    // Export transponder env vars from env-role transponders attached to this entity.
-    for _, tp := range branch.Transponders {
-        if tp.Role == "env" {
-            directives = append(directives, ShellDirective{Op: "export", Key: tp.Brand, Value: tp.Location})
+    // Export transponder env vars from env-role transponders in the branch.
+    for _, r := range calibResult.Resources {
+        for _, tp := range r.LevelTransponders {
+            if tp.Role == "env" {
+                directives = append(directives, ShellDirective{Op: "export", Key: tp.Brand, Value: tp.Location})
+            }
         }
     }
 
