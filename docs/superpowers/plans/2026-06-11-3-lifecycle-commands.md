@@ -628,22 +628,33 @@ func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]str
     return chain, nil
 }
 
-// BuildResolvedContextForLevel filters a BranchLevel using the integration's manifest
-// dependency declarations, passing only the level's own transponders to the integration.
-// This replaces BuildResolvedContext for lifecycle dispatch.
-func BuildResolvedContextForLevel(level BranchLevel, platform integrations.Platform, manifest integrations.Manifest) integrations.ResolvedContext {
+// BuildResolvedContextForResource builds the ResolvedContext passed to an integration.
+//
+// Resources are searched across ALL levels of the branch (lb) — a planet resource can
+// declare a dependency on a vessel-level manager and find it. The branch gives context.
+//
+// Transponders are scoped strictly to the resource's own level — auth/access isolation
+// is maintained per level. A system-level credential never appears in a planet-level
+// integration call even though both are in the branch.
+//
+// This replaces BuildResolvedContext for all lifecycle dispatch (scan, calibrate, jump).
+func BuildResolvedContextForResource(level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
     rc := integrations.ResolvedContext{
-        Platform:     platform,
+        Platform:     lb.Platform,
         Resources:    make(map[string][]integrations.ResolvedResource),
         Transponders: make(map[string][]integrations.ResolvedTransponder),
     }
+    // Resources: search the full branch — resource dependencies can be at any level.
     for role, brands := range manifest.Dependencies.Resources {
-        for _, r := range level.Resources {
-            if r.Role == role && brandAccepted(r.Brand, brands) {
-                rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
+        for _, l := range lb.Levels {
+            for _, r := range l.Resources {
+                if r.Role == role && brandAccepted(r.Brand, brands) {
+                    rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
+                }
             }
         }
     }
+    // Transponders: only from this resource's own level. Auth stays where it was attached.
     for role, brands := range manifest.Dependencies.Transponders {
         for _, tp := range level.Transponders {
             if tp.Role == role && brandAccepted(tp.Brand, brands) {
@@ -795,7 +806,7 @@ type BranchCalibrateResult struct {
 }
 
 // ScanBranch scans all resources and transponders in the full FILO hierarchy for entityID.
-// Each resource receives only the transponders from its own level as integration context.
+// Each resource receives branch-wide resource context but only its own level's transponders.
 // Levels with no resources are skipped. Writes beacon updates as a side effect.
 func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchScanResult, error) {
     lb, err := sc.LeveledBranchCrawl(ctx, entityID)
@@ -806,14 +817,14 @@ func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchSca
     var result BranchScanResult
     for _, level := range lb.Levels {
         for _, r := range level.Resources {
-            rr, err := sc.scanResourceAtLevel(ctx, r, level, lb.Platform)
+            rr, err := sc.scanResource(ctx, r, level, lb)
             if err != nil {
                 return BranchScanResult{}, err
             }
             result.Resources = append(result.Resources, rr)
         }
         for _, tp := range level.Transponders {
-            tr, err := sc.scanTransponderAtLevel(ctx, tp, level, lb.Platform)
+            tr, err := sc.scanTransponder(ctx, tp, level, lb)
             if err != nil {
                 return BranchScanResult{}, err
             }
@@ -824,7 +835,7 @@ func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchSca
 }
 
 // CalibrateBranch scans the full FILO hierarchy, then calibrates drifted/failed entities.
-// Each resource receives only the transponders from its own level as integration context.
+// Each resource receives branch-wide resource context but only its own level's transponders.
 // Writes beacon updates as a side effect.
 func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (BranchCalibrateResult, error) {
     lb, err := sc.LeveledBranchCrawl(ctx, entityID)
@@ -835,14 +846,14 @@ func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (Bran
     var result BranchCalibrateResult
     for _, level := range lb.Levels {
         for _, r := range level.Resources {
-            cr, err := sc.calibrateResourceAtLevel(ctx, r, level, lb.Platform)
+            cr, err := sc.calibrateResource(ctx, r, level, lb)
             if err != nil {
                 return BranchCalibrateResult{}, err
             }
             result.Resources = append(result.Resources, cr)
         }
         for _, tp := range level.Transponders {
-            ct, err := sc.calibrateTransponderAtLevel(ctx, tp, level, lb.Platform)
+            ct, err := sc.calibrateTransponder(ctx, tp, level, lb)
             if err != nil {
                 return BranchCalibrateResult{}, err
             }
@@ -852,7 +863,7 @@ func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (Bran
     return result, nil
 }
 
-func (sc *StarChart) scanResourceAtLevel(ctx context.Context, r models.Resource, level BranchLevel, platform integrations.Platform) (ResourceScanResult, error) {
+func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, level BranchLevel, lb LeveledBranch) (ResourceScanResult, error) {
     integration, ok := sc.integrations.Get(r.Role, r.Brand)
     if !ok {
         status := models.BeaconStatusFailed
@@ -862,7 +873,7 @@ func (sc *StarChart) scanResourceAtLevel(ctx context.Context, r models.Resource,
         }
         return ResourceScanResult{Resource: r, BeaconStatus: status}, nil
     }
-    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
+    rc := BuildResolvedContextForResource(level, lb, integration.Meta())
     report := integration.Scan(rc)
     status := scanBeaconStatus(report)
     if err := sc.setBeaconStatus(ctx, r.ID, status, report.Observations); err != nil {
@@ -871,7 +882,7 @@ func (sc *StarChart) scanResourceAtLevel(ctx context.Context, r models.Resource,
     return ResourceScanResult{Resource: r, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) scanTransponderAtLevel(ctx context.Context, tp models.Transponder, level BranchLevel, platform integrations.Platform) (TransponderScanResult, error) {
+func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (TransponderScanResult, error) {
     integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
     if !ok {
         status := models.BeaconStatusFailed
@@ -881,9 +892,9 @@ func (sc *StarChart) scanTransponderAtLevel(ctx context.Context, tp models.Trans
         }
         return TransponderScanResult{Transponder: tp, BeaconStatus: status}, nil
     }
-    // Transponder integrations receive a minimal level context — just the platform
-    // and the transponder's own level data (no peer resources needed for credential checks).
-    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
+    // Transponder integrations check their own credential location; resources in context
+    // are provided in case the transponder integration needs to know about the environment.
+    rc := BuildResolvedContextForResource(level, lb, integration.Meta())
     report := integration.Scan(rc)
     status := scanBeaconStatus(report)
     if err := sc.setBeaconStatus(ctx, tp.ID, status, report.Observations); err != nil {
@@ -892,8 +903,8 @@ func (sc *StarChart) scanTransponderAtLevel(ctx context.Context, tp models.Trans
     return TransponderScanResult{Transponder: tp, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) calibrateResourceAtLevel(ctx context.Context, r models.Resource, level BranchLevel, platform integrations.Platform) (ResourceCalibrateResult, error) {
-    scanResult, err := sc.scanResourceAtLevel(ctx, r, level, platform)
+func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, level BranchLevel, lb LeveledBranch) (ResourceCalibrateResult, error) {
+    scanResult, err := sc.scanResource(ctx, r, level, lb)
     if err != nil {
         return ResourceCalibrateResult{}, err
     }
@@ -904,7 +915,7 @@ func (sc *StarChart) calibrateResourceAtLevel(ctx context.Context, r models.Reso
     if !ok {
         return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, Action: "failed"}, nil
     }
-    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
+    rc := BuildResolvedContextForResource(level, lb, integration.Meta())
     after := integration.Calibrate(rc)
     afterStatus := scanBeaconStatus(after)
     if err := sc.setBeaconStatus(ctx, r.ID, afterStatus, after.Observations); err != nil {
@@ -917,8 +928,8 @@ func (sc *StarChart) calibrateResourceAtLevel(ctx context.Context, r models.Reso
     return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, After: after, Action: action}, nil
 }
 
-func (sc *StarChart) calibrateTransponderAtLevel(ctx context.Context, tp models.Transponder, level BranchLevel, platform integrations.Platform) (TransponderCalibrateResult, error) {
-    scanResult, err := sc.scanTransponderAtLevel(ctx, tp, level, platform)
+func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (TransponderCalibrateResult, error) {
+    scanResult, err := sc.scanTransponder(ctx, tp, level, lb)
     if err != nil {
         return TransponderCalibrateResult{}, err
     }
@@ -929,7 +940,7 @@ func (sc *StarChart) calibrateTransponderAtLevel(ctx context.Context, tp models.
     if !ok {
         return TransponderCalibrateResult{Transponder: tp, Before: scanResult.Report, Action: "failed"}, nil
     }
-    rc := BuildResolvedContextForLevel(level, platform, integration.Meta())
+    rc := BuildResolvedContextForResource(level, lb, integration.Meta())
     after := integration.Calibrate(rc)
     afterStatus := scanBeaconStatus(after)
     if err := sc.setBeaconStatus(ctx, tp.ID, afterStatus, after.Observations); err != nil {
