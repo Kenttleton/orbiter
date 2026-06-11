@@ -4,19 +4,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Six Lifecycle Commands ---
-
-func newRetroCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "retro [target]",
-		Short: "Retire obsolete entities — \"Remove what no longer belongs in the universe.\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("retro: not yet implemented")
-			return nil
-		},
-	}
-}
-
 // --- Vessel Commands ---
 
 func newVesselCmd(d *deps) *cobra.Command {

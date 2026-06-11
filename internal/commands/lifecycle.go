@@ -66,6 +66,24 @@ func newSurveyCmd(d *deps) *cobra.Command {
 	}
 }
 
+func newRetroCmd(d *deps) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "retro [target]",
+		Short: "Retire an entity — \"Remove what no longer belongs.\"",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := ""
+			if len(args) > 0 {
+				target = args[0]
+			}
+			return NewExecutor(d.sc, d.renderer).Retro(cmd.Context(), target, yes)
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompt")
+	return cmd
+}
+
 func newJumpCmd(d *deps) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{

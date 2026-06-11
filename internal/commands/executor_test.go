@@ -77,6 +77,22 @@ func TestExecutor_Calibrate(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExecutor_Retro_Confirmed(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "retro-galaxy")
+	_, _ = exec.SC().CreatePlanet(ctx, "retro-planet", g.ID, "")
+
+	// Retro the planet — confirmed=true skips the interactive prompt.
+	err := exec.Retro(ctx, "retro-planet", true)
+	require.NoError(t, err)
+
+	// Planet should no longer be resolvable.
+	_, err = exec.SC().Resolve(ctx, "retro-planet")
+	assert.ErrorIs(t, err, starchart.ErrNotFound)
+}
+
 func TestExecutor_Jump_Confirmed(t *testing.T) {
 	exec := openTestExecutor(t)
 	ctx := context.Background()

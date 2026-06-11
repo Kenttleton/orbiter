@@ -252,6 +252,50 @@ func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]S
 	return directives, nil
 }
 
+// Retro plans and optionally executes retirement of an entity.
+// Human-readable output goes to the configured renderer.
+// If confirmed is false, renders the plan and prompts interactively.
+func (e *Executor) Retro(ctx context.Context, target string, confirmed bool) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	plan, err := e.sc.PlanRetro(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("plan retro for %s: %w", alias.Name, err)
+	}
+
+	if len(plan.Nodes) == 0 {
+		e.renderer.Success(fmt.Sprintf("%s has no entities to retire", alias.Name))
+		return nil
+	}
+
+	// Render the plan as a table.
+	rows := make([][]string, len(plan.Nodes))
+	for i, n := range plan.Nodes {
+		rows[i] = []string{n.Name, n.Action}
+	}
+	e.renderer.Table([]string{"entity", "action"}, rows)
+
+	if !confirmed {
+		fmt.Fprintf(os.Stderr, "\nExecute retro? [y/N] ")
+		var response string
+		fmt.Fscanln(os.Stdin, &response)
+		if response != "y" && response != "Y" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
+			return nil
+		}
+	}
+
+	if err := e.sc.ExecuteRetro(ctx, plan); err != nil {
+		return fmt.Errorf("execute retro for %s: %w", alias.Name, err)
+	}
+
+	e.renderer.Success(fmt.Sprintf("%s retired", alias.Name))
+	return nil
+}
+
 // Calibrate reconciles drift for the target entity.
 func (e *Executor) Calibrate(ctx context.Context, target string) error {
 	alias, err := e.resolveTarget(ctx, target)
