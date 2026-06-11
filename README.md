@@ -227,8 +227,8 @@ Add `--verbose` (or `ORBITER_VERBOSE=1`) to replace thematic labels with plain o
 Requires [Just](https://github.com/casey/just).
 
 ```bash
-just build        # build both binaries to bin/
-just install      # go install both binaries
+just build        # build orbiter to bin/
+just install      # go install orbiter
 just test         # run all tests
 just lint         # run golangci-lint
 just clean        # remove bin/
