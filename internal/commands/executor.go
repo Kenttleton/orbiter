@@ -92,3 +92,34 @@ func (e *Executor) Survey(ctx context.Context, target string) error {
 	}
 	return nil
 }
+
+// Scan verifies current reality for the target entity and updates beacons.
+func (e *Executor) Scan(ctx context.Context, target string) error {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return err
+	}
+
+	result, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("scan %s: %w", alias.Name, err)
+	}
+
+	var rows [][]string
+	for _, r := range result.Resources {
+		obs := ""
+		if r.Report.Error != "" {
+			obs = r.Report.Error
+		} else if len(r.Report.Observations) > 0 {
+			obs = r.Report.Observations[0]
+		}
+		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.BeaconStatus, obs})
+	}
+
+	if len(rows) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: no resources attached", alias.Name))
+		return nil
+	}
+	e.renderer.Table([]string{"resource", "status", "observation"}, rows)
+	return nil
+}

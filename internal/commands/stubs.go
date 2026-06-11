@@ -28,17 +28,6 @@ func newJumpCmd(d *deps) *cobra.Command {
 	}
 }
 
-func newScanCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
-		Use:   "scan [target]",
-		Short: "Verify reality — \"What does reality currently look like?\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			d.renderer.Info("scan: not yet implemented")
-			return nil
-		},
-	}
-}
-
 func newCalibrateCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "calibrate [target]",
