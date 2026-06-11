@@ -174,6 +174,79 @@ git commit -m "feat: rename orbit binary to orbiter, update env vars"
 
 ---
 
+## Task 1.5: Role and integration-type constants
+
+Every role name is currently a bare string literal scattered across models, integrations, and executor code. The Orbiter Constitution defines the canonical set of resource roles and transponder roles. Collecting them as package-level constants in one file prevents typos, enables IDE completion, and gives a single place to verify against the spec.
+
+**Files:**
+
+- Create: `internal/integrations/roles.go`
+
+- [ ] **Step 1: Create the constants file**
+
+Create `internal/integrations/roles.go`:
+
+```go
+package integrations
+
+// Resource roles, as defined in the Orbiter Constitution.
+const (
+    ResourceRoleManager    = "manager"
+    ResourceRoleRuntime    = "runtime"
+    ResourceRoleTool       = "tool"
+    ResourceRoleRemote     = "remote"
+    ResourceRoleFilesystem = "filesystem"
+)
+
+// Transponder roles, as defined in the Orbiter Constitution.
+const (
+    TransponderRoleFile     = "file"
+    TransponderRoleEnv      = "env"
+    TransponderRoleKeychain = "keychain"
+    TransponderRoleVault    = "vault"
+    TransponderRoleAgent    = "agent"
+)
+
+// Integration types used in Manifest.Integration.Type.
+const (
+    IntegrationTypeResource    = "resource"
+    IntegrationTypeTransponder = "transponder"
+)
+```
+
+- [ ] **Step 2: Replace string literals throughout the existing codebase**
+
+Run grep to find all bare role/type strings and replace with constants:
+
+```bash
+grep -rn '"manager"\|"runtime"\|"tool"\|"remote"\|"filesystem"\|"file"\|"env"\|"keychain"\|"vault"\|"agent"' \
+    internal/ cmd/ --include="*.go" | grep -v "_test.go\|roles.go"
+```
+
+For each match, replace the string literal with the appropriate constant. Common locations:
+
+- `internal/integrations/golang/register.go`: `Role: "runtime"` → `Role: integrations.ResourceRoleRuntime`
+- `internal/integrations/native/filesystem.go` (Task 3.5): `Role: "filesystem"` → `integrations.ResourceRoleFilesystem`
+- Any executor or starchart code checking `r.Role == "filesystem"` → `r.Role == integrations.ResourceRoleFilesystem`
+- Manifest structs in integration `register.go` files
+
+- [ ] **Step 3: Verify the build still passes**
+
+```bash
+go build ./...
+```
+
+Expected: PASS. No test changes needed — constants don't change behavior.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add internal/integrations/roles.go
+git commit -m "feat: add role and integration-type constants from Orbiter Constitution"
+```
+
+---
+
 ## Task 2: starchart.ResolveCWD — exact match then longest prefix via filesystem resources
 
 Paths are expressed by attaching a `role=filesystem, brand=orbiter` resource to a hierarchy node. The path is stored in the resource's `config` JSON field as `{"path": "/home/kent/acme/payment-api"}`. `ResolveCWD` collects all such resources via the attachment graph, loads them into a FILO queue (most specific/deepest attached last → popped first), and runs exact-match-first then longest-prefix matching to find the entity to resolve to. No schema changes are needed — the `config` column already exists on `resources`.
