@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
-	_ "github.com/Kenttleton/orbiter/internal/integrations/golang"
+	_ "github.com/Kenttleton/orbiter/integrations"
 	_ "github.com/Kenttleton/orbiter/internal/integrations/native"
 )
 

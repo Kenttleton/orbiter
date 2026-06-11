@@ -1,0 +1,7 @@
+[integration]
+type = "resource"
+role = "runtime"
+brand = "go"
+
+[detection]
+files = ["go.mod", "go.sum"]
