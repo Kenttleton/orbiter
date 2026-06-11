@@ -6,8 +6,10 @@ import (
 	"io/fs"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Kenttleton/orbiter/internal/migrations"
+	"github.com/Kenttleton/orbiter/internal/models"
 )
 
 func (sc *StarChart) migrate(ctx context.Context) error {
@@ -49,7 +51,41 @@ func (sc *StarChart) migrate(ctx context.Context) error {
 			return fmt.Errorf("apply migration %s: %w", name, err)
 		}
 	}
-	return nil
+	return sc.seedVessel(ctx)
+}
+
+// seedVessel inserts the single vessel row if it does not already exist.
+// The vessel alias uses the reserved name "vessel".
+func (sc *StarChart) seedVessel(ctx context.Context) error {
+	var count int
+	row := sc.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM vessel")
+	if err := row.Scan(&count); err != nil {
+		return fmt.Errorf("check vessel: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	id := models.NewID(models.EntityTypeVessel)
+	now := time.Now().UTC()
+	tx, err := sc.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin vessel seed: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO aliases (id, name, entity_type, created_at) VALUES (?, ?, ?, ?)",
+		id, "vessel", models.EntityTypeVessel, now,
+	); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("seed vessel alias: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO vessel (id, created_at) VALUES (?, ?)",
+		id, now,
+	); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("seed vessel row: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (sc *StarChart) appliedVersions(ctx context.Context) (map[int]bool, error) {

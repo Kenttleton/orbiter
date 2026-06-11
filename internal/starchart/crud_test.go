@@ -77,8 +77,12 @@ func TestListEmpty(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
+	// A fresh DB contains only the seeded vessel alias; filtering by a
+	// non-vessel entity type must return an empty slice.
 	var results []models.Alias
-	require.NoError(t, sc.List(ctx, "aliases", &results))
+	require.NoError(t, sc.List(ctx, "aliases", &results,
+		starchart.Filter{Column: "entity_type", Op: "=", Value: models.EntityTypePlanet},
+	))
 	require.Empty(t, results)
 }
 
