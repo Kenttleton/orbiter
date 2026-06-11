@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -62,4 +64,30 @@ func newSurveyCmd(d *deps) *cobra.Command {
 			return NewExecutor(d.sc, d.renderer).Survey(cmd.Context(), target)
 		},
 	}
+}
+
+func newJumpCmd(d *deps) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "jump [target]",
+		Short: "Execute a transition — \"Take me there.\"",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			target := ""
+			if len(args) > 0 {
+				target = args[0]
+			}
+			exec := NewExecutor(d.sc, d.renderer)
+			directives, err := exec.Jump(cmd.Context(), target, yes)
+			if err != nil {
+				return err
+			}
+			for _, dir := range directives {
+				fmt.Println(dir.String())
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompt")
+	return cmd
 }

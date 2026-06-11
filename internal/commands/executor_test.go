@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
+	_ "github.com/Kenttleton/orbiter/internal/integrations/native"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,4 +75,24 @@ func TestExecutor_Calibrate(t *testing.T) {
 
 	err := exec.Calibrate(ctx, "payment-api")
 	require.NoError(t, err)
+}
+
+func TestExecutor_Jump_Confirmed(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	path := t.TempDir()
+	config := `{"path":"` + path + `"}`
+	_, _ = exec.SC().CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", config)
+	_, _ = exec.SC().Attach(ctx, "payment-api-path", "payment-api")
+
+	// confirmed=true skips the interactive prompt
+	directives, err := exec.Jump(ctx, "payment-api", true)
+	require.NoError(t, err)
+	require.NotEmpty(t, directives)
+	assert.Equal(t, "cd", directives[0].Op)
+	assert.Equal(t, path, directives[0].Value)
 }

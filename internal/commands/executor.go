@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
@@ -171,6 +172,84 @@ func beaconToAction(status string) string {
 	default:
 		return "change"
 	}
+}
+
+// Jump executes a full transition to the target entity.
+// Returns shell directives for the shell function to eval.
+// Human-readable output is written to stderr; shell directives to stdout.
+// If confirmed is false, renders the plan and prompts interactively.
+func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]ShellDirective, error) {
+	alias, err := e.resolveTarget(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 1: chart — show what will happen.
+	scanResult, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
+	}
+
+	// Render plan to stderr.
+	stderrRenderer := output.NewRendererTo(output.FormatStyled, false, os.Stderr)
+	var steps []output.PlanStep
+	for _, r := range scanResult.Resources {
+		steps = append(steps, output.PlanStep{
+			Action:     beaconToAction(r.BeaconStatus),
+			EntityType: r.Resource.Role,
+			Name:       r.Resource.Brand,
+		})
+	}
+	if len(steps) > 0 {
+		stderrRenderer.Plan(steps)
+	}
+
+	// Phase 2: confirm.
+	if !confirmed {
+		fmt.Fprintf(os.Stderr, "\nExecute maneuver? [y/N] ")
+		var response string
+		fmt.Fscanln(os.Stdin, &response)
+		if response != "y" && response != "Y" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
+			return nil, nil
+		}
+	}
+
+	// Phase 3: execute — calibrate all drifted/failed resources.
+	calibResult, err := e.sc.CalibrateBranch(ctx, alias.ID)
+	if err != nil {
+		return nil, fmt.Errorf("execute jump for %s: %w", alias.Name, err)
+	}
+
+	// Render execution results to stderr.
+	var execRows [][]string
+	for _, r := range calibResult.Resources {
+		execRows = append(execRows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action})
+	}
+	if len(execRows) > 0 {
+		stderrRenderer.Table([]string{"resource", "action"}, execRows)
+	}
+
+	// Phase 4: build shell directives.
+	var directives []ShellDirective
+
+	// cd directive: first filesystem resource with an InstallDir in After (calibrated)
+	// or Before (already healthy — scan report has the dir, After is zero).
+	for _, r := range calibResult.Resources {
+		if r.Resource.Role != integrations.ResourceRoleFilesystem {
+			continue
+		}
+		if r.After.InstallDir != "" {
+			directives = append(directives, ShellDirective{Op: "cd", Value: r.After.InstallDir})
+			break
+		}
+		if r.Before.InstallDir != "" {
+			directives = append(directives, ShellDirective{Op: "cd", Value: r.Before.InstallDir})
+			break
+		}
+	}
+
+	return directives, nil
 }
 
 // Calibrate reconciles drift for the target entity.
