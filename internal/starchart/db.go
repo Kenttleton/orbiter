@@ -7,17 +7,26 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Kenttleton/orbiter/internal/integrations"
 	_ "modernc.org/sqlite"
 )
 
 // StarChart wraps the SQLite connection for the Star Chart database.
 type StarChart struct {
-	db *sql.DB
+	db           *sql.DB
+	integrations integrationProvider
 }
 
 // Open opens or creates the Star Chart database at path, creating parent
 // directories as needed, and applies any pending migrations.
 func Open(path string) (*StarChart, error) {
+	return OpenWithRegistry(path, integrations.Default)
+}
+
+// OpenWithRegistry opens or creates the Star Chart database at path with a
+// custom integration registry, creating parent directories as needed, and
+// applies any pending migrations.
+func OpenWithRegistry(path string, reg integrationProvider) (*StarChart, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, fmt.Errorf("create starchart directory: %w", err)
 	}
@@ -33,7 +42,7 @@ func Open(path string) (*StarChart, error) {
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
-	sc := &StarChart{db: db}
+	sc := &StarChart{db: db, integrations: reg}
 	if err := sc.migrate(context.Background()); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
