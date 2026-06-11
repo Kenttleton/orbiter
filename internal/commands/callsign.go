@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +45,9 @@ func newCallsignInitCmd(d *deps) *cobra.Command {
 			ctx := cmd.Context()
 			alias, err := d.sc.Resolve(ctx, args[0])
 			if err != nil {
+				if !errors.Is(err, starchart.ErrNotFound) {
+					return err
+				}
 				cs, err := d.sc.CreateCallsign(ctx, args[0])
 				if err != nil {
 					return err

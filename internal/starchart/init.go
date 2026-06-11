@@ -3,6 +3,7 @@ package starchart
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -23,17 +24,20 @@ func (sc *StarChart) InitGalaxy(ctx context.Context, galaxyID string) error {
 	if err := sc.List(ctx, "planets", &planets, Filter{Column: "galaxy_id", Op: "=", Value: galaxyID}); err != nil {
 		return fmt.Errorf("list planets for galaxy %s: %w", galaxyID, err)
 	}
-	var initErr error
+	var errs []error
 	for _, p := range planets {
 		if err := sc.InitPlanet(ctx, p.ID); err != nil {
-			initErr = err
+			errs = append(errs, err)
 		}
 	}
 	status := models.BeaconStatusVerified
-	if initErr != nil {
+	if len(errs) > 0 {
 		status = models.BeaconStatusDegraded
 	}
-	return sc.setBeaconStatus(ctx, galaxyID, status, nil)
+	if err := sc.setBeaconStatus(ctx, galaxyID, status, nil); err != nil {
+		return err
+	}
+	return errors.Join(errs...)
 }
 
 // InitSolarSystem cascades init to all planets in the system.
@@ -42,17 +46,20 @@ func (sc *StarChart) InitSolarSystem(ctx context.Context, systemID string) error
 	if err := sc.List(ctx, "planets", &planets, Filter{Column: "solar_system_id", Op: "=", Value: systemID}); err != nil {
 		return fmt.Errorf("list planets for system %s: %w", systemID, err)
 	}
-	var initErr error
+	var errs []error
 	for _, p := range planets {
 		if err := sc.InitPlanet(ctx, p.ID); err != nil {
-			initErr = err
+			errs = append(errs, err)
 		}
 	}
 	status := models.BeaconStatusVerified
-	if initErr != nil {
+	if len(errs) > 0 {
 		status = models.BeaconStatusDegraded
 	}
-	return sc.setBeaconStatus(ctx, systemID, status, nil)
+	if err := sc.setBeaconStatus(ctx, systemID, status, nil); err != nil {
+		return err
+	}
+	return errors.Join(errs...)
 }
 
 // InitPlanet cascades init to all resources and callsigns attached to the planet.
@@ -66,23 +73,26 @@ func (sc *StarChart) InitPlanet(ctx context.Context, planetID string) error {
 		return fmt.Errorf("list callsigns for planet %s: %w", planetID, err)
 	}
 
-	var initErr error
+	var errs []error
 	for _, r := range resources {
 		if err := sc.InitResource(ctx, r.ID); err != nil {
-			initErr = err
+			errs = append(errs, err)
 		}
 	}
 	for _, cs := range callsigns {
 		if err := sc.InitCallsign(ctx, cs.ID); err != nil {
-			initErr = err
+			errs = append(errs, err)
 		}
 	}
 
 	status := models.BeaconStatusVerified
-	if initErr != nil {
+	if len(errs) > 0 {
 		status = models.BeaconStatusDegraded
 	}
-	return sc.setBeaconStatus(ctx, planetID, status, nil)
+	if err := sc.setBeaconStatus(ctx, planetID, status, nil); err != nil {
+		return err
+	}
+	return errors.Join(errs...)
 }
 
 // InitCallsign cascades init to all transponders attached to the callsign.
@@ -91,17 +101,20 @@ func (sc *StarChart) InitCallsign(ctx context.Context, callsignID string) error 
 	if err != nil {
 		return fmt.Errorf("list transponders for callsign %s: %w", callsignID, err)
 	}
-	var initErr error
+	var errs []error
 	for _, tp := range transponders {
 		if err := sc.InitTransponder(ctx, tp.ID); err != nil {
-			initErr = err
+			errs = append(errs, err)
 		}
 	}
 	status := models.BeaconStatusVerified
-	if initErr != nil {
+	if len(errs) > 0 {
 		status = models.BeaconStatusDegraded
 	}
-	return sc.setBeaconStatus(ctx, callsignID, status, nil)
+	if err := sc.setBeaconStatus(ctx, callsignID, status, nil); err != nil {
+		return err
+	}
+	return errors.Join(errs...)
 }
 
 // InitResource provisions a resource by dispatching to its registered integration.

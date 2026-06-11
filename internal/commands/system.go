@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/spf13/cobra"
 )
 
@@ -52,6 +54,9 @@ func newSystemInitCmd(d *deps) *cobra.Command {
 			ctx := cmd.Context()
 			alias, err := d.sc.Resolve(ctx, args[0])
 			if err != nil {
+				if !errors.Is(err, starchart.ErrNotFound) {
+					return err
+				}
 				galAlias, err := d.sc.Resolve(ctx, galaxy)
 				if err != nil {
 					return fmt.Errorf("galaxy %q not found: %w", galaxy, err)

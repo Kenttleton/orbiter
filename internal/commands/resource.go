@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/spf13/cobra"
 )
 
@@ -64,6 +66,9 @@ func newResourceInitCmd(d *deps) *cobra.Command {
 			}
 			alias, err := d.sc.Resolve(ctx, args[0])
 			if err != nil {
+				if !errors.Is(err, starchart.ErrNotFound) {
+					return err
+				}
 				r, err := d.sc.CreateResource(ctx, args[0], role, brand, manages, config)
 				if err != nil {
 					return err
