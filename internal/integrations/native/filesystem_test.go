@@ -15,7 +15,7 @@ import (
 func makeRC(path string) integrations.ResolvedContext {
 	return integrations.ResolvedContext{
 		Platform: integrations.Platform{OS: "linux", Arch: "amd64"},
-		Self: &models.Resource{
+		Self: models.Resource{
 			ID:     "r-fs-01",
 			Role:   "filesystem",
 			Brand:  "orbiter",
