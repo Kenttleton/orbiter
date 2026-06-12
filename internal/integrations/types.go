@@ -2,6 +2,23 @@ package integrations
 
 import "github.com/Kenttleton/orbiter/internal/models"
 
+// Entity is the uniform interface implemented by both Resource and Transponder.
+// ResolvedContext.Self is Entity so the same dispatch path serves both.
+type Entity interface {
+	GetID() string
+	GetRole() string
+	GetBrand() string
+	GetConfig() string
+}
+
+// InputRequest describes a single credential prompt the integration needs.
+// The host collects responses and calls the integration again with Responses populated.
+type InputRequest struct {
+	Key    string `json:"key"`
+	Prompt string `json:"prompt"`
+	Masked bool   `json:"masked"`
+}
+
 // Platform describes the host operating system and architecture.
 type Platform struct {
 	OS   string `json:"os"`   // "darwin" | "linux" | "windows"
@@ -37,9 +54,10 @@ type SuggestedResource struct {
 // All fields are JSON-serializable for Phase 3 WASM compatibility.
 type ResolvedContext struct {
 	Platform     Platform                         `json:"platform"`
-	Self         *models.Resource                 `json:"self,omitempty"`
+	Self         Entity                           `json:"self,omitempty"`
 	Resources    map[string][]ResolvedResource    `json:"resources"`
 	Transponders map[string][]ResolvedTransponder `json:"transponders"`
+	Responses    map[string]string                `json:"responses,omitempty"`
 }
 
 // ResolvedResource wraps a resource from the branch with its StateReport
@@ -58,14 +76,16 @@ type ResolvedTransponder struct {
 // Manager is always populated — every installation has a manager
 // (nvm, homebrew, apt, the OS itself, or "source").
 type StateReport struct {
-	Present      bool           `json:"present"`
-	Reachable    bool           `json:"reachable"`
-	BinaryPath   string         `json:"binary_path,omitempty"`
-	InstallDir   string         `json:"install_dir,omitempty"`
-	InPath       bool           `json:"in_path"`
-	Manager      string         `json:"manager"`
-	Config       map[string]any `json:"config,omitempty"`
-	Observations []string       `json:"observations,omitempty"`
-	Error        string         `json:"error,omitempty"`
+	Present      bool              `json:"present"`
+	Reachable    bool              `json:"reachable"`
+	BinaryPath   string            `json:"binary_path,omitempty"`
+	InstallDir   string            `json:"install_dir,omitempty"`
+	InPath       bool              `json:"in_path"`
+	Manager      string            `json:"manager"`
+	Config       map[string]any    `json:"config,omitempty"`
+	Observations []string          `json:"observations,omitempty"`
+	Error        string            `json:"error,omitempty"`
+	NeedsInput   []InputRequest    `json:"needs_input,omitempty"`
+	Exports      map[string]string `json:"exports,omitempty"`
 }
 

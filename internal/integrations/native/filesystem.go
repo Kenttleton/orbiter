@@ -67,7 +67,7 @@ func pathFromSelf(ctx integrations.ResolvedContext) string {
 	var cfg struct {
 		Path string `json:"path"`
 	}
-	if err := json.Unmarshal([]byte(ctx.Self.Config), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(ctx.Self.GetConfig()), &cfg); err != nil {
 		return ""
 	}
 	return cfg.Path

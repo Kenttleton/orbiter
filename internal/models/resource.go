@@ -16,3 +16,8 @@ type Resource struct {
 	Config    string    `db:"config"     json:"config"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
+
+func (r Resource) GetID() string     { return r.ID }
+func (r Resource) GetRole() string   { return r.Role }
+func (r Resource) GetBrand() string  { return r.Brand }
+func (r Resource) GetConfig() string { return r.Config }

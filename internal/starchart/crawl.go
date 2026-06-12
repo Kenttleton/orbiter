@@ -198,7 +198,7 @@ func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]str
 func BuildResolvedContextForResource(self models.Resource, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
 	rc := integrations.ResolvedContext{
 		Platform:     lb.Platform,
-		Self:         &self,
+		Self:         self,
 		Resources:    make(map[string][]integrations.ResolvedResource),
 		Transponders: make(map[string][]integrations.ResolvedTransponder),
 	}
