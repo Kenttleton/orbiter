@@ -148,8 +148,8 @@ func Register(role, brand string, i Integration) {
 }
 
 func brandFromKey(key string) string {
-	if i := strings.Index(key, "/"); i >= 0 {
-		return key[i+1:]
+	if _, brand, ok := strings.Cut(key, "/"); ok {
+		return brand
 	}
 	return key
 }

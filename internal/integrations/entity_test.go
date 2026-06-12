@@ -39,8 +39,6 @@ func TestResolvedContext_SelfIsEntity(t *testing.T) {
 
 func TestStateReport_NeedsInputAndExports(t *testing.T) {
 	report := integrations.StateReport{
-		Present:   true,
-		Reachable: true,
 		NeedsInput: []integrations.InputRequest{
 			{Key: "password", Prompt: "Enter password:", Masked: true},
 		},
