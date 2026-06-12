@@ -52,7 +52,7 @@ func TestInitResourceNoIntegration(t *testing.T) {
 func TestInitResourceWithIntegration(t *testing.T) {
 	ctx := context.Background()
 
-	reg := integrations.NewRegistry()
+	reg := integrations.NewRegistry(nil)
 	reg.Register("manager", "nvm", &successIntegration{})
 
 	sc := testDBWithRegistry(t, reg)

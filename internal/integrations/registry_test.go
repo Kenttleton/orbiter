@@ -24,13 +24,13 @@ func (s *stubIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 }
 
 func TestRegistryGetNotFound(t *testing.T) {
-	r := integrations.NewRegistry()
+	r := integrations.NewRegistry(nil)
 	_, ok := r.Get("manager", "nvm")
 	require.False(t, ok)
 }
 
 func TestRegistryRegisterAndGet(t *testing.T) {
-	r := integrations.NewRegistry()
+	r := integrations.NewRegistry(nil)
 	r.Register("manager", "test-brand", &stubIntegration{})
 
 	i, ok := r.Get("manager", "test-brand")
@@ -39,7 +39,7 @@ func TestRegistryRegisterAndGet(t *testing.T) {
 }
 
 func TestRegistryAllForRole(t *testing.T) {
-	r := integrations.NewRegistry()
+	r := integrations.NewRegistry(nil)
 	r.Register("tool", "brand-a", &stubIntegration{})
 	r.Register("tool", "brand-b", &stubIntegration{})
 	r.Register("runtime", "brand-c", &stubIntegration{})

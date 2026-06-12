@@ -71,7 +71,7 @@ func (h *healthyIntegration) Calibrate(_ integrations.ResolvedContext) integrati
 func TestScanBranch_WithIntegration_Healthy(t *testing.T) {
 	ctx := context.Background()
 
-	reg := integrations.NewRegistry()
+	reg := integrations.NewRegistry(nil)
 	reg.Register("runtime", "go", &healthyIntegration{})
 	sc := testDBWithRegistry(t, reg)
 
@@ -94,7 +94,7 @@ func TestScanBranch_WithIntegration_Healthy(t *testing.T) {
 func TestCalibrateBranch_HealthyResource_NoCalibrate(t *testing.T) {
 	ctx := context.Background()
 
-	reg := integrations.NewRegistry()
+	reg := integrations.NewRegistry(nil)
 	reg.Register("runtime", "go", &healthyIntegration{})
 	sc := testDBWithRegistry(t, reg)
 
