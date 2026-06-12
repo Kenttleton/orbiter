@@ -13,6 +13,8 @@ func newVesselCmd(d *deps) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newVesselInitCmd(d),
+		newVesselInspectCmd(d),
+		newVesselUnquarantineCmd(d),
 		&cobra.Command{
 			Use:   "survey",
 			Short: "Show vessel configuration",
