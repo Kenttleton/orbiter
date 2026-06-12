@@ -8,7 +8,7 @@ roles = ["tool"]
 files = [".git/config"]
 
 [commands]
-allowed = ["git"]
+allowed = ["git", "which"]
 timeout_seconds = 30
 
 [runtime]

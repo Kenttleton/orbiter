@@ -8,7 +8,7 @@ roles = ["runtime"]
 files = ["go.mod", "go.sum"]
 
 [commands]
-allowed = ["go"]
+allowed = ["go", "which"]
 timeout_seconds = 30
 
 [runtime]

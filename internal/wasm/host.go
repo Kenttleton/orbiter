@@ -85,10 +85,7 @@ func readInputFn(ctx context.Context, mod api.Module, stack []uint64) {
 		return
 	}
 
-	n := uint32(len(cs.input))
-	if n > max {
-		n = max
-	}
+	n := min(uint32(len(cs.input)), max)
 	if n > 0 {
 		mod.Memory().Write(ptr, cs.input[:n])
 	}
@@ -160,10 +157,7 @@ func runCommandFn(ctx context.Context, mod api.Module, stack []uint64) {
 		return
 	}
 
-	n := uint32(len(out))
-	if n > outMax {
-		n = outMax
-	}
+	n := min(uint32(len(out)), outMax)
 	if n > 0 {
 		mod.Memory().Write(outPtr, out[:n])
 	}
