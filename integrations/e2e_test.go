@@ -3,18 +3,28 @@ package integrations_test
 import (
 	"testing"
 
-	_ "github.com/Kenttleton/orbiter/integrations"
-	"github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/integrations"
+	core "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
+func setupBundleRegistry(t *testing.T) *core.Registry {
+	t.Helper()
+	reg := core.NewRegistry(nil)
+	if err := integrations.InstallSelected(integrations.CatalogEntries(), reg); err != nil {
+		t.Fatalf("InstallSelected: %v", err)
+	}
+	return reg
+}
+
 func TestBundledIntegrations_Git(t *testing.T) {
-	i, ok := integrations.Default.Get("tool", "git")
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "git")
 	if !ok {
 		t.Fatal("git integration not registered")
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(integrations.ResolvedContext{})
+		report := i.Scan(core.ResolvedContext{})
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (git is installed)")
@@ -22,7 +32,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("detect_hit", func(t *testing.T) {
-		report := i.Detect(integrations.DetectContext{
+		report := i.Detect(core.DetectContext{
 			Files: map[string]string{".git/config": ""},
 		})
 		if !report.Detected {
@@ -31,7 +41,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("detect_miss", func(t *testing.T) {
-		report := i.Detect(integrations.DetectContext{
+		report := i.Detect(core.DetectContext{
 			Files: map[string]string{"package.json": ""},
 		})
 		if report.Detected {
@@ -41,13 +51,14 @@ func TestBundledIntegrations_Git(t *testing.T) {
 }
 
 func TestBundledIntegrations_Go(t *testing.T) {
-	i, ok := integrations.Default.Get("runtime", "go")
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("runtime", "go")
 	if !ok {
 		t.Fatal("go integration not registered")
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(integrations.ResolvedContext{})
+		report := i.Scan(core.ResolvedContext{})
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true")
@@ -55,7 +66,7 @@ func TestBundledIntegrations_Go(t *testing.T) {
 	})
 
 	t.Run("detect_hit", func(t *testing.T) {
-		report := i.Detect(integrations.DetectContext{
+		report := i.Detect(core.DetectContext{
 			Files: map[string]string{"go.mod": "", "go.sum": ""},
 		})
 		if !report.Detected {
@@ -64,7 +75,7 @@ func TestBundledIntegrations_Go(t *testing.T) {
 	})
 
 	t.Run("detect_miss", func(t *testing.T) {
-		report := i.Detect(integrations.DetectContext{
+		report := i.Detect(core.DetectContext{
 			Files: map[string]string{"package.json": ""},
 		})
 		if report.Detected {
