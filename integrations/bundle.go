@@ -71,6 +71,7 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry) error {
 	}
 
 	ctx := context.Background()
+	installed := make(map[string]bool, len(wanted))
 	for _, d := range dirs {
 		if !d.IsDir() {
 			continue
@@ -103,6 +104,12 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry) error {
 		for _, role := range manifest.Integration.Roles {
 			registry.Register(role, manifest.Integration.Brand, i)
 		}
+		installed[manifest.Integration.Brand] = true
+	}
+	for brand := range wanted {
+		if !installed[brand] {
+			log.Printf("orbiter: catalog: brand %q not found in bundle", brand)
+		}
 	}
 	return nil
 }
@@ -122,7 +129,8 @@ func LoadInstalled(dir string, registry *core.Registry) error {
 
 	ctx := context.Background()
 	for _, e := range entries {
-		if !e.IsDir() {
+		// Skip symlinks — third-party integration dirs must be real directories.
+		if e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
 			continue
 		}
 		name := e.Name()
