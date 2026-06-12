@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -103,6 +104,17 @@ func (ss *SettingsStore) Quarantine(brand, reason string) error {
 	return ss.flush()
 }
 
+// QuarantinedBrands returns the brands currently listed in the quarantine map.
+func (ss *SettingsStore) QuarantinedBrands() []string {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+	brands := make([]string, 0, len(ss.data.Quarantine))
+	for b := range ss.data.Quarantine {
+		brands = append(brands, b)
+	}
+	return brands
+}
+
 // Unquarantine removes the quarantine entry for brand and flushes to disk.
 func (ss *SettingsStore) Unquarantine(brand string) error {
 	ss.mu.Lock()
@@ -118,18 +130,35 @@ func (ss *SettingsStore) load() {
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(data, &ss.data)
+	if err := json.Unmarshal(data, &ss.data); err != nil {
+		fmt.Fprintf(os.Stderr, "orbiter: warning: could not parse %s: %v (starting fresh)\n", ss.path, err)
+	}
 }
 
 func (ss *SettingsStore) flush() error {
-	if err := os.MkdirAll(filepath.Dir(ss.path), 0700); err != nil {
+	dir := filepath.Dir(ss.path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(ss.data, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ss.path, append(data, '\n'), 0600)
+	data = append(data, '\n')
+	tmp, err := os.CreateTemp(dir, ".settings-*.json")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op if rename succeeds
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, ss.path)
 }
 
 // DefaultSettings is the process-wide settings store at ~/.orbiter/settings.json.

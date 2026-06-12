@@ -38,11 +38,9 @@ func NewRegistry(settings *SettingsStore) *Registry {
 		settings:    settings,
 	}
 	if settings != nil {
-		settings.mu.RLock()
-		for brand := range settings.data.Quarantine {
+		for _, brand := range settings.QuarantinedBrands() {
 			r.quarantined[brand] = true
 		}
-		settings.mu.RUnlock()
 	}
 	return r
 }
