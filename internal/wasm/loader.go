@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -12,19 +14,54 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// ApproveFunc is called when a WASM integration attempts a command that has not
+// been previously allowed. It must print a prompt and return true if the Captain
+// approves this run, or false to deny.
+type ApproveFunc func(brand, fullCmd string) bool
+
+// StdinApproveFunc is the default ApproveFunc, used when running interactively.
+func StdinApproveFunc(brand, fullCmd string) bool {
+	fmt.Fprintf(os.Stderr, "\n  orbiter: integration %q wants to run:\n    %s\n  Allow? [y/N] ", brand, fullCmd)
+	var response string
+	fmt.Fscan(os.Stdin, &response)
+	return strings.ToLower(strings.TrimSpace(response)) == "y"
+}
+
+// AlwaysAllowFunc is called after Captain approval to ask whether this exact
+// command should always be allowed. Returns true to persist the trust entry.
+type AlwaysAllowFunc func(brand, fullCmd string) bool
+
+// StdinAlwaysAllowFunc is the default AlwaysAllowFunc.
+func StdinAlwaysAllowFunc(brand, fullCmd string) bool {
+	fmt.Fprintf(os.Stderr, "  Always allow this exact command for %q? [y/N] ", brand)
+	var response string
+	fmt.Fscan(os.Stdin, &response)
+	return strings.ToLower(strings.TrimSpace(response)) == "y"
+}
+
 // WASMIntegration wraps a live WASM module instance and implements integrations.Integration.
 // The module is instantiated once; exported functions (detect, initialize, scan, calibrate)
 // are called directly — Lambda-style: stateless, independently invocable, no restart cost.
 // mu serializes concurrent calls for Phase 2.5; Phase 4 will replace it with a pool.
 type WASMIntegration struct {
-	manifest integrations.Manifest
-	mod      api.Module
-	mu       sync.Mutex
+	manifest    integrations.Manifest
+	mod         api.Module
+	mu          sync.Mutex
+	approve     ApproveFunc
+	alwaysAllow AlwaysAllowFunc
+	settings    *integrations.SettingsStore
+	registry    *integrations.Registry
 }
 
 // Load compiles wasmBytes, instantiates the module, and returns a WASMIntegration
 // ready to serve calls. The module stays alive for the lifetime of the integration.
-func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte) (*WASMIntegration, error) {
+// If approve is nil, StdinApproveFunc is used.
+func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte, settings *integrations.SettingsStore, registry *integrations.Registry, approve ApproveFunc) (*WASMIntegration, error) {
+	if approve == nil {
+		approve = StdinApproveFunc
+	}
+	alwaysAllow := StdinAlwaysAllowFunc
+
 	rt := SharedRuntime(ctx)
 
 	compiled, err := rt.CompileModule(ctx, wasmBytes)
@@ -43,7 +80,14 @@ func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte)
 		return nil, fmt.Errorf("instantiate wasm module: %w", err)
 	}
 
-	return &WASMIntegration{manifest: manifest, mod: mod}, nil
+	return &WASMIntegration{
+		manifest:    manifest,
+		mod:         mod,
+		approve:     approve,
+		alwaysAllow: alwaysAllow,
+		settings:    settings,
+		registry:    registry,
+	}, nil
 }
 
 func (w *WASMIntegration) Meta() integrations.Manifest { return w.manifest }
@@ -99,7 +143,16 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	cs := &callState{input: input}
+	cs := &callState{
+		input:       input,
+		brand:       w.manifest.Integration.Brand,
+		allowed:     w.manifest.Commands.Allowed,
+		timeout:     w.manifest.Commands.TimeoutSeconds,
+		approve:     w.approve,
+		alwaysAllow: w.alwaysAllow,
+		settings:    w.settings,
+		registry:    w.registry,
+	}
 	ctx = context.WithValue(ctx, callStateKey{}, cs)
 
 	exported := w.mod.ExportedFunction(fn)
