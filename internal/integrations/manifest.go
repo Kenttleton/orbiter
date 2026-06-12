@@ -35,15 +35,15 @@ type ManifestDependencies struct {
 
 // ManifestCommands is the [commands] section.
 // Allowed lists every executable the integration may call via run_command.
-// The host rejects any call for an executable not listed here.
+// The host enforces this allowlist at Stage 2 of runCommandFn (Phase 4 Task 6).
 type ManifestCommands struct {
 	Allowed        []string `toml:"allowed"`
 	TimeoutSeconds int      `toml:"timeout_seconds"`
 }
 
 // ManifestShell is the [shell] section.
-// Exports lists env var names the integration may include in StateReport.Exports.
-// The host drops any export key not declared here.
+// Exports lists env var names the integration may write to StateReport.Exports.
+// The host enforces this allowlist after dispatch (Phase 4 Task 7).
 type ManifestShell struct {
 	Exports []string `toml:"exports"`
 }
@@ -63,7 +63,7 @@ type ManifestConfigField struct {
 }
 
 // ManifestRuntime is the [runtime] section — performance hints.
-// PoolSize is the number of concurrent WASM instances (default 4 if zero).
+// PoolSize drives the module pool size created at load time (Phase 4 Task 7).
 // InputBufferKB and OutputBufferKB are guest buffer size hints (default 8 if zero).
 type ManifestRuntime struct {
 	PoolSize       int `toml:"pool_size"`
