@@ -44,7 +44,7 @@ func init() {
 			continue
 		}
 
-		i, err := wasm.Load(context.Background(), manifest, wasmBytes)
+		i, err := wasm.Load(context.Background(), manifest, wasmBytes, core.DefaultSettings, core.Default, nil)
 		if err != nil {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue
