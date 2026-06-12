@@ -3,10 +3,22 @@ package starchart
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
 )
+
+// resourceRoleOrder defines the dispatch sequence for resources within a branch level.
+// Filesystem must initialize before managers, managers before runtimes,
+// runtimes before remotes, remotes before tools.
+var resourceRoleOrder = []string{
+	integrations.ResourceRoleFilesystem,
+	integrations.ResourceRoleManager,
+	integrations.ResourceRoleRuntime,
+	integrations.ResourceRoleRemote,
+	integrations.ResourceRoleTool,
+}
 
 // ResourceScanResult is the scan outcome for one resource.
 type ResourceScanResult struct {
@@ -15,9 +27,10 @@ type ResourceScanResult struct {
 	BeaconStatus string
 }
 
-// BranchScanResult holds scan results for all resources in the FILO hierarchy.
+// BranchScanResult holds scan results for all resources and transponders in the FILO hierarchy.
 type BranchScanResult struct {
-	Resources []ResourceScanResult
+	Resources    []ResourceScanResult
+	Transponders []integrations.TransponderScanResult
 }
 
 // ResourceCalibrateResult is the calibration outcome for one resource.
@@ -28,13 +41,16 @@ type ResourceCalibrateResult struct {
 	Action   string // "healthy", "calibrated", "failed"
 }
 
-// BranchCalibrateResult holds calibration results for all resources in the FILO hierarchy.
+// BranchCalibrateResult holds calibration results for all resources and transponders in the FILO hierarchy.
 type BranchCalibrateResult struct {
-	Resources []ResourceCalibrateResult
+	Resources    []ResourceCalibrateResult
+	Transponders []integrations.TransponderCalibrateResult
 }
 
 // ScanBranch scans all resources in the FILO hierarchy for entityID.
-// Each resource receives its own level's transponders. Writes beacons as a side effect.
+// Resources dispatch in role order (filesystem → manager → runtime → remote → tool).
+// After resources, transponders at each level also dispatch Scan.
+// Writes beacons as a side effect.
 func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchScanResult, error) {
 	lb, err := sc.LeveledBranchCrawl(ctx, entityID)
 	if err != nil {
@@ -43,18 +59,28 @@ func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchSca
 
 	var result BranchScanResult
 	for _, level := range lb.Levels {
-		for _, r := range level.Resources {
+		for _, r := range sortedResources(level.Resources) {
 			rr, err := sc.scanResource(ctx, r, level, lb)
 			if err != nil {
 				return BranchScanResult{}, err
 			}
 			result.Resources = append(result.Resources, rr)
 		}
+		for _, tp := range level.Transponders {
+			tr, err := sc.scanTransponder(ctx, tp, level, lb)
+			if err != nil {
+				return BranchScanResult{}, err
+			}
+			result.Transponders = append(result.Transponders, tr)
+		}
 	}
 	return result, nil
 }
 
-// CalibrateBranch scans then calibrates drifted/failed resources. Writes beacons as a side effect.
+// CalibrateBranch scans then calibrates drifted/failed resources.
+// Resources dispatch in role order (filesystem → manager → runtime → remote → tool).
+// After resources, transponders at each level also dispatch Calibrate.
+// Writes beacons as a side effect.
 func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (BranchCalibrateResult, error) {
 	lb, err := sc.LeveledBranchCrawl(ctx, entityID)
 	if err != nil {
@@ -63,15 +89,45 @@ func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (Bran
 
 	var result BranchCalibrateResult
 	for _, level := range lb.Levels {
-		for _, r := range level.Resources {
+		for _, r := range sortedResources(level.Resources) {
 			cr, err := sc.calibrateResource(ctx, r, level, lb)
 			if err != nil {
 				return BranchCalibrateResult{}, err
 			}
 			result.Resources = append(result.Resources, cr)
 		}
+		for _, tp := range level.Transponders {
+			tr, err := sc.calibrateTransponder(ctx, tp, level, lb)
+			if err != nil {
+				return BranchCalibrateResult{}, err
+			}
+			result.Transponders = append(result.Transponders, tr)
+		}
 	}
 	return result, nil
+}
+
+// sortedResources returns resources sorted by resourceRoleOrder.
+// Resources with unknown roles are appended last, preserving their relative order.
+func sortedResources(resources []models.Resource) []models.Resource {
+	sorted := make([]models.Resource, len(resources))
+	copy(sorted, resources)
+	slices.SortStableFunc(sorted, func(a, b models.Resource) int {
+		ai := roleIndex(a.Role)
+		bi := roleIndex(b.Role)
+		return ai - bi
+	})
+	return sorted
+}
+
+// roleIndex returns the position of role in resourceRoleOrder, or len+1 for unknown roles.
+func roleIndex(role string) int {
+	for i, r := range resourceRoleOrder {
+		if r == role {
+			return i
+		}
+	}
+	return len(resourceRoleOrder)
 }
 
 func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, level BranchLevel, lb LeveledBranch) (ResourceScanResult, error) {
@@ -117,6 +173,33 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 		action = "failed"
 	}
 	return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, After: after, Action: action}, nil
+}
+
+func (sc *StarChart) scanTransponder(_ context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (integrations.TransponderScanResult, error) {
+	integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
+	if !ok {
+		return integrations.TransponderScanResult{Transponder: tp}, nil
+	}
+	rc := BuildResolvedContextForTransponder(tp, level, lb, integration.Meta())
+	report := integration.Scan(rc)
+	return integrations.TransponderScanResult{Transponder: tp, Report: report}, nil
+}
+
+func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (integrations.TransponderCalibrateResult, error) {
+	tr, err := sc.scanTransponder(ctx, tp, level, lb)
+	if err != nil {
+		return integrations.TransponderCalibrateResult{}, err
+	}
+	if tr.Report.Error == "" && tr.Report.Present && tr.Report.Reachable {
+		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
+	}
+	integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
+	if !ok {
+		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
+	}
+	rc := BuildResolvedContextForTransponder(tp, level, lb, integration.Meta())
+	after := integration.Calibrate(rc)
+	return integrations.TransponderCalibrateResult{Transponder: tp, Report: after}, nil
 }
 
 // scanBeaconStatus maps a StateReport to a beacon status constant.

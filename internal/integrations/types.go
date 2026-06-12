@@ -72,6 +72,18 @@ type ResolvedTransponder struct {
 	Transponder models.Transponder `json:"transponder"`
 }
 
+// TransponderScanResult pairs a transponder with its scan report.
+type TransponderScanResult struct {
+	Transponder models.Transponder
+	Report      StateReport
+}
+
+// TransponderCalibrateResult pairs a transponder with its calibration report.
+type TransponderCalibrateResult struct {
+	Transponder models.Transponder
+	Report      StateReport
+}
+
 // StateReport is returned by Init, Scan, and Calibrate.
 // Manager is always populated — every installation has a manager
 // (nvm, homebrew, apt, the OS itself, or "source").

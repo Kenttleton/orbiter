@@ -113,3 +113,57 @@ func TestCalibrateBranch_HealthyResource_NoCalibrate(t *testing.T) {
 	// resource was healthy → action should be "healthy", no calibration call
 	assert.Equal(t, "healthy", result.Resources[0].Action)
 }
+
+func TestScanBranch_ResourceOrder(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, _ := sc.CreateGalaxy(ctx, "acme")
+	p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	// Create resources in REVERSE role order to verify they scan in correct order
+	_, _ = sc.CreateResource(ctx, "gh-remote", "remote", "github", "[]", "{}")
+	_, _ = sc.Attach(ctx, "gh-remote", "payment-api")
+	_, _ = sc.CreateResource(ctx, "node-rt", "runtime", "node", "[]", "{}")
+	_, _ = sc.Attach(ctx, "node-rt", "payment-api")
+	_, _ = sc.CreateResource(ctx, "fs", "filesystem", "orbiter", "[]", `{"path":"/tmp"}`)
+	_, _ = sc.Attach(ctx, "fs", "payment-api")
+
+	results, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+
+	// Verify all three resources were dispatched
+	require.Len(t, results.Resources, 3)
+
+	// Verify filesystem came first in the ordered output
+	assert.Equal(t, "filesystem", results.Resources[0].Resource.Role,
+		"filesystem must scan before runtime")
+	assert.Equal(t, "runtime", results.Resources[1].Resource.Role,
+		"runtime must scan before remote")
+	assert.Equal(t, "remote", results.Resources[2].Resource.Role)
+}
+
+func TestScanBranch_TransponderPass(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, _ := sc.CreateGalaxy(ctx, "acme")
+	p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+
+	// Resource required: LeveledBranchCrawl skips levels with no resources.
+	// The transponder pass runs at the same level as its resources.
+	_, _ = sc.CreateResource(ctx, "gh-remote", "remote", "github", "[]", "{}")
+	_, _ = sc.Attach(ctx, "gh-remote", "payment-api")
+
+	_, _ = sc.CreateCallsign(ctx, "kent-acme")
+	tp, _ := sc.CreateTransponder(ctx, "acme-gh", "file", "github", `{"location":"/home/kent/.ssh/id_ed25519_acme"}`)
+	_, _ = sc.Attach(ctx, "acme-gh", "kent-acme")
+	_, _ = sc.Attach(ctx, "kent-acme", "payment-api")
+
+	results, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+
+	require.Len(t, results.Transponders, 1, "transponder pass must run at levels with resources")
+	assert.Equal(t, tp.ID, results.Transponders[0].Transponder.ID,
+		"transponder should match what was attached")
+}

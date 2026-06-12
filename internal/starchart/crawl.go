@@ -224,6 +224,38 @@ func BuildResolvedContextForResource(self models.Resource, level BranchLevel, lb
 	return rc
 }
 
+// BuildResolvedContextForTransponder builds the ResolvedContext for a single transponder dispatch.
+// Follows the same pattern as BuildResolvedContextForResource but with a Transponder as Self.
+// Resources and Transponders are populated from the level's manifest dependencies.
+func BuildResolvedContextForTransponder(t models.Transponder, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
+	rc := integrations.ResolvedContext{
+		Platform:     lb.Platform,
+		Self:         t,
+		Resources:    make(map[string][]integrations.ResolvedResource),
+		Transponders: make(map[string][]integrations.ResolvedTransponder),
+	}
+	seenResource := make(map[string]bool)
+	for role, brands := range manifest.Dependencies.Resources {
+		for _, l := range lb.Levels {
+			for _, r := range l.Resources {
+				key := r.Role + "/" + r.Brand
+				if r.Role == role && brandAccepted(r.Brand, brands) && !seenResource[key] {
+					seenResource[key] = true
+					rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
+				}
+			}
+		}
+	}
+	for role, brands := range manifest.Dependencies.Transponders {
+		for _, tp := range level.Transponders {
+			if tp.Role == role && brandAccepted(tp.Brand, brands) {
+				rc.Transponders[role] = append(rc.Transponders[role], integrations.ResolvedTransponder{Transponder: tp})
+			}
+		}
+	}
+	return rc
+}
+
 func (sc *StarChart) resourcesAttachedTo(ctx context.Context, nodeID string) ([]models.Resource, error) {
 	const q = `
         SELECT r.id, r.role, r.brand, r.manages, r.config, r.created_at
