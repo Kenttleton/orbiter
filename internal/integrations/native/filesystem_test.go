@@ -56,6 +56,7 @@ func TestFilesystemOrbiter_Registered(t *testing.T) {
 	i, ok := integrations.Default.Get("filesystem", "orbiter")
 	require.True(t, ok, "filesystem/orbiter should be registered")
 	m := i.Meta()
-	assert.Equal(t, "filesystem", m.Integration.Role)
+	require.Len(t, m.Integration.Roles, 1)
+	assert.Equal(t, "filesystem", m.Integration.Roles[0])
 	assert.Equal(t, "orbiter", m.Integration.Brand)
 }

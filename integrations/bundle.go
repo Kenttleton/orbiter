@@ -49,6 +49,8 @@ func init() {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue
 		}
-		core.Register(manifest.Integration.Role, manifest.Integration.Brand, i)
+		for _, role := range manifest.Integration.Roles {
+			core.Register(role, manifest.Integration.Brand, i)
+		}
 	}
 }

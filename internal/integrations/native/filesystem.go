@@ -9,9 +9,8 @@ import (
 
 var filesystemOrbiterManifest = integrations.Manifest{
 	Integration: integrations.ManifestIntegration{
-		Type:  integrations.IntegrationTypeResource,
-		Role:  integrations.ResourceRoleFilesystem,
 		Brand: "orbiter",
+		Roles: []string{integrations.ResourceRoleFilesystem},
 	},
 }
 

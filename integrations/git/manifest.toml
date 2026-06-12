@@ -1,7 +1,17 @@
 [integration]
-type = "resource"
-role = "tool"
 brand = "git"
+name = "Git"
+description = "Scans and configures the git version control tool"
+roles = ["tool"]
 
 [detection]
 files = [".git/config"]
+
+[commands]
+allowed = ["git"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

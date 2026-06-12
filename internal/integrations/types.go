@@ -69,28 +69,3 @@ type StateReport struct {
 	Error        string         `json:"error,omitempty"`
 }
 
-// Manifest is the parsed content of an integration's manifest.toml.
-type Manifest struct {
-	Integration  ManifestIntegration  `toml:"integration"`
-	Detection    ManifestDetection    `toml:"detection"`
-	Dependencies ManifestDependencies `toml:"dependencies"`
-}
-
-// ManifestIntegration is the [integration] section of a manifest.toml.
-type ManifestIntegration struct {
-	Type  string `toml:"type"`  // "resource" | "transponder"
-	Role  string `toml:"role"`
-	Brand string `toml:"brand"`
-}
-
-// ManifestDetection is the [detection] section of a manifest.toml.
-type ManifestDetection struct {
-	Files []string `toml:"files"`
-}
-
-// ManifestDependencies is the [dependencies] section of a manifest.toml.
-// Keys are roles. Values are brand whitelists (empty slice = any brand accepted).
-type ManifestDependencies struct {
-	Resources    map[string][]string `toml:"resources"`
-	Transponders map[string][]string `toml:"transponders"`
-}

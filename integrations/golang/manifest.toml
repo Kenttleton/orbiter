@@ -1,7 +1,17 @@
 [integration]
-type = "resource"
-role = "runtime"
 brand = "go"
+name = "Go Toolchain"
+description = "Scans and verifies the Go runtime and module toolchain"
+roles = ["runtime"]
 
 [detection]
 files = ["go.mod", "go.sum"]
+
+[commands]
+allowed = ["go"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8
