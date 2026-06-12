@@ -18,7 +18,6 @@ import (
 // mu serializes concurrent calls for Phase 2.5; Phase 4 will replace it with a pool.
 type WASMIntegration struct {
 	manifest integrations.Manifest
-	rt       wazero.Runtime
 	mod      api.Module
 	mu       sync.Mutex
 }
@@ -26,14 +25,10 @@ type WASMIntegration struct {
 // Load compiles wasmBytes, instantiates the module, and returns a WASMIntegration
 // ready to serve calls. The module stays alive for the lifetime of the integration.
 func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte) (*WASMIntegration, error) {
-	rt, err := newRuntime(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("create wasm runtime: %w", err)
-	}
+	rt := SharedRuntime(ctx)
 
 	compiled, err := rt.CompileModule(ctx, wasmBytes)
 	if err != nil {
-		rt.Close(ctx)
 		return nil, fmt.Errorf("compile wasm module: %w", err)
 	}
 
@@ -44,11 +39,11 @@ func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte)
 			WithStderr(io.Discard),
 	)
 	if err != nil {
-		rt.Close(ctx)
+		compiled.Close(ctx)
 		return nil, fmt.Errorf("instantiate wasm module: %w", err)
 	}
 
-	return &WASMIntegration{manifest: manifest, rt: rt, mod: mod}, nil
+	return &WASMIntegration{manifest: manifest, mod: mod}, nil
 }
 
 func (w *WASMIntegration) Meta() integrations.Manifest { return w.manifest }
