@@ -110,7 +110,9 @@ func (w *WASMIntegration) Detect(ctx integrations.DetectContext) integrations.De
 		return integrations.DetectReport{}
 	}
 	var report integrations.DetectReport
-	json.Unmarshal(out, &report)
+	if err := json.Unmarshal(out, &report); err != nil {
+		return integrations.DetectReport{}
+	}
 	return report
 }
 
@@ -121,7 +123,9 @@ func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.St
 		return integrations.StateReport{Error: err.Error()}
 	}
 	var report integrations.StateReport
-	json.Unmarshal(out, &report)
+	if err := json.Unmarshal(out, &report); err != nil {
+		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
+	}
 	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
@@ -133,7 +137,9 @@ func (w *WASMIntegration) Scan(ctx integrations.ResolvedContext) integrations.St
 		return integrations.StateReport{Error: err.Error()}
 	}
 	var report integrations.StateReport
-	json.Unmarshal(out, &report)
+	if err := json.Unmarshal(out, &report); err != nil {
+		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
+	}
 	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
@@ -145,7 +151,9 @@ func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 		return integrations.StateReport{Error: err.Error()}
 	}
 	var report integrations.StateReport
-	json.Unmarshal(out, &report)
+	if err := json.Unmarshal(out, &report); err != nil {
+		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
+	}
 	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
@@ -153,9 +161,22 @@ func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 // invoke checks out a module from the pool, calls fn, then returns the module.
 // callState is threaded through context so host functions can read/write the
 // JSON payload without any shared mutable state on the struct.
-func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) ([]byte, error) {
-	mod := <-w.pool
-	defer func() { w.pool <- mod }()
+// On error the module is closed and discarded rather than returned to the pool,
+// because a WASM trap may leave the module in a corrupted state.
+func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (_ []byte, retErr error) {
+	var mod api.Module
+	select {
+	case mod = <-w.pool:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() {
+		if retErr != nil {
+			mod.Close(ctx) // discard; pool shrinks by 1
+		} else {
+			w.pool <- mod
+		}
+	}()
 
 	cs := &callState{
 		input:       input,
@@ -173,7 +194,6 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 	if exported == nil {
 		return nil, fmt.Errorf("function %q not exported by wasm module", fn)
 	}
-
 	if _, err := exported.Call(ctx); err != nil {
 		return nil, fmt.Errorf("call %q: %w", fn, err)
 	}
