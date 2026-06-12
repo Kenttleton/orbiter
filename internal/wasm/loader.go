@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/tetratelabs/wazero"
@@ -39,14 +38,13 @@ func StdinAlwaysAllowFunc(brand, fullCmd string) bool {
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
 }
 
-// WASMIntegration wraps a live WASM module instance and implements integrations.Integration.
-// The module is instantiated once; exported functions (detect, initialize, scan, calibrate)
-// are called directly — Lambda-style: stateless, independently invocable, no restart cost.
-// mu serializes concurrent calls for Phase 2.5; Phase 4 will replace it with a pool.
+// WASMIntegration wraps a pool of live WASM module instances and implements integrations.Integration.
+// Exported functions (detect, initialize, scan, calibrate) are called Lambda-style: stateless,
+// independently invocable, no restart cost. The channel-based pool allows N concurrent calls
+// where N = manifest.Runtime.PoolSize (defaults to 1).
 type WASMIntegration struct {
 	manifest    integrations.Manifest
-	mod         api.Module
-	mu          sync.Mutex
+	pool        chan api.Module
 	approve     ApproveFunc
 	alwaysAllow AlwaysAllowFunc
 	settings    *integrations.SettingsStore
@@ -69,20 +67,33 @@ func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte,
 		return nil, fmt.Errorf("compile wasm module: %w", err)
 	}
 
-	mod, err := rt.InstantiateModule(ctx, compiled,
-		wazero.NewModuleConfig().
-			WithName("").
-			WithStdout(io.Discard).
-			WithStderr(io.Discard),
-	)
-	if err != nil {
-		compiled.Close(ctx)
-		return nil, fmt.Errorf("instantiate wasm module: %w", err)
+	poolSize := manifest.Runtime.PoolSize
+	if poolSize <= 0 {
+		poolSize = 1
+	}
+
+	pool := make(chan api.Module, poolSize)
+	for i := range poolSize {
+		mod, err := rt.InstantiateModule(ctx, compiled,
+			wazero.NewModuleConfig().
+				WithName("").
+				WithStdout(io.Discard).
+				WithStderr(io.Discard),
+		)
+		if err != nil {
+			close(pool)
+			for m := range pool {
+				m.Close(ctx)
+			}
+			compiled.Close(ctx)
+			return nil, fmt.Errorf("instantiate wasm pool[%d]: %w", i, err)
+		}
+		pool <- mod
 	}
 
 	return &WASMIntegration{
 		manifest:    manifest,
-		mod:         mod,
+		pool:        pool,
 		approve:     approve,
 		alwaysAllow: alwaysAllow,
 		settings:    settings,
@@ -111,6 +122,7 @@ func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.St
 	}
 	var report integrations.StateReport
 	json.Unmarshal(out, &report)
+	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
 
@@ -122,6 +134,7 @@ func (w *WASMIntegration) Scan(ctx integrations.ResolvedContext) integrations.St
 	}
 	var report integrations.StateReport
 	json.Unmarshal(out, &report)
+	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
 
@@ -133,15 +146,16 @@ func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 	}
 	var report integrations.StateReport
 	json.Unmarshal(out, &report)
+	report = FilterExports(report, w.manifest.Shell.Exports)
 	return report
 }
 
-// invoke calls a named exported function on the live module instance.
+// invoke checks out a module from the pool, calls fn, then returns the module.
 // callState is threaded through context so host functions can read/write the
 // JSON payload without any shared mutable state on the struct.
 func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) ([]byte, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	mod := <-w.pool
+	defer func() { w.pool <- mod }()
 
 	cs := &callState{
 		input:       input,
@@ -155,7 +169,7 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 	}
 	ctx = context.WithValue(ctx, callStateKey{}, cs)
 
-	exported := w.mod.ExportedFunction(fn)
+	exported := mod.ExportedFunction(fn)
 	if exported == nil {
 		return nil, fmt.Errorf("function %q not exported by wasm module", fn)
 	}
@@ -164,6 +178,31 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 		return nil, fmt.Errorf("call %q: %w", fn, err)
 	}
 	return cs.output, nil
+}
+
+// FilterExports removes entries from report.Exports whose keys are not in
+// the manifest's Shell.Exports allowlist. If the allowlist is empty, all
+// exports are stripped. Returns a shallow copy of report with the filtered map.
+func FilterExports(report integrations.StateReport, allowed []string) integrations.StateReport {
+	if report.Exports == nil {
+		return report
+	}
+	if len(allowed) == 0 {
+		report.Exports = nil
+		return report
+	}
+	allowSet := make(map[string]struct{}, len(allowed))
+	for _, k := range allowed {
+		allowSet[k] = struct{}{}
+	}
+	filtered := make(map[string]string)
+	for k, v := range report.Exports {
+		if _, ok := allowSet[k]; ok {
+			filtered[k] = v
+		}
+	}
+	report.Exports = filtered
+	return report
 }
 
 var _ integrations.Integration = (*WASMIntegration)(nil)
