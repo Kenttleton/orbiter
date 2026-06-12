@@ -12,6 +12,7 @@ func newVesselCmd(d *deps) *cobra.Command {
 		Short: "Manage the vessel (this workstation)",
 	}
 	cmd.AddCommand(
+		newVesselInitCmd(d),
 		&cobra.Command{
 			Use:   "survey",
 			Short: "Show vessel configuration",
