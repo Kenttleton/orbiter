@@ -81,9 +81,13 @@ func (sc *StarChart) CreateCallsign(ctx context.Context, name string) (models.Ca
 // CreateTransponder registers a new transponder.
 // Role is Orbiter-owned (file, env, keychain, vault, agent).
 // Brand is integration-owned — any string is accepted.
-func (sc *StarChart) CreateTransponder(ctx context.Context, name, role, brand, location string) (models.Transponder, error) {
+// config is a JSON object (e.g. `{"location":"/path"}` for file transponders); defaults to `{}`.
+func (sc *StarChart) CreateTransponder(ctx context.Context, name, role, brand, config string) (models.Transponder, error) {
+	if config == "" {
+		config = "{}"
+	}
 	id := models.NewID(models.EntityTypeTransponder)
-	tp := models.Transponder{ID: id, Role: role, Brand: brand, Location: location, CreatedAt: time.Now().UTC()}
+	tp := models.Transponder{ID: id, Role: role, Brand: brand, Config: config, CreatedAt: time.Now().UTC()}
 	return tp, sc.createEntity(ctx, id, name, func(t *Tx) error {
 		return t.Insert(ctx, "transponders", tp)
 	})

@@ -77,11 +77,11 @@ func TestCreateTransponder(t *testing.T) {
 	ctx := context.Background()
 	sc := testDB(t)
 
-	tp, err := sc.CreateTransponder(ctx, "work-github", "file", "github", "~/.ssh/id_ed25519_work")
+	tp, err := sc.CreateTransponder(ctx, "work-github", "file", "github", `{"location":"~/.ssh/id_ed25519_work"}`)
 	require.NoError(t, err)
 	require.Equal(t, "file", tp.Role)
 	require.Equal(t, "github", tp.Brand)
-	require.Equal(t, "~/.ssh/id_ed25519_work", tp.Location)
+	require.Equal(t, `{"location":"~/.ssh/id_ed25519_work"}`, tp.Config)
 }
 
 func TestCreateResource(t *testing.T) {

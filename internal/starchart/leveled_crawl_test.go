@@ -19,7 +19,7 @@ func TestLeveledBranchCrawl_PlanetLevel(t *testing.T) {
 	_, _ = sc.Attach(ctx, "node", "payment-api")
 
 	cs, _ := sc.CreateCallsign(ctx, "kent-acme")
-	_, _ = sc.CreateTransponder(ctx, "acme-gh", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+	_, _ = sc.CreateTransponder(ctx, "acme-gh", "file", "github", `{"location":"/home/kent/.ssh/id_ed25519_acme"}`)
 	_, _ = sc.Attach(ctx, "acme-gh", "kent-acme")
 	_, _ = sc.Attach(ctx, "kent-acme", "payment-api")
 
@@ -43,7 +43,7 @@ func TestLeveledBranchCrawl_SkipsEmptyLevels(t *testing.T) {
 	p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
 
 	_, _ = sc.CreateCallsign(ctx, "kent-acme-galaxy")
-	_, _ = sc.CreateTransponder(ctx, "acme-gh-galaxy", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+	_, _ = sc.CreateTransponder(ctx, "acme-gh-galaxy", "file", "github", `{"location":"/home/kent/.ssh/id_ed25519_acme"}`)
 	_, _ = sc.Attach(ctx, "acme-gh-galaxy", "kent-acme-galaxy")
 	_, _ = sc.Attach(ctx, "kent-acme-galaxy", "acme")
 
@@ -69,14 +69,14 @@ func TestLeveledBranchCrawl_TwoLevels(t *testing.T) {
 	_, _ = sc.CreateResource(ctx, "nvm", "manager", "nvm", "[]", "{}")
 	_, _ = sc.Attach(ctx, "nvm", "acme")
 	csGalaxy, _ := sc.CreateCallsign(ctx, "kent-acme-galaxy")
-	_, _ = sc.CreateTransponder(ctx, "acme-npm-token", "env", "npm", "NPM_TOKEN")
+	_, _ = sc.CreateTransponder(ctx, "acme-npm-token", "env", "npm", `{"var":"NPM_TOKEN"}`)
 	_, _ = sc.Attach(ctx, "acme-npm-token", "kent-acme-galaxy")
 	_, _ = sc.Attach(ctx, "kent-acme-galaxy", "acme")
 
 	_, _ = sc.CreateResource(ctx, "github-remote", "remote", "github", "[]", "{}")
 	_, _ = sc.Attach(ctx, "github-remote", "payment-api")
 	csPlanet, _ := sc.CreateCallsign(ctx, "kent-acme-planet")
-	_, _ = sc.CreateTransponder(ctx, "acme-gh-key", "file", "github", "/home/kent/.ssh/id_ed25519_acme")
+	_, _ = sc.CreateTransponder(ctx, "acme-gh-key", "file", "github", `{"location":"/home/kent/.ssh/id_ed25519_acme"}`)
 	_, _ = sc.Attach(ctx, "acme-gh-key", "kent-acme-planet")
 	_, _ = sc.Attach(ctx, "kent-acme-planet", "payment-api")
 

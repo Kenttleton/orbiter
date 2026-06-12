@@ -188,7 +188,9 @@ Each tool has an integration (`role + brand`) that knows how to install, verify,
 | .NET | manager + dotnet |
 | Go | runtime + go |
 
-New integrations are WASM modules compiled with TinyGo. See [docs/integrations.md](docs/integrations.md) for the full guest ABI, known TinyGo restrictions, and a step-by-step guide to building and wiring a new integration.
+New integrations are WASM modules — Rust is recommended, TinyGo is supported for Go codebases. See [docs/integrations.md](docs/integrations.md) for the full guest ABI, language guide, and a step-by-step guide to building and wiring a new integration.
+
+**Integration security model**: Integrations run inside a WASM sandbox and may only execute commands declared in their manifest's `[commands] allowed` list. Every command invocation — allowed or rejected — is logged to `~/.orbiter/audit.log`. Integrations cannot write to the Captain's shell directly; all environment variable exports are validated against the manifest's `[shell] exports` allowlist before reaching the shell. Secrets (API keys, tokens, passwords) are never stored in config or the database — they pass transiently through interactive prompts and are discarded after use.
 
 **Orbiter manages environment configuration state — not data state.**
 

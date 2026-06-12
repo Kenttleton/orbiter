@@ -272,7 +272,7 @@ func (sc *StarChart) callsignsAttachedTo(ctx context.Context, nodeID string) ([]
 
 func (sc *StarChart) transpondersAttachedTo(ctx context.Context, callsignID string) ([]models.Transponder, error) {
 	const q = `
-        SELECT tp.id, tp.role, tp.brand, tp.location, tp.created_at
+        SELECT tp.id, tp.role, tp.brand, tp.config, tp.created_at
         FROM transponders tp
         JOIN attachments a ON a.from_id = tp.id
         WHERE a.to_id = ?
@@ -285,7 +285,7 @@ func (sc *StarChart) transpondersAttachedTo(ctx context.Context, callsignID stri
 	var result []models.Transponder
 	for rows.Next() {
 		var tp models.Transponder
-		if err := rows.Scan(&tp.ID, &tp.Role, &tp.Brand, &tp.Location, &tp.CreatedAt); err != nil {
+		if err := rows.Scan(&tp.ID, &tp.Role, &tp.Brand, &tp.Config, &tp.CreatedAt); err != nil {
 			return nil, err
 		}
 		result = append(result, tp)

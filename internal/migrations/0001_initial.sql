@@ -52,11 +52,12 @@ CREATE TABLE IF NOT EXISTS callsigns (
 -- Transponders are pointers to credential locations — never the credentials themselves.
 -- role is Orbiter-owned (file, env, keychain, vault, agent).
 -- brand is integration-owned (any string; validated at init time).
+-- config is a JSON object whose shape is role-specific (see docs/integrations.md).
 CREATE TABLE IF NOT EXISTS transponders (
     id         TEXT PRIMARY KEY REFERENCES aliases(entity),
     role       TEXT NOT NULL,
     brand      TEXT NOT NULL,
-    location   TEXT NOT NULL,
+    config     TEXT NOT NULL DEFAULT '{}',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

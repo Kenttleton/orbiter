@@ -21,6 +21,46 @@ This mirrors the AWS Lambda model: the module is instantiated once at startup an
 
 ---
 
+## Security
+
+### Threat model
+
+An integration runs code on the Captain's machine. The threat is a module that looks legitimate (copied manifest, plausible brand name) but executes malicious commands — installing malware, exfiltrating keys, establishing persistence.
+
+Defense is layered:
+
+**WASM sandbox** — The module cannot access the filesystem, network, or OS directly. The only way to interact with the outside world is through the three host-imported functions: `read_input`, `write_output`, and `run_command`. The sandbox eliminates entire attack classes.
+
+**`[commands]` allowlist** — Every executable an integration may pass to `run_command` must be declared in the manifest's `[commands] allowed` list. The host rejects any call for an undeclared executable and returns a zero-length result. The integration cannot silently expand its access beyond what it declared upfront.
+
+**Audit log** — Every `run_command` invocation — allowed or rejected — is written to `~/.orbiter/audit.log` as a JSON line with timestamp, brand, command, arguments, exit code, and duration. Rejected calls include `"rejected": true` and the reason. The audit log is the primary forensic tool.
+
+```jsonl
+{"ts":"2026-06-11T14:32:01Z","brand":"gh","cmd":"gh","args":["auth","status"],"exit":0,"duration_ms":142}
+{"ts":"2026-06-11T14:32:02Z","brand":"gh","cmd":"curl","args":["evil.com"],"exit":-1,"rejected":true,"reason":"not in allowlist"}
+```
+
+**No ambient environment** — Subprocesses spawned by `run_command` inherit only `PATH`. No secrets, tokens, or session credentials leak via the environment.
+
+**Validated shell exports** — Integrations communicate required shell state through `StateReport.Exports`. Every key is validated against the manifest's `[shell] exports` allowlist before Orbiter emits any shell directive. Undeclared keys are dropped and logged. Integrations never write to the Captain's shell directly.
+
+**No stored secrets** — API keys, tokens, and passwords are never stored in config or the database. They are collected transiently via interactive prompts (`NeedsInput`/`Responses`) and discarded after use.
+
+### Trust tiers
+
+| Tier | Source | Trust level |
+| --- | --- | --- |
+| Bundled | `integrations/` in this repo | Reviewed and trusted |
+| Third-party | `~/.orbiter/integrations/` | Captain installs explicitly; Orbiter warns on unsigned modules |
+
+### Limitations
+
+The `[commands]` allowlist declares capability claims — it does not prevent an allowed command from receiving malicious arguments. For example, an integration that declares `git` in its allowlist could construct a `git` invocation with harmful flags. The audit log surfaces this; detection is the Captain's responsibility.
+
+**Future work:** WASM module signing and verification, subprocess sandboxing (seccomp/namespaces on Linux, sandbox profiles on macOS).
+
+---
+
 ## Handler Contracts
 
 ### `detect`
