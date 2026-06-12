@@ -190,7 +190,7 @@ func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transpo
 	if err != nil {
 		return integrations.TransponderCalibrateResult{}, err
 	}
-	if tr.Report.Error == "" && tr.Report.Present && tr.Report.Reachable {
+	if scanBeaconStatus(tr.Report) == models.BeaconStatusHealthy {
 		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
 	}
 	integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
