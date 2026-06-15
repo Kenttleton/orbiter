@@ -67,7 +67,9 @@ func (m ChecklistModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case " ":
-			m.Items[m.cursor].Checked = !m.Items[m.cursor].Checked
+			if len(m.Items) > 0 {
+				m.Items[m.cursor].Checked = !m.Items[m.cursor].Checked
+			}
 		case "enter":
 			m.done = true
 			return m, tea.Quit
@@ -94,6 +96,6 @@ func (m ChecklistModel) View() string {
 		}
 		fmt.Fprintf(&sb, "%s%s %s%s\n", cursor, checked, item.Label, badge)
 	}
-	sb.WriteString("\n↑/↓ move  space toggle  enter confirm  q cancel\n")
+	sb.WriteString("\nup/down move  space toggle  enter confirm  q cancel\n")
 	return sb.String()
 }

@@ -1,6 +1,7 @@
 package commands_test
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -111,20 +112,31 @@ func TestChecklistModel_ViewContainsLabels(t *testing.T) {
 	})
 	view := m.View()
 	for _, want := range []string{"Alpha", "Beta", "upgrade available", "Pick one:"} {
-		if !containsString(view, want) {
+		if !strings.Contains(view, want) {
 			t.Errorf("view missing %q:\n%s", want, view)
 		}
 	}
 }
 
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		func() bool {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-			return false
-		}())
+func TestChecklistModel_CtrlCDoesNotSetDone(t *testing.T) {
+	m := commands.NewChecklistModel("Test", []commands.ChecklistItem{
+		{Label: "A", Tag: "a"},
+	})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	final := updated.(commands.ChecklistModel)
+	if final.Done() {
+		t.Error("done should be false after ctrl+c")
+	}
+}
+
+func TestChecklistModel_EmptyItems(t *testing.T) {
+	m := commands.NewChecklistModel("Empty", []commands.ChecklistItem{})
+	// space on empty list must not panic
+	m = applyKey(m, " ")
+	// down/up on empty list must not panic
+	m = applyKey(m, "down")
+	m = applyKey(m, "up")
+	if m.Cursor() != 0 {
+		t.Errorf("cursor should stay 0 on empty list, got %d", m.Cursor())
+	}
 }
