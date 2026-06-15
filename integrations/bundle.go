@@ -121,19 +121,20 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry, approve wa
 // LoadInstalled scans dir for integration directories and loads any that
 // contain a manifest.toml and a matching <name>.wasm file. Loaded integrations
 // are registered in the provided registry.
-// This is used to load third-party integrations the Captain has installed.
-func LoadInstalled(dir string, registry *core.Registry) error {
+// approve is passed to each loaded WASMIntegration; nil uses StdinApproveFunc.
+// This is used to load third-party integrations the Captain has installed,
+// and is called at startup for every command that opens the StarChart.
+func LoadInstalled(dir string, registry *core.Registry, approve wasm.ApproveFunc) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // empty dir is not an error
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
 		}
 		return err
 	}
 
 	ctx := context.Background()
 	for _, e := range entries {
-		// Skip symlinks — third-party integration dirs must be real directories.
 		if e.Type()&os.ModeSymlink != 0 || !e.IsDir() {
 			continue
 		}
@@ -156,7 +157,7 @@ func LoadInstalled(dir string, registry *core.Registry) error {
 			continue
 		}
 
-		i, err := wasm.Load(ctx, manifest, wasmBytes, core.DefaultSettings, registry, nil)
+		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, approve)
 		if err != nil {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue

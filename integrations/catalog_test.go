@@ -52,3 +52,36 @@ func TestDefaultIntegrationsDir_NotEmpty(t *testing.T) {
 		t.Error("DefaultIntegrationsDir should return a non-empty path")
 	}
 }
+
+func TestLoadInstalled_EmptyDir(t *testing.T) {
+	reg := core.NewRegistry(nil)
+	approve := func(_, _ string) bool { return true }
+	if err := integrations.LoadInstalled(t.TempDir(), reg, approve); err != nil {
+		t.Fatalf("LoadInstalled on empty dir: %v", err)
+	}
+}
+
+func TestLoadInstalled_AfterExtract(t *testing.T) {
+	dir := t.TempDir()
+	entries := integrations.CatalogEntries()
+	if len(entries) == 0 {
+		t.Skip("no catalog entries")
+	}
+	if err := integrations.ExtractSelected(entries, dir); err != nil {
+		t.Fatalf("ExtractSelected: %v", err)
+	}
+
+	reg := core.NewRegistry(nil)
+	approve := func(_, _ string) bool { return true }
+	if err := integrations.LoadInstalled(dir, reg, approve); err != nil {
+		t.Fatalf("LoadInstalled: %v", err)
+	}
+
+	for _, e := range entries {
+		for _, role := range e.Roles {
+			if _, ok := reg.Get(role, e.Brand); !ok {
+				t.Errorf("expected %s/%s registered after LoadInstalled", role, e.Brand)
+			}
+		}
+	}
+}
