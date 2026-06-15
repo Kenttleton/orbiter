@@ -67,6 +67,40 @@ func TestPlanRetro_SharedResource(t *testing.T) {
 	assert.False(t, found)
 }
 
+func TestExecuteRetro_Galaxy(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	p, err := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
+	require.NoError(t, err)
+	r, err := sc.CreateResource(ctx, "node", "runtime", "node", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "node", "payment-api")
+	require.NoError(t, err)
+
+	plan, err := sc.PlanRetro(ctx, g.ID)
+	require.NoError(t, err)
+
+	// Plan must include galaxy, planet, and resource.
+	require.Len(t, plan.Nodes, 3)
+
+	require.NoError(t, sc.ExecuteRetro(ctx, plan))
+
+	var galaxy models.Galaxy
+	err = sc.Get(ctx, "galaxies", g.ID, &galaxy)
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "galaxy should have been retired")
+
+	var planet models.Planet
+	err = sc.Get(ctx, "planets", p.ID, &planet)
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "planet should have been retired")
+
+	var resource models.Resource
+	err = sc.Get(ctx, "resources", r.ID, &resource)
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "resource should have been retired")
+}
+
 func TestExecuteRetro(t *testing.T) {
 	sc := testDB(t)
 	ctx := context.Background()

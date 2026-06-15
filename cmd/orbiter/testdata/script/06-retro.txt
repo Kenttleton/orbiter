@@ -20,6 +20,14 @@ stdout 'acme-corp'
 ! exec orbiter survey acme-corp
 stderr 'not found|no target'
 
-# NOTE: retiring a non-leaf hierarchy (galaxy with live children) currently
-# fails with a foreign key constraint — PlanRetro does not yet traverse
-# descendants for ordered deletion. Tracked as a known gap.
+# Non-leaf hierarchy: galaxy with live children retires cleanly (cascade, leaf-first)
+exec orbiter galaxy add bigcorp
+exec orbiter planet add billing --galaxy bigcorp
+exec orbiter retro bigcorp --yes
+stdout 'bigcorp'
+
+! exec orbiter survey bigcorp
+stderr 'not found|no target'
+
+! exec orbiter survey billing
+stderr 'not found|no target'

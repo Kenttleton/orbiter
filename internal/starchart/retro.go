@@ -128,9 +128,15 @@ func (sc *StarChart) ExecuteRetro(ctx context.Context, plan RetroPlan) error {
 	})
 }
 
-// collectSubtree returns targetID plus all entities attached to it (recursively).
-// In the attachment graph, from_id is the child and to_id is the parent.
-// Children of target = rows where to_id = target.
+// collectSubtree returns targetID plus all descendants in post-order (leaves first,
+// target last). This ordering is required so ExecuteRetro deletes children before
+// parents, satisfying FK constraints (e.g. planets reference galaxies via galaxy_id).
+//
+// Two kinds of children are traversed:
+//  1. Attachment children: entities attached to id via the attachments table
+//     (resources, transponders — from_id = child, to_id = parent).
+//  2. Hierarchy children: structural children via FK columns
+//     (solar_systems.galaxy_id, planets.galaxy_id, planets.solar_system_id).
 func (sc *StarChart) collectSubtree(ctx context.Context, entityID string) ([]string, error) {
 	visited := make(map[string]bool)
 	var order []string
@@ -141,33 +147,43 @@ func (sc *StarChart) collectSubtree(ctx context.Context, entityID string) ([]str
 			return nil
 		}
 		visited[id] = true
-		order = append(order, id)
 
-		rows, err := sc.db.QueryContext(ctx,
+		// Attachment children (resources/transponders attached to this entity).
+		attachRows, err := sc.db.QueryContext(ctx,
 			`SELECT from_id FROM attachments WHERE to_id = ?`, id,
 		)
 		if err != nil {
-			return fmt.Errorf("query children of %s: %w", id, err)
+			return fmt.Errorf("query attachment children of %s: %w", id, err)
 		}
-		defer rows.Close()
-
 		var children []string
-		for rows.Next() {
+		for attachRows.Next() {
 			var childID string
-			if err := rows.Scan(&childID); err != nil {
+			if err := attachRows.Scan(&childID); err != nil {
+				attachRows.Close()
 				return err
 			}
 			children = append(children, childID)
 		}
-		if err := rows.Err(); err != nil {
+		attachRows.Close()
+		if err := attachRows.Err(); err != nil {
 			return err
 		}
 
+		// Hierarchy children (galaxy→systems, galaxy→planets, system→planets).
+		hierarchyKids, err := sc.hierarchyChildrenOf(ctx, id)
+		if err != nil {
+			return err
+		}
+		children = append(children, hierarchyKids...)
+
+		// Recurse children first (post-order = leaf before parent).
 		for _, child := range children {
 			if err := walk(child); err != nil {
 				return err
 			}
 		}
+
+		order = append(order, id)
 		return nil
 	}
 
@@ -175,6 +191,56 @@ func (sc *StarChart) collectSubtree(ctx context.Context, entityID string) ([]str
 		return nil, err
 	}
 	return order, nil
+}
+
+// hierarchyChildrenOf returns the structural (FK-column) children of entityID.
+// Galaxy → solar_systems + planets; SolarSystem → planets; others → none.
+func (sc *StarChart) hierarchyChildrenOf(ctx context.Context, entityID string) ([]string, error) {
+	if len(entityID) < 10 {
+		return nil, nil
+	}
+	var ids []string
+	switch entityID[8:10] {
+	case models.EntityTypeGalaxy:
+		sysIDs, err := sc.childIDsWhere(ctx, "solar_systems", "galaxy_id", entityID)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, sysIDs...)
+		planetIDs, err := sc.childIDsWhere(ctx, "planets", "galaxy_id", entityID)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, planetIDs...)
+	case models.EntityTypeSolarSystem:
+		planetIDs, err := sc.childIDsWhere(ctx, "planets", "solar_system_id", entityID)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, planetIDs...)
+	}
+	return ids, nil
+}
+
+// childIDsWhere returns the IDs of all rows in table where col = val.
+// Table and column names are hardcoded call sites — not user input.
+func (sc *StarChart) childIDsWhere(ctx context.Context, table, col, val string) ([]string, error) {
+	rows, err := sc.db.QueryContext(ctx,
+		`SELECT id FROM `+table+` WHERE `+col+` = ?`, val,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query %s.%s=%s: %w", table, col, val, err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // hasAttachmentOutside returns true if entityID is attached to any entity NOT in retireSet.
