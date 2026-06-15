@@ -54,24 +54,3 @@ func newUnquarantineCmd() *cobra.Command {
 	}
 }
 
-// newHistoryCmd returns the history subcommand group.
-//
-//	orbiter history clean   → remove navigation history older than retention period
-func newHistoryCmd(d *deps) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "history",
-		Short: "Manage orbiter navigation history",
-	}
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "clean",
-			Short: "Remove history older than retention period",
-			Args:  cobra.NoArgs,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				d.renderer.Info("history clean: not yet implemented")
-				return nil
-			},
-		},
-	)
-	return cmd
-}
