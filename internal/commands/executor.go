@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	bundle "github.com/Kenttleton/orbiter/integrations"
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/output"
@@ -56,8 +57,25 @@ func (e *Executor) resolveTarget(ctx context.Context, target string) (models.Ali
 	return alias, nil
 }
 
+// isCatalogBrand returns true if target matches a bundled integration brand.
+func isCatalogBrand(target string) bool {
+	for _, e := range bundle.CatalogEntries() {
+		if e.Brand == target {
+			return true
+		}
+	}
+	return false
+}
+
 // Survey renders the desired state and last beacon for the target entity.
+// If target is a known integration brand, it shows integration state instead.
 func (e *Executor) Survey(ctx context.Context, target string) error {
+	if target != "" && isCatalogBrand(target) {
+		info := IntegrationInspectInfo(target, integrations.DefaultSettings, integrations.Default)
+		WriteInspectReport(os.Stdout, info)
+		return nil
+	}
+
 	alias, err := e.resolveTarget(ctx, target)
 	if err != nil {
 		return err

@@ -113,7 +113,7 @@ func (r *Registry) QuarantineBrand(brand, reason string) error {
 	r.mu.Unlock()
 
 	fmt.Fprintf(os.Stderr,
-		"\n  orbiter: integration %q quarantined — %s\n  Review: orbiter vessel inspect %s\n\n",
+		"\n  orbiter: integration %q quarantined — %s\n  Review: orbiter survey %s\n\n",
 		brand, reason, brand,
 	)
 

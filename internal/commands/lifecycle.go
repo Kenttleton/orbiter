@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/Kenttleton/orbiter/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -94,6 +95,9 @@ func newJumpCmd(d *deps) *cobra.Command {
 			target := ""
 			if len(args) > 0 {
 				target = args[0]
+			}
+			if target == "starchart" {
+				return tui.Run(d.sc)
 			}
 			exec := NewExecutor(d.sc, d.renderer)
 			directives, err := exec.Jump(cmd.Context(), target, yes)

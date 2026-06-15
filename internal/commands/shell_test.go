@@ -33,5 +33,5 @@ func TestInitCmd_NoOrbiterToken(t *testing.T) {
 	initCmd, _, err := root.Find([]string{"init"})
 	require.NoError(t, err)
 	assert.NotNil(t, initCmd)
-	assert.Equal(t, "init", initCmd.Use)
+	assert.Equal(t, "init [shell|vessel]", initCmd.Use)
 }

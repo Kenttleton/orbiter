@@ -95,7 +95,7 @@ func TestWriteInspectReport_Quarantined(t *testing.T) {
 	if !strings.Contains(out, "attempted banned command: bash") {
 		t.Errorf("missing reason in output: %s", out)
 	}
-	if !strings.Contains(out, "vessel unquarantine git") {
+	if !strings.Contains(out, "orbiter unquarantine git") {
 		t.Errorf("missing restore hint in output: %s", out)
 	}
 }

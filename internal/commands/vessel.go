@@ -12,6 +12,7 @@ import (
 	integrations "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
+
 // RenderCatalogChecklist returns one display line per catalog entry, suitable
 // for a terminal checklist prompt. Each line is: "Name — Description (roles: role1, role2)"
 func RenderCatalogChecklist(entries []bundle.CatalogEntry) []string {
@@ -64,7 +65,7 @@ func WriteInspectReport(w io.Writer, info IntegrationInspectResult) {
 		fmt.Fprintf(w, "Status:      QUARANTINED\n")
 		fmt.Fprintf(w, "Reason:      %s\n", info.QuarantineReason)
 		fmt.Fprintf(w, "Since:       %s\n", info.QuarantineAt.Format(time.RFC3339))
-		fmt.Fprintf(w, "\nTo restore:  orbiter vessel unquarantine %s\n", info.Brand)
+		fmt.Fprintf(w, "\nTo restore:  orbiter unquarantine %s\n", info.Brand)
 	} else if info.Registered {
 		fmt.Fprintf(w, "Status:      active\n")
 	} else {
@@ -72,7 +73,7 @@ func WriteInspectReport(w io.Writer, info IntegrationInspectResult) {
 	}
 }
 
-func newVesselInitCmd(d *deps) *cobra.Command {
+func newVesselInitCmd(_ *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "Initialize the vessel and install bundled integrations",
@@ -80,17 +81,12 @@ func newVesselInitCmd(d *deps) *cobra.Command {
 		// Override parent PersistentPreRunE — vessel init needs no star chart.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			catalog := bundle.CatalogEntries()
-			if err := bundle.InstallSelected(catalog, integrations.Default, nil); err != nil {
-				return fmt.Errorf("install integrations: %w", err)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Installed %d integration(s)\n", len(catalog))
-			return nil
+			return vesselInitRun(cmd.OutOrStdout())
 		},
 	}
 }
 
-func newVesselInspectCmd(d *deps) *cobra.Command {
+func newVesselInspectCmd(_ *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "inspect <brand>",
 		Short: "Show details for an installed integration",
@@ -105,7 +101,7 @@ func newVesselInspectCmd(d *deps) *cobra.Command {
 	}
 }
 
-func newVesselUnquarantineCmd(d *deps) *cobra.Command {
+func newVesselUnquarantineCmd(_ *deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "unquarantine <brand>",
 		Short: "Remove quarantine from an integration and re-enable it",
