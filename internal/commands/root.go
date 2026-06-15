@@ -6,9 +6,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	bundle "github.com/Kenttleton/orbiter/integrations"
+	integrations "github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/resolver"
 	"github.com/Kenttleton/orbiter/internal/starchart"
+	"github.com/Kenttleton/orbiter/internal/wasm"
 )
 
 // deps holds the dependency-injected resources available to all commands.
@@ -66,6 +69,16 @@ and environment orchestration platform for freelance and contract engineers.`,
 
 			d.renderer = output.NewRenderer(format, verbose)
 			d.resolver = resolver.New(sc)
+
+			// Load integrations installed to disk into the Default registry.
+			// Non-fatal: a missing integrations dir is silently skipped (LoadInstalled handles it).
+			if err := bundle.LoadInstalled(
+				bundle.DefaultIntegrationsDir(),
+				integrations.Default,
+				wasm.StdinApproveFunc,
+			); err != nil {
+				fmt.Fprintf(os.Stderr, "orbiter: load integrations: %v\n", err)
+			}
 			return nil
 		},
 	}
