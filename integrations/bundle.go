@@ -59,7 +59,8 @@ func CatalogEntries() []CatalogEntry {
 // InstallSelected loads and registers the integrations matching the given
 // catalog entries into the provided registry. Entries whose WASM file cannot
 // be loaded are logged and skipped.
-func InstallSelected(entries []CatalogEntry, registry *core.Registry) error {
+// approve is the Captain prompt func passed to each WASM integration; nil uses StdinApproveFunc.
+func InstallSelected(entries []CatalogEntry, registry *core.Registry, approve wasm.ApproveFunc) error {
 	dirs, err := fs.ReadDir(bundleFS, ".")
 	if err != nil {
 		return err
@@ -96,7 +97,7 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry) error {
 			continue
 		}
 
-		i, err := wasm.Load(ctx, manifest, wasmBytes, core.DefaultSettings, registry, nil)
+		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, approve)
 		if err != nil {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue

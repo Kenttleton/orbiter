@@ -123,6 +123,13 @@ func (r *Registry) QuarantineBrand(brand, reason string) error {
 	return nil
 }
 
+// Settings returns the settings store backing this registry, or nil for in-memory registries.
+func (r *Registry) Settings() *SettingsStore {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.settings
+}
+
 // UnquarantineBrand clears the quarantine flag in memory and in settings.json.
 // The integration is available immediately — no restart required.
 func (r *Registry) UnquarantineBrand(brand string) error {

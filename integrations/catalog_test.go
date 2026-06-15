@@ -32,7 +32,7 @@ func TestInstallSelected_RegistersInRegistry(t *testing.T) {
 		t.Skip("no catalog entries")
 	}
 
-	if err := integrations.InstallSelected(entries, reg); err != nil {
+	if err := integrations.InstallSelected(entries, reg, nil); err != nil {
 		t.Fatalf("InstallSelected: %v", err)
 	}
 

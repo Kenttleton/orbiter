@@ -153,7 +153,7 @@ func runCommandFn(ctx context.Context, mod api.Module, stack []uint64) {
 
 	out, code := runGate(ctx, cs, fullCmd, executable, spec.Args)
 	if code != 0 {
-		stack[0] = uint64(code)
+		stack[0] = 0 // 0 bytes written; guest handles empty output
 		return
 	}
 

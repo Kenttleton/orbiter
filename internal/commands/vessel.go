@@ -81,7 +81,7 @@ func newVesselInitCmd(d *deps) *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
 			catalog := bundle.CatalogEntries()
-			if err := bundle.InstallSelected(catalog, integrations.Default); err != nil {
+			if err := bundle.InstallSelected(catalog, integrations.Default, nil); err != nil {
 				return fmt.Errorf("install integrations: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Installed %d integration(s)\n", len(catalog))

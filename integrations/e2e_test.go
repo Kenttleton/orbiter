@@ -1,16 +1,20 @@
 package integrations_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/integrations"
 	core "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
+// autoApprove is used in tests to approve all commands without reading stdin.
+func autoApprove(_, _ string) bool { return true }
+
 func setupBundleRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry(nil)
-	if err := integrations.InstallSelected(integrations.CatalogEntries(), reg); err != nil {
+	if err := integrations.InstallSelected(integrations.CatalogEntries(), reg, autoApprove); err != nil {
 		t.Fatalf("InstallSelected: %v", err)
 	}
 	return reg
@@ -29,6 +33,45 @@ func TestBundledIntegrations_Git(t *testing.T) {
 		if !report.Present {
 			t.Error("expected present=true (git is installed)")
 		}
+		if !report.Reachable {
+			t.Error("expected reachable=true")
+		}
+		if !report.InPath {
+			t.Error("expected in_path=true")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+		if len(report.Observations) == 0 || report.Observations[0] == "" {
+			t.Error("expected observations to contain git version string")
+		}
+	})
+
+	t.Run("init", func(t *testing.T) {
+		report := i.Init(core.ResolvedContext{})
+		t.Logf("Init: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path from init")
+		}
+		if report.Manager != "system" {
+			t.Errorf("expected manager=system, got %q", report.Manager)
+		}
+	})
+
+	t.Run("calibrate", func(t *testing.T) {
+		report := i.Calibrate(core.ResolvedContext{})
+		t.Logf("Calibrate: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true after calibrate")
+		}
+		if len(report.Observations) == 0 {
+			t.Error("expected calibrate to populate observations")
+		} else if !strings.HasPrefix(report.Observations[0], "calibrated:") {
+			t.Errorf("expected observations[0] to start with 'calibrated:', got %q", report.Observations[0])
+		}
 	})
 
 	t.Run("detect_hit", func(t *testing.T) {
@@ -37,6 +80,15 @@ func TestBundledIntegrations_Git(t *testing.T) {
 		})
 		if !report.Detected {
 			t.Error("expected detected=true for .git/config")
+		}
+		if len(report.Resources) == 0 {
+			t.Fatal("expected at least one suggested resource")
+		}
+		if report.Resources[0].Role != "tool" {
+			t.Errorf("expected role=tool, got %q", report.Resources[0].Role)
+		}
+		if report.Resources[0].Brand != "git" {
+			t.Errorf("expected brand=git, got %q", report.Resources[0].Brand)
 		}
 	})
 
@@ -63,6 +115,45 @@ func TestBundledIntegrations_Go(t *testing.T) {
 		if !report.Present {
 			t.Error("expected present=true")
 		}
+		if !report.Reachable {
+			t.Error("expected reachable=true")
+		}
+		if !report.InPath {
+			t.Error("expected in_path=true")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+		if len(report.Observations) == 0 || report.Observations[0] == "" {
+			t.Error("expected observations to contain go version string")
+		}
+	})
+
+	t.Run("init", func(t *testing.T) {
+		report := i.Init(core.ResolvedContext{})
+		t.Logf("Init: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path from init")
+		}
+		if report.Manager != "system" {
+			t.Errorf("expected manager=system, got %q", report.Manager)
+		}
+	})
+
+	t.Run("calibrate", func(t *testing.T) {
+		report := i.Calibrate(core.ResolvedContext{})
+		t.Logf("Calibrate: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true after calibrate")
+		}
+		if len(report.Observations) == 0 {
+			t.Error("expected calibrate to populate observations")
+		} else if !strings.HasPrefix(report.Observations[0], "calibrated:") {
+			t.Errorf("expected observations[0] to start with 'calibrated:', got %q", report.Observations[0])
+		}
 	})
 
 	t.Run("detect_hit", func(t *testing.T) {
@@ -71,6 +162,15 @@ func TestBundledIntegrations_Go(t *testing.T) {
 		})
 		if !report.Detected {
 			t.Error("expected detected=true for go.mod")
+		}
+		if len(report.Resources) == 0 {
+			t.Fatal("expected at least one suggested resource")
+		}
+		if report.Resources[0].Role != "runtime" {
+			t.Errorf("expected role=runtime, got %q", report.Resources[0].Role)
+		}
+		if report.Resources[0].Brand != "go" {
+			t.Errorf("expected brand=go, got %q", report.Resources[0].Brand)
 		}
 	})
 
