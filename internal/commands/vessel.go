@@ -3,6 +3,8 @@ package commands
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -73,17 +75,67 @@ func WriteInspectReport(w io.Writer, info IntegrationInspectResult) {
 	}
 }
 
+// BuildChecklistItems converts CatalogEntryState slice into ChecklistItem slice
+// for vessel init. Pre-checks installed entries and adds "upgrade available" badges
+// for entries whose installed WASM differs from the bundled version.
+func BuildChecklistItems(states []bundle.CatalogEntryState) []ChecklistItem {
+	items := make([]ChecklistItem, len(states))
+	for i, s := range states {
+		badge := ""
+		if s.Installed && !s.ChecksumMatches {
+			badge = "upgrade available"
+		}
+		items[i] = ChecklistItem{
+			Label:   fmt.Sprintf("%s — %s (roles: %s)", s.Name, s.Description, strings.Join(s.Roles, ", ")),
+			Tag:     s.Brand,
+			Checked: s.Installed,
+			Badge:   badge,
+		}
+	}
+	return items
+}
+
+// ApplySelections extracts selected integrations to dir and removes directories
+// for integrations that were previously installed but are no longer selected.
+func ApplySelections(states []bundle.CatalogEntryState, selected []ChecklistItem, dir string) error {
+	selectedBrands := make(map[string]bool, len(selected))
+	for _, item := range selected {
+		selectedBrands[item.Tag] = true
+	}
+
+	// Remove deselected integrations that were previously installed.
+	for _, s := range states {
+		if s.Installed && !selectedBrands[s.Brand] {
+			if err := os.RemoveAll(filepath.Join(dir, s.Brand)); err != nil {
+				return fmt.Errorf("remove %s: %w", s.Brand, err)
+			}
+		}
+	}
+
+	// Extract selected entries.
+	var toExtract []bundle.CatalogEntry
+	for _, s := range states {
+		if selectedBrands[s.Brand] {
+			toExtract = append(toExtract, s.CatalogEntry)
+		}
+	}
+	return bundle.ExtractSelected(toExtract, dir)
+}
+
 func newVesselInitCmd(_ *deps) *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize the vessel and install bundled integrations",
 		Args:  cobra.NoArgs,
 		// Override parent PersistentPreRunE — vessel init needs no star chart.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return vesselInitRun(cmd.OutOrStdout())
+			return vesselInitRun(cmd.OutOrStdout(), yes)
 		},
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "install all integrations without interactive selection")
+	return cmd
 }
 
 func newVesselInspectCmd(_ *deps) *cobra.Command {
@@ -116,7 +168,7 @@ func newVesselUnquarantineCmd(_ *deps) *cobra.Command {
 			if err := integrations.Default.UnquarantineBrand(brand); err != nil {
 				return fmt.Errorf("unquarantine %s: %w", brand, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now active\n", brand)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s quarantine removed — run 'orbiter init' to reload\n", brand)
 			return nil
 		},
 	}

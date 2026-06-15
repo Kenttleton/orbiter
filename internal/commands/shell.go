@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	bundle "github.com/Kenttleton/orbiter/integrations"
-	integrations "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
 //go:embed shell/orbiter.bash
@@ -48,12 +48,64 @@ func printShellScript() error {
 	return nil
 }
 
-func vesselInitRun(out io.Writer) error {
-	catalog := bundle.CatalogEntries()
-	if err := bundle.InstallSelected(catalog, integrations.Default, nil); err != nil {
-		return fmt.Errorf("install integrations: %w", err)
+func vesselInitRun(out io.Writer, yes bool) error {
+	dir := bundle.DefaultIntegrationsDir()
+	states, err := bundle.CatalogEntriesWithState(dir)
+	if err != nil {
+		return fmt.Errorf("check integration state: %w", err)
 	}
-	fmt.Fprintf(out, "Installed %d integration(s)\n", len(catalog))
+
+	if yes {
+		// Non-interactive: install all catalog entries.
+		entries := make([]bundle.CatalogEntry, len(states))
+		for i, s := range states {
+			entries[i] = s.CatalogEntry
+		}
+		if err := bundle.ExtractSelected(entries, dir); err != nil {
+			return fmt.Errorf("install integrations: %w", err)
+		}
+		fmt.Fprintf(out, "Installed %d integration(s)\n", len(entries))
+		return nil
+	}
+
+	items := BuildChecklistItems(states)
+	if len(items) == 0 {
+		fmt.Fprintln(out, "No integrations available in catalog.")
+		return nil
+	}
+
+	initial := NewChecklistModel("Select integrations to install:", items)
+	result, err := tea.NewProgram(initial).Run()
+	if err != nil {
+		return fmt.Errorf("checklist: %w", err)
+	}
+
+	final := result.(ChecklistModel)
+	if !final.Done() {
+		fmt.Fprintln(out, "Cancelled.")
+		return nil
+	}
+
+	if err := ApplySelections(states, final.Selected(), dir); err != nil {
+		return fmt.Errorf("apply selections: %w", err)
+	}
+
+	installed := len(final.Selected())
+	removed := 0
+	selectedBrands := make(map[string]bool, len(final.Selected()))
+	for _, sel := range final.Selected() {
+		selectedBrands[sel.Tag] = true
+	}
+	for _, s := range states {
+		if s.Installed && !selectedBrands[s.Brand] {
+			removed++
+		}
+	}
+	fmt.Fprintf(out, "Installed %d integration(s)", installed)
+	if removed > 0 {
+		fmt.Fprintf(out, ", removed %d", removed)
+	}
+	fmt.Fprintln(out)
 	return nil
 }
 
@@ -63,7 +115,8 @@ func vesselInitRun(out io.Writer) error {
 //	orbiter init shell     → print shell integration script
 //	orbiter init vessel    → vessel init (same as no target)
 func newInitCmd() *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+	cmd := &cobra.Command{
 		Use:   "init [shell|vessel]",
 		Short: "Initialize orbiter or a target — \"Make it ready.\"",
 		Long: `Initialize orbiter or a named target.
@@ -87,12 +140,14 @@ For shell integration add this to your profile:
 			case "shell":
 				return printShellScript()
 			case "vessel", "":
-				return vesselInitRun(cmd.OutOrStdout())
+				return vesselInitRun(cmd.OutOrStdout(), yes)
 			default:
 				return fmt.Errorf("unknown init target %q — use 'shell' or 'vessel'", target)
 			}
 		},
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "install all integrations without interactive selection")
+	return cmd
 }
 
 // newShellCmd returns the shell subcommand group.

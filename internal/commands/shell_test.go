@@ -11,7 +11,7 @@ import (
 
 func TestInitCmd_OutputContainsFunctionDef(t *testing.T) {
 	root := commands.NewRootCommand()
-	root.SetArgs([]string{"init"})
+	root.SetArgs([]string{"init", "--yes"})
 
 	var buf bytes.Buffer
 	root.SetOut(&buf)

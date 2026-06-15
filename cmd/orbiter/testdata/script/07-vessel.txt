@@ -1,7 +1,7 @@
 # Vessel commands: inspect and command aliases.
 
-# Init (alias for orbiter init)
-exec orbiter vessel init
+# Init (alias for orbiter init, --yes skips TUI)
+exec orbiter vessel init --yes
 stdout 'Installed 2 integration\(s\)'
 
 # Inspect a known brand — shows integration state

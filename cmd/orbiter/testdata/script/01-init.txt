@@ -1,15 +1,15 @@
 # All init variants install integrations or print the shell script.
 
-# No-arg init → vessel init
-exec orbiter init
+# No-arg init -> vessel init (--yes skips TUI, installs all)
+exec orbiter init --yes
 stdout 'Installed 2 integration\(s\)'
 
 # Explicit vessel target
-exec orbiter init vessel
+exec orbiter init vessel --yes
 stdout 'Installed 2 integration\(s\)'
 
 # Via vessel subcommand alias
-exec orbiter vessel init
+exec orbiter vessel init --yes
 stdout 'Installed 2 integration\(s\)'
 
 # Shell target via init

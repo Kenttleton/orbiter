@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -115,5 +116,100 @@ func TestWriteInspectReport_NotInstalled(t *testing.T) {
 	commands.WriteInspectReport(&buf, info)
 	if !strings.Contains(buf.String(), "not installed") {
 		t.Errorf("expected 'not installed' in output: %s", buf.String())
+	}
+}
+
+func TestBuildChecklistItems_NotInstalled(t *testing.T) {
+	states := []bundle.CatalogEntryState{
+		{CatalogEntry: bundle.CatalogEntry{Brand: "git", Name: "Git", Description: "Git VCS"}, Installed: false},
+	}
+	items := commands.BuildChecklistItems(states)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Checked {
+		t.Error("not-installed item should not be pre-checked")
+	}
+	if items[0].Badge != "" {
+		t.Errorf("not-installed item should have no badge, got %q", items[0].Badge)
+	}
+	if items[0].Tag != "git" {
+		t.Errorf("tag should be brand, got %q", items[0].Tag)
+	}
+}
+
+func TestBuildChecklistItems_InstalledUpToDate(t *testing.T) {
+	states := []bundle.CatalogEntryState{
+		{CatalogEntry: bundle.CatalogEntry{Brand: "git", Name: "Git"}, Installed: true, ChecksumMatches: true},
+	}
+	items := commands.BuildChecklistItems(states)
+	if !items[0].Checked {
+		t.Error("installed item should be pre-checked")
+	}
+	if items[0].Badge != "" {
+		t.Errorf("up-to-date item should have no badge, got %q", items[0].Badge)
+	}
+}
+
+func TestBuildChecklistItems_UpgradeAvailable(t *testing.T) {
+	states := []bundle.CatalogEntryState{
+		{CatalogEntry: bundle.CatalogEntry{Brand: "git", Name: "Git"}, Installed: true, ChecksumMatches: false},
+	}
+	items := commands.BuildChecklistItems(states)
+	if !items[0].Checked {
+		t.Error("outdated item should still be pre-checked")
+	}
+	if items[0].Badge != "upgrade available" {
+		t.Errorf("outdated item should have 'upgrade available' badge, got %q", items[0].Badge)
+	}
+}
+
+func TestApplySelections_ExtractsSelected(t *testing.T) {
+	dir := t.TempDir()
+	entries := bundle.CatalogEntries()
+	if len(entries) == 0 {
+		t.Skip("no catalog entries")
+	}
+
+	states, err := bundle.CatalogEntriesWithState(dir)
+	if err != nil {
+		t.Fatalf("CatalogEntriesWithState: %v", err)
+	}
+	selected := []commands.ChecklistItem{{Tag: entries[0].Brand}}
+
+	if err := commands.ApplySelections(states, selected, dir); err != nil {
+		t.Fatalf("ApplySelections: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, entries[0].Brand)); err != nil {
+		t.Errorf("expected %s to be installed after ApplySelections: %v", entries[0].Brand, err)
+	}
+}
+
+func TestApplySelections_RemovesDeselected(t *testing.T) {
+	dir := t.TempDir()
+	entries := bundle.CatalogEntries()
+	if len(entries) == 0 {
+		t.Skip("no catalog entries")
+	}
+
+	// Pre-install all.
+	if err := bundle.ExtractSelected(entries, dir); err != nil {
+		t.Fatalf("pre-install: %v", err)
+	}
+
+	states, err := bundle.CatalogEntriesWithState(dir)
+	if err != nil {
+		t.Fatalf("CatalogEntriesWithState: %v", err)
+	}
+	// Deselect all.
+	if err := commands.ApplySelections(states, nil, dir); err != nil {
+		t.Fatalf("ApplySelections: %v", err)
+	}
+
+	for _, e := range entries {
+		if _, err := os.Stat(filepath.Join(dir, e.Brand)); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be removed after deselect", e.Brand)
+		}
 	}
 }
