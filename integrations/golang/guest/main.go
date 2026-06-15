@@ -171,7 +171,7 @@ func detect() {
 	version := runCmd("go", "version")
 	writeDetectReport(true, []suggestedResource{{
 		Role:    "runtime",
-		Brand:   "go",
+		Brand:   "golang",
 		Version: parseGoVersion(version),
 	}})
 }

@@ -18,7 +18,7 @@ exec orbiter survey payments-api
 stdout 'resources.*1'
 
 # Register and attach a second resource
-exec orbiter resource add go-runtime --role runtime --brand go
+exec orbiter resource add go-runtime --role runtime --brand golang
 exec orbiter attach go-runtime payments-api
 
 exec orbiter survey payments-api

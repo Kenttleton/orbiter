@@ -1,5 +1,5 @@
 [integration]
-brand = "go"
+brand = "golang"
 name = "Go Toolchain"
 description = "Scans and verifies the Go runtime and module toolchain"
 roles = ["runtime"]

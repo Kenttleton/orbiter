@@ -27,12 +27,12 @@ exec orbiter survey git
 exec orbiter unquarantine git
 stdout 'not quarantined'
 
-# Vessel alias for unquarantine works identically (brand 'go', not 'golang')
-exec orbiter quarantine go
-stdout 'go is now quarantined'
+# Vessel alias for unquarantine works identically
+exec orbiter quarantine golang
+stdout 'golang is now quarantined'
 
-exec orbiter vessel unquarantine go
+exec orbiter vessel unquarantine golang
 stdout 'quarantine removed'
 
-exec orbiter survey go
+exec orbiter survey golang
 ! stdout 'QUARANTINED'

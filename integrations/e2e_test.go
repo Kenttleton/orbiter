@@ -104,9 +104,9 @@ func TestBundledIntegrations_Git(t *testing.T) {
 
 func TestBundledIntegrations_Go(t *testing.T) {
 	reg := setupBundleRegistry(t)
-	i, ok := reg.Get("runtime", "go")
+	i, ok := reg.Get("runtime", "golang")
 	if !ok {
-		t.Fatal("go integration not registered")
+		t.Fatal("golang integration not registered")
 	}
 
 	t.Run("scan", func(t *testing.T) {
@@ -169,8 +169,8 @@ func TestBundledIntegrations_Go(t *testing.T) {
 		if report.Resources[0].Role != "runtime" {
 			t.Errorf("expected role=runtime, got %q", report.Resources[0].Role)
 		}
-		if report.Resources[0].Brand != "go" {
-			t.Errorf("expected brand=go, got %q", report.Resources[0].Brand)
+		if report.Resources[0].Brand != "golang" {
+			t.Errorf("expected brand=golang, got %q", report.Resources[0].Brand)
 		}
 	})
 

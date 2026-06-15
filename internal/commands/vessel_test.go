@@ -25,7 +25,7 @@ func (f fakeIntegration) Calibrate(_ integrations.ResolvedContext) integrations.
 func TestRenderCatalogChecklist_AllEntries(t *testing.T) {
 	entries := []bundle.CatalogEntry{
 		{Brand: "git", Name: "Git", Description: "Git version control", Roles: []string{"tool"}},
-		{Brand: "go", Name: "Go Toolchain", Description: "Go runtime", Roles: []string{"runtime"}},
+		{Brand: "golang", Name: "Go Toolchain", Description: "Go runtime", Roles: []string{"runtime"}},
 	}
 	lines := commands.RenderCatalogChecklist(entries)
 	if len(lines) != len(entries) {
