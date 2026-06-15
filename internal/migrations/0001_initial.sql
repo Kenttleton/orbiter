@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS resources (
 );
 
 -- Defaults store configuration key/value pairs scoped to any entity.
--- Vessel-level defaults include output_format and history_retention_days.
 CREATE TABLE IF NOT EXISTS defaults (
     id         TEXT PRIMARY KEY REFERENCES aliases(entity),
     entity_id  TEXT NOT NULL REFERENCES aliases(entity),
@@ -85,19 +84,6 @@ CREATE TABLE IF NOT EXISTS defaults (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(entity_id, key)
 );
-
--- Immutable log of navigation events.
--- IDs here are NOT in the alias registry — they are log record IDs only.
-CREATE TABLE IF NOT EXISTS navigation_history (
-    id             TEXT PRIMARY KEY,
-    from_entity_id TEXT REFERENCES aliases(entity),
-    to_entity_id   TEXT NOT NULL REFERENCES aliases(entity),
-    command        TEXT NOT NULL,
-    occurred_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS navigation_history_occurred_idx
-    ON navigation_history(occurred_at);
 
 -- Most recent verified observation of an entity. One beacon per entity.
 -- IDs here are NOT in the alias registry — they are observation record IDs only.
