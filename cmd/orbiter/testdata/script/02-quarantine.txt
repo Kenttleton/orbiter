@@ -1,0 +1,38 @@
+# Quarantine/unquarantine lifecycle — all state persists across process boundaries
+# because $HOME/.orbiter/settings.json survives between exec calls.
+
+# Quarantine an integration
+exec orbiter quarantine git
+stdout 'git is now quarantined'
+
+# Survey reflects quarantine state (persisted to settings.json)
+exec orbiter survey git
+stdout 'QUARANTINED'
+stdout 'manual quarantine'
+stdout 'orbiter unquarantine git'
+
+# Double-quarantine is a no-op
+exec orbiter quarantine git
+stdout 'already quarantined'
+
+# Remove quarantine
+exec orbiter unquarantine git
+stdout 'quarantine removed'
+
+# Survey no longer shows quarantine
+exec orbiter survey git
+! stdout 'QUARANTINED'
+
+# Unquarantine of a non-quarantined brand is informational, not an error
+exec orbiter unquarantine git
+stdout 'not quarantined'
+
+# Vessel alias for unquarantine works identically (brand 'go', not 'golang')
+exec orbiter quarantine go
+stdout 'go is now quarantined'
+
+exec orbiter vessel unquarantine go
+stdout 'quarantine removed'
+
+exec orbiter survey go
+! stdout 'QUARANTINED'

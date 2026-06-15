@@ -1,0 +1,31 @@
+# Error cases: missing args, unknown targets, bad flags.
+
+# Commands requiring a star chart fail gracefully if entity not found
+exec orbiter galaxy add test-corp
+
+! exec orbiter survey nonexistent
+stderr 'not found|no target'
+
+! exec orbiter scan nonexistent
+stderr 'not found|no target'
+
+! exec orbiter jump nonexistent --yes
+stderr 'not found|no target'
+
+# Missing required flags
+! exec orbiter planet add orphan-planet
+stderr 'required flag.*galaxy|galaxy.*required'
+
+! exec orbiter resource add myres --role tool
+stderr 'required flag.*brand|brand.*required'
+
+! exec orbiter resource add myres --brand git
+stderr 'required flag.*role|role.*required'
+
+# history clean takes no args
+! exec orbiter history clean extra-arg
+stderr 'unknown command|accepts 0 arg'
+
+# attach requires exactly 2 args
+! exec orbiter attach only-one
+stderr 'accepts 2 arg'

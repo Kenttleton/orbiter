@@ -1,0 +1,22 @@
+# Jump executes a transition to a target entity.
+
+# Setup
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+# Jump with no resources succeeds silently (nothing to plan or execute)
+exec orbiter jump payments-api --yes
+
+# With an unregistered resource the jump still succeeds — resource stays failed
+# but the command exits cleanly.
+exec orbiter resource add git-tool --role tool --brand git
+exec orbiter attach git-tool payments-api
+exec orbiter jump payments-api --yes
+
+# Jump to unknown entity is an error
+! exec orbiter jump nonexistent-planet --yes
+stderr 'not found|no target'
+
+# NOTE: the cd directive (stdout 'cd ') requires a filesystem resource with a
+# configured directory path. That is exercised by the integration e2e tests in
+# integrations/e2e_test.go once Phase 5 startup loading is in place.

@@ -1,0 +1,27 @@
+# Vessel commands: inspect and command aliases.
+
+# Init (alias for orbiter init)
+exec orbiter vessel init
+stdout 'Installed 2 integration\(s\)'
+
+# Inspect a known brand — shows integration state
+exec orbiter vessel inspect git
+stdout 'Integration: git'
+stdout 'Status:'
+
+# Inspect after quarantine shows quarantine state
+exec orbiter quarantine git
+exec orbiter vessel inspect git
+stdout 'QUARANTINED'
+stdout 'manual quarantine'
+
+# Vessel unquarantine alias clears the quarantine
+exec orbiter vessel unquarantine git
+stdout 'quarantine removed'
+
+exec orbiter vessel inspect git
+! stdout 'QUARANTINED'
+
+# Inspect an unknown brand exits without error (graceful — brand may be 3rd party)
+exec orbiter vessel inspect unknown-brand
+stdout 'not installed'

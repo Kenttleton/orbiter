@@ -1,0 +1,18 @@
+# Calibrate reconciles drift for a target entity.
+
+# Setup
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+# No resources → nothing to calibrate
+exec orbiter calibrate payments-api
+stdout 'nothing to calibrate'
+
+# With an unregistered resource, calibrate reports action taken
+exec orbiter resource add git-tool --role tool --brand git
+exec orbiter attach git-tool payments-api
+
+# Calibrate attempts to reconcile; without the integration loaded the resource
+# stays in failed state but the command exits cleanly.
+exec orbiter calibrate payments-api
+stdout 'tool/git'

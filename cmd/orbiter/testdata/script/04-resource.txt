@@ -1,0 +1,30 @@
+# Resource registration and attachment to entities.
+
+# Setup: galaxy and planet
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+# Register a resource
+exec orbiter resource add git-tool --role tool --brand git
+stdout 'resource.*git-tool.*registered'
+stdout 'tool/git'
+
+# Attach resource to planet
+exec orbiter attach git-tool payments-api
+stdout 'attached'
+
+# Survey planet now shows 1 resource
+exec orbiter survey payments-api
+stdout 'resources.*1'
+
+# Register and attach a second resource
+exec orbiter resource add go-runtime --role runtime --brand go
+exec orbiter attach go-runtime payments-api
+
+exec orbiter survey payments-api
+stdout 'resources.*2'
+
+# Scan reflects attached resources (status unverified — no integration loaded)
+exec orbiter scan payments-api
+stdout 'tool/git'
+stdout 'runtime/go'

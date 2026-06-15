@@ -1,0 +1,25 @@
+# Retro retires entities from the star chart.
+
+# Setup
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+# Retro a leaf planet — plan shows it, execution removes it
+exec orbiter retro payments-api --yes
+stdout 'payments-api'
+stdout 'retire|retired'
+
+# Surveying a retired entity fails
+! exec orbiter survey payments-api
+stderr 'not found|no target'
+
+# Retro the galaxy (now a leaf — its only planet was just retired)
+exec orbiter retro acme-corp --yes
+stdout 'acme-corp'
+
+! exec orbiter survey acme-corp
+stderr 'not found|no target'
+
+# NOTE: retiring a non-leaf hierarchy (galaxy with live children) currently
+# fails with a foreign key constraint — PlanRetro does not yet traverse
+# descendants for ordered deletion. Tracked as a known gap.

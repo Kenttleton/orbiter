@@ -48,7 +48,7 @@ func newUnquarantineCmd() *cobra.Command {
 			if err := integrations.Default.UnquarantineBrand(brand); err != nil {
 				return fmt.Errorf("unquarantine %s: %w", brand, err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now active\n", brand)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s quarantine removed — run 'orbiter init' to reload\n", brand)
 			return nil
 		},
 	}
@@ -66,6 +66,7 @@ func newHistoryCmd(d *deps) *cobra.Command {
 		&cobra.Command{
 			Use:   "clean",
 			Short: "Remove history older than retention period",
+			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				d.renderer.Info("history clean: not yet implemented")
 				return nil

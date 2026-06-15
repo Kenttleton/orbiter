@@ -1,0 +1,25 @@
+# All init variants install integrations or print the shell script.
+
+# No-arg init → vessel init
+exec orbiter init
+stdout 'Installed 2 integration\(s\)'
+
+# Explicit vessel target
+exec orbiter init vessel
+stdout 'Installed 2 integration\(s\)'
+
+# Via vessel subcommand alias
+exec orbiter vessel init
+stdout 'Installed 2 integration\(s\)'
+
+# Shell target via init
+exec orbiter init shell
+stdout 'function orbiter'
+
+# Shell subcommand route
+exec orbiter shell init
+stdout 'function orbiter'
+
+# Unknown target is an error
+! exec orbiter init badtarget
+stderr 'unknown init target'

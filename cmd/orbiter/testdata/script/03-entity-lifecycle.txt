@@ -1,0 +1,47 @@
+# Full entity hierarchy: galaxy → system → planet
+# Star chart DB is created on first command that requires it.
+
+# Create galaxy
+exec orbiter galaxy add acme-corp
+stdout 'galaxy.*acme-corp.*registered'
+
+# Survey galaxy
+exec orbiter survey acme-corp
+stdout 'entity'
+stdout 'acme-corp'
+stdout 'unverified'
+
+# Create system under galaxy
+exec orbiter system add frontend --galaxy acme-corp
+stdout 'system.*frontend.*registered'
+
+# Survey system
+exec orbiter survey frontend
+stdout 'entity'
+stdout 'frontend'
+
+# Create planet under galaxy (no system required)
+exec orbiter planet add payments-api --galaxy acme-corp
+stdout 'planet.*payments-api.*registered'
+
+# Survey planet — shows resource/transponder/callsign counts
+exec orbiter survey payments-api
+stdout 'entity'
+stdout 'payments-api'
+stdout 'resources.*0'
+stdout 'transponders.*0'
+
+# Scan with no resources reports nothing attached
+exec orbiter scan payments-api
+stdout 'no resources attached'
+
+# Chart with no resources reports nothing to chart
+exec orbiter chart payments-api
+stdout 'no resources to chart'
+
+# Create planet under system
+exec orbiter planet add auth-service --galaxy acme-corp --system frontend
+stdout 'planet.*auth-service.*registered'
+
+exec orbiter survey auth-service
+stdout 'auth-service'
