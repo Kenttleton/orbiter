@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -189,7 +190,7 @@ type InstalledInfo struct {
 func InstalledState(dir string) (map[string]InstalledInfo, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return map[string]InstalledInfo{}, nil
 		}
 		return nil, err
@@ -232,8 +233,11 @@ type CatalogEntryState struct {
 
 // CatalogEntriesWithState returns all catalog entries annotated with their
 // install state from dir. Use this to populate the vessel init checklist.
-func CatalogEntriesWithState(dir string) []CatalogEntryState {
-	installed, _ := InstalledState(dir)
+func CatalogEntriesWithState(dir string) ([]CatalogEntryState, error) {
+	installed, err := InstalledState(dir)
+	if err != nil {
+		return nil, err
+	}
 	bundled := bundledChecksums()
 
 	entries := CatalogEntries()
@@ -248,7 +252,7 @@ func CatalogEntriesWithState(dir string) []CatalogEntryState {
 		}
 		result[i] = state
 	}
-	return result
+	return result, nil
 }
 
 // bundledChecksums returns a map from brand to SHA256 of the embedded WASM.
@@ -328,6 +332,12 @@ func ExtractSelected(entries []CatalogEntry, dir string) error {
 		}
 		if err := os.WriteFile(filepath.Join(destDir, brand+".wasm"), wasmBytes, 0644); err != nil {
 			return fmt.Errorf("write wasm for %s: %w", brand, err)
+		}
+		wanted[brand] = false // mark as written
+	}
+	for brand, stillWanted := range wanted {
+		if stillWanted {
+			return fmt.Errorf("brand %q not found in bundle", brand)
 		}
 	}
 	return nil

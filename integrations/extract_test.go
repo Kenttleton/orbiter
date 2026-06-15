@@ -83,7 +83,10 @@ func TestInstalledState_AfterExtract(t *testing.T) {
 }
 
 func TestCatalogEntriesWithState_NoneInstalled(t *testing.T) {
-	states := integrations.CatalogEntriesWithState(t.TempDir())
+	states, err := integrations.CatalogEntriesWithState(t.TempDir())
+	if err != nil {
+		t.Fatalf("CatalogEntriesWithState: %v", err)
+	}
 	for _, s := range states {
 		if s.Installed {
 			t.Errorf("brand %q should not be installed in empty dir", s.Brand)
@@ -100,7 +103,10 @@ func TestCatalogEntriesWithState_AfterExtract(t *testing.T) {
 	if err := integrations.ExtractSelected(entries, dir); err != nil {
 		t.Fatalf("ExtractSelected: %v", err)
 	}
-	states := integrations.CatalogEntriesWithState(dir)
+	states, err := integrations.CatalogEntriesWithState(dir)
+	if err != nil {
+		t.Fatalf("CatalogEntriesWithState: %v", err)
+	}
 	for _, s := range states {
 		if !s.Installed {
 			t.Errorf("brand %q should be installed after extract", s.Brand)
