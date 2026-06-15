@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS planets (
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Callsigns represent the Captain's active identity.
--- Scope is determined by attachments to hierarchy nodes.
+-- Callsigns are keyrings: each holds a set of transponders (keys) and is
+-- attached to at most one hierarchy node (vessel, galaxy, system, or planet).
+-- They represent the Captain's identity at that level of the tree.
 CREATE TABLE IF NOT EXISTS callsigns (
     id         TEXT PRIMARY KEY REFERENCES aliases(entity),
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -73,16 +74,6 @@ CREATE TABLE IF NOT EXISTS resources (
     manages    TEXT NOT NULL DEFAULT '[]',
     config     TEXT NOT NULL DEFAULT '{}',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- Defaults store configuration key/value pairs scoped to any entity.
-CREATE TABLE IF NOT EXISTS defaults (
-    id         TEXT PRIMARY KEY REFERENCES aliases(entity),
-    entity_id  TEXT NOT NULL REFERENCES aliases(entity),
-    key        TEXT NOT NULL,
-    value      TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(entity_id, key)
 );
 
 -- Most recent verified observation of an entity. One beacon per entity.
