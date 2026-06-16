@@ -56,8 +56,10 @@ exec orbiter scan beta-api
 stdout 'file/github|no resources attached'
 
 # --- 7. Direct transponder on planet supersedes callsign lookup ---
-exec orbiter transponder add direct-gh --role file --brand github --location /tmp/direct
-exec orbiter attach direct-gh beta-api
+# Use a different brand so we can assert both are visible (callsign's file/github AND direct file/gitea)
+exec orbiter transponder add direct-gitea --role file --brand gitea --location /tmp/gitea-token
+exec orbiter attach direct-gitea beta-api
 
 exec orbiter scan beta-api
 stdout 'file/github'
+stdout 'file/gitea'

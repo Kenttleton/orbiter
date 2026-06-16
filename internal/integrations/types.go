@@ -83,6 +83,7 @@ type TransponderScanResult struct {
 type TransponderCalibrateResult struct {
 	Transponder models.Transponder
 	Report      StateReport
+	Action      string // "healthy" | "calibrated" | "failed"
 }
 
 // StateReport is returned by Init, Scan, and Calibrate.

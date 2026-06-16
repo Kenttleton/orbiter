@@ -283,12 +283,12 @@ func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transpo
 	if err != nil {
 		return integrations.TransponderCalibrateResult{}, err
 	}
-	if scanBeaconStatus(tr.Report) == models.BeaconStatusHealthy {
-		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
+	if tr.BeaconStatus == models.BeaconStatusHealthy {
+		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report, Action: "healthy"}, nil
 	}
 	integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
 	if !ok {
-		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
+		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report, Action: "failed"}, nil
 	}
 	rc := BuildResolvedContext(tp, lb, integration.Meta())
 	after := integration.Calibrate(rc)
@@ -296,7 +296,11 @@ func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transpo
 	if err := sc.setBeaconStatus(ctx, tp.ID, afterStatus, after.Observations); err != nil {
 		return integrations.TransponderCalibrateResult{}, err
 	}
-	return integrations.TransponderCalibrateResult{Transponder: tp, Report: after}, nil
+	action := "calibrated"
+	if afterStatus == models.BeaconStatusFailed || after.Error != "" {
+		action = "failed"
+	}
+	return integrations.TransponderCalibrateResult{Transponder: tp, Report: after, Action: action}, nil
 }
 
 // scanBeaconStatus maps a StateReport to a beacon status constant.

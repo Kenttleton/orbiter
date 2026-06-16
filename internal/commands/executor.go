@@ -440,9 +440,9 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 			if tr.Report.Error != "" {
 				obs = tr.Report.Error
 			}
-			rows = append(rows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, obs})
+			rows = append(rows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.Action, obs})
 		}
-		e.renderer.Table([]string{"transponder", "observation"}, rows)
+		e.renderer.Table([]string{"transponder", "action", "observation"}, rows)
 		return nil
 	case models.EntityTypeTransponder:
 		tr, err := e.sc.CalibrateTransponder(ctx, alias.ID)
@@ -453,8 +453,8 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 		if tr.Report.Error != "" {
 			obs = tr.Report.Error
 		}
-		e.renderer.Table([]string{"transponder", "observation"}, [][]string{
-			{tr.Transponder.Role + "/" + tr.Transponder.Brand, obs},
+		e.renderer.Table([]string{"transponder", "action", "observation"}, [][]string{
+			{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.Action, obs},
 		})
 		return nil
 	default:

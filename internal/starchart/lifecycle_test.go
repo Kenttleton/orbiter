@@ -257,6 +257,7 @@ func TestCalibrateTransponder_SetsBeacon(t *testing.T) {
 	result, err := sc.CalibrateTransponder(ctx, tp.ID)
 	require.NoError(t, err)
 	assert.Equal(t, tp.ID, result.Transponder.ID)
+	assert.Equal(t, models.BeaconStatusFailed, result.Action)
 	// no integration → beacon should be written as failed
 	b, err := sc.GetBeacon(ctx, tp.ID)
 	require.NoError(t, err)
