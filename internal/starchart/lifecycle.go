@@ -167,6 +167,11 @@ func (sc *StarChart) CalibrateCallsign(ctx context.Context, callsignID string) (
 	return result, nil
 }
 
+// TranspondersForCallsign returns all transponders attached to callsignID.
+func (sc *StarChart) TranspondersForCallsign(ctx context.Context, callsignID string) ([]models.Transponder, error) {
+	return sc.transpondersAttachedTo(ctx, callsignID)
+}
+
 // ScanTransponder scans a single transponder in isolation.
 func (sc *StarChart) ScanTransponder(ctx context.Context, transponderID string) (integrations.TransponderScanResult, error) {
 	var tp models.Transponder
@@ -287,6 +292,10 @@ func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transpo
 	}
 	rc := BuildResolvedContext(tp, lb, integration.Meta())
 	after := integration.Calibrate(rc)
+	afterStatus := scanBeaconStatus(after)
+	if err := sc.setBeaconStatus(ctx, tp.ID, afterStatus, after.Observations); err != nil {
+		return integrations.TransponderCalibrateResult{}, err
+	}
 	return integrations.TransponderCalibrateResult{Transponder: tp, Report: after}, nil
 }
 

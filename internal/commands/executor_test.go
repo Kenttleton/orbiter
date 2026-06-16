@@ -93,6 +93,40 @@ func TestExecutor_Retro_Confirmed(t *testing.T) {
 	assert.ErrorIs(t, err, starchart.ErrNotFound)
 }
 
+func TestExecutor_Scan_Callsign_NoTransponders(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	_, err := exec.SC().CreateCallsign(ctx, "my-keys")
+	require.NoError(t, err)
+
+	// scan callsign — should not error (routes to ScanCallsign)
+	err = exec.Scan(ctx, "my-keys")
+	require.NoError(t, err)
+}
+
+func TestExecutor_Survey_Callsign(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	_, err := exec.SC().CreateCallsign(ctx, "my-keys")
+	require.NoError(t, err)
+
+	err = exec.Survey(ctx, "my-keys")
+	require.NoError(t, err)
+}
+
+func TestExecutor_Scan_Transponder(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	_, err := exec.SC().CreateTransponder(ctx, "solo-token", "file", "github", `{"location":"/tmp/t"}`)
+	require.NoError(t, err)
+
+	err = exec.Scan(ctx, "solo-token")
+	require.NoError(t, err)
+}
+
 func TestExecutor_Jump_Confirmed(t *testing.T) {
 	exec := openTestExecutor(t)
 	ctx := context.Background()

@@ -235,6 +235,34 @@ func TestScanTransponder_Isolation(t *testing.T) {
 	assert.Equal(t, models.BeaconStatusFailed, result.BeaconStatus) // no integration
 }
 
+func TestCalibrateCallsign_NoTransponders(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	cs, err := sc.CreateCallsign(ctx, "empty-keys")
+	require.NoError(t, err)
+
+	result, err := sc.CalibrateCallsign(ctx, cs.ID)
+	require.NoError(t, err)
+	assert.Empty(t, result.Transponders)
+}
+
+func TestCalibrateTransponder_SetsBeacon(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	tp, err := sc.CreateTransponder(ctx, "solo-token", "file", "github", `{"location":"/tmp/token"}`)
+	require.NoError(t, err)
+
+	result, err := sc.CalibrateTransponder(ctx, tp.ID)
+	require.NoError(t, err)
+	assert.Equal(t, tp.ID, result.Transponder.ID)
+	// no integration → beacon should be written as failed
+	b, err := sc.GetBeacon(ctx, tp.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.BeaconStatusFailed, b.Status)
+}
+
 func TestScanBranch_DirectTransponderSupersedesCallsign(t *testing.T) {
 	sc := testDB(t)
 	ctx := context.Background()

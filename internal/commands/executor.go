@@ -81,6 +81,45 @@ func (e *Executor) Survey(ctx context.Context, target string) error {
 		return err
 	}
 
+	parsed, _ := models.ParseID(alias.ID)
+	switch parsed.EntityType {
+	case models.EntityTypeCallsign:
+		tps, err := e.sc.TranspondersForCallsign(ctx, alias.ID)
+		if err != nil {
+			return fmt.Errorf("survey callsign %s: %w", alias.Name, err)
+		}
+		rows := [][]string{
+			{"callsign", alias.Name},
+			{"id", alias.ID},
+			{"transponders", fmt.Sprintf("%d", len(tps))},
+		}
+		e.renderer.Table([]string{"field", "value"}, rows)
+		if len(tps) > 0 {
+			var tpRows [][]string
+			for _, tp := range tps {
+				b, _ := e.sc.GetBeacon(ctx, tp.ID)
+				tpRows = append(tpRows, []string{tp.Role + "/" + tp.Brand, tp.ID, b.Status})
+			}
+			e.renderer.Table([]string{"transponder", "id", "status"}, tpRows)
+		}
+		return nil
+	case models.EntityTypeTransponder:
+		var tp models.Transponder
+		if err := e.sc.Get(ctx, "transponders", alias.ID, &tp); err != nil {
+			return fmt.Errorf("survey transponder %s: %w", alias.Name, err)
+		}
+		b, _ := e.sc.GetBeacon(ctx, tp.ID)
+		rows := [][]string{
+			{"transponder", alias.Name},
+			{"id", alias.ID},
+			{"role", tp.Role},
+			{"brand", tp.Brand},
+			{"status", b.Status},
+		}
+		e.renderer.Table([]string{"field", "value"}, rows)
+		return nil
+	}
+
 	branch, err := e.sc.BranchCrawl(ctx, alias.ID)
 	if err != nil {
 		return fmt.Errorf("crawl %s: %w", alias.Name, err)
@@ -118,13 +157,63 @@ func (e *Executor) Scan(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
+	parsed, _ := models.ParseID(alias.ID)
+	switch parsed.EntityType {
+	case models.EntityTypeCallsign:
+		return e.scanCallsignEntity(ctx, alias)
+	case models.EntityTypeTransponder:
+		return e.scanTransponderEntity(ctx, alias)
+	default:
+		return e.scanBranchEntity(ctx, alias)
+	}
+}
 
+func (e *Executor) scanCallsignEntity(ctx context.Context, alias models.Alias) error {
+	result, err := e.sc.ScanCallsign(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("scan callsign %s: %w", alias.Name, err)
+	}
+	if len(result.Transponders) == 0 {
+		e.renderer.Info(fmt.Sprintf("%s: no transponders attached", alias.Name))
+		return nil
+	}
+	var rows [][]string
+	for _, tr := range result.Transponders {
+		obs := ""
+		if tr.Report.Error != "" {
+			obs = tr.Report.Error
+		} else if len(tr.Report.Observations) > 0 {
+			obs = tr.Report.Observations[0]
+		}
+		rows = append(rows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.BeaconStatus, obs})
+	}
+	e.renderer.Table([]string{"transponder", "status", "observation"}, rows)
+	return nil
+}
+
+func (e *Executor) scanTransponderEntity(ctx context.Context, alias models.Alias) error {
+	tr, err := e.sc.ScanTransponder(ctx, alias.ID)
+	if err != nil {
+		return fmt.Errorf("scan transponder %s: %w", alias.Name, err)
+	}
+	obs := ""
+	if tr.Report.Error != "" {
+		obs = tr.Report.Error
+	} else if len(tr.Report.Observations) > 0 {
+		obs = tr.Report.Observations[0]
+	}
+	e.renderer.Table([]string{"transponder", "status", "observation"}, [][]string{
+		{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.BeaconStatus, obs},
+	})
+	return nil
+}
+
+func (e *Executor) scanBranchEntity(ctx context.Context, alias models.Alias) error {
 	result, err := e.sc.ScanBranch(ctx, alias.ID)
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", alias.Name, err)
 	}
-
-	var rows [][]string
+	var resourceRows [][]string
 	for _, r := range result.Resources {
 		obs := ""
 		if r.Report.Error != "" {
@@ -132,14 +221,28 @@ func (e *Executor) Scan(ctx context.Context, target string) error {
 		} else if len(r.Report.Observations) > 0 {
 			obs = r.Report.Observations[0]
 		}
-		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.BeaconStatus, obs})
+		resourceRows = append(resourceRows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.BeaconStatus, obs})
 	}
-
-	if len(rows) == 0 {
+	var transponderRows [][]string
+	for _, tr := range result.Transponders {
+		obs := ""
+		if tr.Report.Error != "" {
+			obs = tr.Report.Error
+		} else if len(tr.Report.Observations) > 0 {
+			obs = tr.Report.Observations[0]
+		}
+		transponderRows = append(transponderRows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.BeaconStatus, obs})
+	}
+	if len(resourceRows) == 0 && len(transponderRows) == 0 {
 		e.renderer.Info(fmt.Sprintf("%s: no resources attached", alias.Name))
 		return nil
 	}
-	e.renderer.Table([]string{"resource", "status", "observation"}, rows)
+	if len(resourceRows) > 0 {
+		e.renderer.Table([]string{"resource", "status", "observation"}, resourceRows)
+	}
+	if len(transponderRows) > 0 {
+		e.renderer.Table([]string{"transponder", "status", "observation"}, transponderRows)
+	}
 	return nil
 }
 
@@ -320,29 +423,62 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
-
-	result, err := e.sc.CalibrateBranch(ctx, alias.ID)
-	if err != nil {
-		return fmt.Errorf("calibrate %s: %w", alias.Name, err)
-	}
-
-	if len(result.Resources) == 0 {
-		e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
+	parsed, _ := models.ParseID(alias.ID)
+	switch parsed.EntityType {
+	case models.EntityTypeCallsign:
+		result, err := e.sc.CalibrateCallsign(ctx, alias.ID)
+		if err != nil {
+			return fmt.Errorf("calibrate callsign %s: %w", alias.Name, err)
+		}
+		if len(result.Transponders) == 0 {
+			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
+			return nil
+		}
+		var rows [][]string
+		for _, tr := range result.Transponders {
+			obs := ""
+			if tr.Report.Error != "" {
+				obs = tr.Report.Error
+			}
+			rows = append(rows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, obs})
+		}
+		e.renderer.Table([]string{"transponder", "observation"}, rows)
+		return nil
+	case models.EntityTypeTransponder:
+		tr, err := e.sc.CalibrateTransponder(ctx, alias.ID)
+		if err != nil {
+			return fmt.Errorf("calibrate transponder %s: %w", alias.Name, err)
+		}
+		obs := ""
+		if tr.Report.Error != "" {
+			obs = tr.Report.Error
+		}
+		e.renderer.Table([]string{"transponder", "observation"}, [][]string{
+			{tr.Transponder.Role + "/" + tr.Transponder.Brand, obs},
+		})
+		return nil
+	default:
+		result, err := e.sc.CalibrateBranch(ctx, alias.ID)
+		if err != nil {
+			return fmt.Errorf("calibrate %s: %w", alias.Name, err)
+		}
+		if len(result.Resources) == 0 {
+			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
+			return nil
+		}
+		var rows [][]string
+		for _, r := range result.Resources {
+			obs := ""
+			if r.After.Error != "" {
+				obs = r.After.Error
+			} else if len(r.After.Observations) > 0 {
+				obs = r.After.Observations[0]
+			} else if len(r.Before.Observations) > 0 {
+				obs = r.Before.Observations[0]
+			}
+			rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action, obs})
+		}
+		e.renderer.Table([]string{"resource", "action", "observation"}, rows)
 		return nil
 	}
-
-	var rows [][]string
-	for _, r := range result.Resources {
-		obs := ""
-		if r.After.Error != "" {
-			obs = r.After.Error
-		} else if len(r.After.Observations) > 0 {
-			obs = r.After.Observations[0]
-		} else if len(r.Before.Observations) > 0 {
-			obs = r.Before.Observations[0]
-		}
-		rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action, obs})
-	}
-	e.renderer.Table([]string{"resource", "action", "observation"}, rows)
-	return nil
 }
