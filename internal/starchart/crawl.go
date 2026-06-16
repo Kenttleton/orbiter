@@ -51,9 +51,9 @@ func (sc *StarChart) BranchCrawl(ctx context.Context, entityID string) (BranchCo
 	return branch, nil
 }
 
-// BuildResolvedContext filters a BranchContext using the integration's manifest
+// BuildResolvedContextFromBranch filters a BranchContext using the integration's manifest
 // dependency declarations, producing the ResolvedContext passed to the integration.
-func BuildResolvedContext(branch BranchContext, manifest integrations.Manifest) integrations.ResolvedContext {
+func BuildResolvedContextFromBranch(branch BranchContext, manifest integrations.Manifest) integrations.ResolvedContext {
 	rc := integrations.ResolvedContext{
 		Platform:     branch.Platform,
 		Resources:    make(map[string][]integrations.ResolvedResource),
@@ -205,68 +205,62 @@ func (sc *StarChart) hierarchyChain(ctx context.Context, entityID string) ([]str
 	return chain, nil
 }
 
-// BuildResolvedContextForResource builds the ResolvedContext for a single resource dispatch.
-// Resources: searched across ALL branch levels FILO order — first match per role+brand wins (superseding).
-// Transponders: ONLY from the resource's own level — auth isolation.
-func BuildResolvedContextForResource(self models.Resource, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
-	rc := integrations.ResolvedContext{
-		Platform:     lb.Platform,
-		Self:         self,
-		Resources:    make(map[string][]integrations.ResolvedResource),
-		Transponders: make(map[string][]integrations.ResolvedTransponder),
-	}
-	seenResource := make(map[string]bool)
-	for role, brands := range manifest.Dependencies.Resources {
-		for _, l := range lb.Levels {
-			for _, r := range l.Resources {
-				key := r.Role + "/" + r.Brand
-				if r.Role == role && brandAccepted(r.Brand, brands) && !seenResource[key] {
-					seenResource[key] = true
-					rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
-				}
-			}
-		}
-	}
-	for role, brands := range manifest.Dependencies.Transponders {
-		for _, tp := range level.Transponders {
-			if tp.Role == role && brandAccepted(tp.Brand, brands) {
-				rc.Transponders[role] = append(rc.Transponders[role], integrations.ResolvedTransponder{Transponder: tp})
-			}
-		}
-	}
-	return rc
+// roleBranded is satisfied by models.Resource and models.Transponder via duck typing.
+// Defined at the consumer (idiomatic Go — not in the models package).
+type roleBranded interface {
+	GetRole() string
+	GetBrand() string
 }
 
-// BuildResolvedContextForTransponder builds the ResolvedContext for a single transponder dispatch.
-// Follows the same pattern as BuildResolvedContextForResource but with a Transponder as Self.
-// Resources and Transponders are populated from the level's manifest dependencies.
-func BuildResolvedContextForTransponder(t models.Transponder, level BranchLevel, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
-	rc := integrations.ResolvedContext{
-		Platform:     lb.Platform,
-		Self:         t,
-		Resources:    make(map[string][]integrations.ResolvedResource),
-		Transponders: make(map[string][]integrations.ResolvedTransponder),
-	}
-	seenResource := make(map[string]bool)
-	for role, brands := range manifest.Dependencies.Resources {
-		for _, l := range lb.Levels {
-			for _, r := range l.Resources {
-				key := r.Role + "/" + r.Brand
-				if r.Role == role && brandAccepted(r.Brand, brands) && !seenResource[key] {
-					seenResource[key] = true
-					rc.Resources[role] = append(rc.Resources[role], integrations.ResolvedResource{Resource: r})
-				}
+// collectFILO walks levels in order, collecting items whose role appears in deps
+// and whose brand is accepted by that role's whitelist. First match per role/brand wins
+// (FILO semantics: planet-first levels supersede ancestor levels).
+func collectFILO[T roleBranded, R any](
+	levels []BranchLevel,
+	getItems func(BranchLevel) []T,
+	wrap func(T) R,
+	deps map[string][]string,
+) map[string][]R {
+	seen := make(map[string]bool)
+	result := make(map[string][]R)
+	for _, l := range levels {
+		for _, item := range getItems(l) {
+			brands, ok := deps[item.GetRole()]
+			if !ok {
+				continue
+			}
+			key := item.GetRole() + "/" + item.GetBrand()
+			if brandAccepted(item.GetBrand(), brands) && !seen[key] {
+				seen[key] = true
+				result[item.GetRole()] = append(result[item.GetRole()], wrap(item))
 			}
 		}
 	}
-	for role, brands := range manifest.Dependencies.Transponders {
-		for _, tp := range level.Transponders {
-			if tp.Role == role && brandAccepted(tp.Brand, brands) {
-				rc.Transponders[role] = append(rc.Transponders[role], integrations.ResolvedTransponder{Transponder: tp})
-			}
-		}
+	return result
+}
+
+// BuildResolvedContext assembles the ResolvedContext for an integration dispatch.
+// Resources and transponders are collected FILO across all branch levels
+// (planet-first = narrow scope supersedes broad scope).
+func BuildResolvedContext(self integrations.Entity, lb LeveledBranch, manifest integrations.Manifest) integrations.ResolvedContext {
+	return integrations.ResolvedContext{
+		Platform: lb.Platform,
+		Self:     self,
+		Resources: collectFILO(
+			lb.Levels,
+			func(l BranchLevel) []models.Resource { return l.Resources },
+			func(r models.Resource) integrations.ResolvedResource { return integrations.ResolvedResource{Resource: r} },
+			manifest.Dependencies.Resources,
+		),
+		Transponders: collectFILO(
+			lb.Levels,
+			func(l BranchLevel) []models.Transponder { return l.Transponders },
+			func(tp models.Transponder) integrations.ResolvedTransponder {
+				return integrations.ResolvedTransponder{Transponder: tp}
+			},
+			manifest.Dependencies.Transponders,
+		),
 	}
-	return rc
 }
 
 func (sc *StarChart) resourcesAttachedTo(ctx context.Context, nodeID string) ([]models.Resource, error) {

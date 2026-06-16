@@ -140,7 +140,7 @@ func (sc *StarChart) InitResource(ctx context.Context, resourceID string) error 
 		return fmt.Errorf("branch crawl for resource %s: %w", resourceID, err)
 	}
 
-	report := integration.Init(BuildResolvedContext(branch, integration.Meta()))
+	report := integration.Init(BuildResolvedContextFromBranch(branch, integration.Meta()))
 	return sc.applyStateReport(ctx, resourceID, report)
 }
 
@@ -163,7 +163,7 @@ func (sc *StarChart) InitTransponder(ctx context.Context, transponderID string) 
 		return fmt.Errorf("branch crawl for transponder %s: %w", transponderID, err)
 	}
 
-	report := integration.Init(BuildResolvedContext(branch, integration.Meta()))
+	report := integration.Init(BuildResolvedContextFromBranch(branch, integration.Meta()))
 	return sc.applyStateReport(ctx, transponderID, report)
 }
 

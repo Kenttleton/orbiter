@@ -61,7 +61,7 @@ func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchSca
 	seenTransponder := make(map[string]bool)
 	for _, level := range lb.Levels {
 		for _, r := range sortedResources(level.Resources) {
-			rr, err := sc.scanResource(ctx, r, level, lb)
+			rr, err := sc.scanResource(ctx, r, lb)
 			if err != nil {
 				return BranchScanResult{}, err
 			}
@@ -73,7 +73,7 @@ func (sc *StarChart) ScanBranch(ctx context.Context, entityID string) (BranchSca
 				continue
 			}
 			seenTransponder[key] = true
-			tr, err := sc.scanTransponder(ctx, tp, level, lb)
+			tr, err := sc.scanTransponder(ctx, tp, lb)
 			if err != nil {
 				return BranchScanResult{}, err
 			}
@@ -94,16 +94,22 @@ func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (Bran
 	}
 
 	var result BranchCalibrateResult
+	seenTransponder := make(map[string]bool)
 	for _, level := range lb.Levels {
 		for _, r := range sortedResources(level.Resources) {
-			cr, err := sc.calibrateResource(ctx, r, level, lb)
+			cr, err := sc.calibrateResource(ctx, r, lb)
 			if err != nil {
 				return BranchCalibrateResult{}, err
 			}
 			result.Resources = append(result.Resources, cr)
 		}
 		for _, tp := range level.Transponders {
-			tr, err := sc.calibrateTransponder(ctx, tp, level, lb)
+			key := tp.Role + "/" + tp.Brand
+			if seenTransponder[key] {
+				continue
+			}
+			seenTransponder[key] = true
+			tr, err := sc.calibrateTransponder(ctx, tp, lb)
 			if err != nil {
 				return BranchCalibrateResult{}, err
 			}
@@ -136,7 +142,7 @@ func roleIndex(role string) int {
 	return len(resourceRoleOrder)
 }
 
-func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, level BranchLevel, lb LeveledBranch) (ResourceScanResult, error) {
+func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceScanResult, error) {
 	integration, ok := sc.integrations.Get(r.Role, r.Brand)
 	if !ok {
 		status := models.BeaconStatusFailed
@@ -147,7 +153,7 @@ func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, level 
 		}
 		return ResourceScanResult{Resource: r, BeaconStatus: status}, nil
 	}
-	rc := BuildResolvedContextForResource(r, level, lb, integration.Meta())
+	rc := BuildResolvedContext(r, lb, integration.Meta())
 	report := integration.Scan(rc)
 	status := scanBeaconStatus(report)
 	if err := sc.setBeaconStatus(ctx, r.ID, status, report.Observations); err != nil {
@@ -156,8 +162,8 @@ func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, level 
 	return ResourceScanResult{Resource: r, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, level BranchLevel, lb LeveledBranch) (ResourceCalibrateResult, error) {
-	scanResult, err := sc.scanResource(ctx, r, level, lb)
+func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceCalibrateResult, error) {
+	scanResult, err := sc.scanResource(ctx, r, lb)
 	if err != nil {
 		return ResourceCalibrateResult{}, err
 	}
@@ -168,7 +174,7 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 	if !ok {
 		return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, Action: "failed"}, nil
 	}
-	rc := BuildResolvedContextForResource(r, level, lb, integration.Meta())
+	rc := BuildResolvedContext(r, lb, integration.Meta())
 	after := integration.Calibrate(rc)
 	afterStatus := scanBeaconStatus(after)
 	if err := sc.setBeaconStatus(ctx, r.ID, afterStatus, after.Observations); err != nil {
@@ -181,7 +187,7 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 	return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, After: after, Action: action}, nil
 }
 
-func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (integrations.TransponderScanResult, error) {
+func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder, lb LeveledBranch) (integrations.TransponderScanResult, error) {
 	integration, ok := sc.integrations.Get(tp.Role, tp.Brand)
 	if !ok {
 		status := models.BeaconStatusFailed
@@ -192,7 +198,7 @@ func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder,
 		}
 		return integrations.TransponderScanResult{Transponder: tp, BeaconStatus: status}, nil
 	}
-	rc := BuildResolvedContextForTransponder(tp, level, lb, integration.Meta())
+	rc := BuildResolvedContext(tp, lb, integration.Meta())
 	report := integration.Scan(rc)
 	status := scanBeaconStatus(report)
 	if err := sc.setBeaconStatus(ctx, tp.ID, status, report.Observations); err != nil {
@@ -201,8 +207,8 @@ func (sc *StarChart) scanTransponder(ctx context.Context, tp models.Transponder,
 	return integrations.TransponderScanResult{Transponder: tp, Report: report, BeaconStatus: status}, nil
 }
 
-func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transponder, level BranchLevel, lb LeveledBranch) (integrations.TransponderCalibrateResult, error) {
-	tr, err := sc.scanTransponder(ctx, tp, level, lb)
+func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transponder, lb LeveledBranch) (integrations.TransponderCalibrateResult, error) {
+	tr, err := sc.scanTransponder(ctx, tp, lb)
 	if err != nil {
 		return integrations.TransponderCalibrateResult{}, err
 	}
@@ -213,7 +219,7 @@ func (sc *StarChart) calibrateTransponder(ctx context.Context, tp models.Transpo
 	if !ok {
 		return integrations.TransponderCalibrateResult{Transponder: tp, Report: tr.Report}, nil
 	}
-	rc := BuildResolvedContextForTransponder(tp, level, lb, integration.Meta())
+	rc := BuildResolvedContext(tp, lb, integration.Meta())
 	after := integration.Calibrate(rc)
 	return integrations.TransponderCalibrateResult{Transponder: tp, Report: after}, nil
 }
