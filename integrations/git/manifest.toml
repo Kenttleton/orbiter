@@ -1,15 +1,42 @@
 [integration]
 brand = "git"
 name = "Git"
-description = "Scans and configures the git version control tool"
-roles = ["tool"]
+description = "Verifies the git tool and authenticates git remote operations"
+roles = ["tool", "file", "env", "agent", "keychain", "vault"]
 
 [detection]
 files = [".git/config"]
 
 [commands]
-allowed = ["git", "which"]
+allowed = [
+  "git",
+  "which",
+  "ssh-keygen",
+  "ssh-add",
+  "ssh-agent",
+  "stat",
+  "chmod",
+]
 timeout_seconds = 30
+
+[shell]
+exports = [
+  "SSH_AUTH_SOCK",
+  "SSH_AGENT_PID",
+  "GIT_SSH_COMMAND",
+  "GIT_ASKPASS",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_KEY_0",
+  "GIT_CONFIG_VALUE_0",
+]
+
+[dependencies]
+[dependencies.resources]
+remote = []
+
+[dependencies.transponders]
+agent    = []
+keychain = []
 
 [runtime]
 pool_size = 4
