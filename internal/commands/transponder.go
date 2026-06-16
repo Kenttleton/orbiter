@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -27,7 +28,12 @@ func newTransponderAddCmd(d *deps) *cobra.Command {
 		Short: "Register a transponder in the Star Chart",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tp, err := d.sc.CreateTransponder(cmd.Context(), args[0], role, brand, location)
+			cfgBytes, err := json.Marshal(map[string]string{"location": location})
+			if err != nil {
+				return fmt.Errorf("build transponder config: %w", err)
+			}
+			config := string(cfgBytes)
+			tp, err := d.sc.CreateTransponder(cmd.Context(), args[0], role, brand, config)
 			if err != nil {
 				return err
 			}
@@ -57,7 +63,12 @@ func newTransponderInitCmd(d *deps) *cobra.Command {
 				if !errors.Is(err, starchart.ErrNotFound) {
 					return err
 				}
-				tp, err := d.sc.CreateTransponder(ctx, args[0], role, brand, location)
+				cfgBytes, err := json.Marshal(map[string]string{"location": location})
+				if err != nil {
+					return fmt.Errorf("build transponder config: %w", err)
+				}
+				config := string(cfgBytes)
+				tp, err := d.sc.CreateTransponder(ctx, args[0], role, brand, config)
 				if err != nil {
 					return err
 				}
