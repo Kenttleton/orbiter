@@ -47,6 +47,16 @@ type BranchCalibrateResult struct {
 	Transponders []integrations.TransponderCalibrateResult
 }
 
+// CallsignScanResult holds scan results for all transponders in a callsign.
+type CallsignScanResult struct {
+	Transponders []integrations.TransponderScanResult
+}
+
+// CallsignCalibrateResult holds calibration results for all transponders in a callsign.
+type CallsignCalibrateResult struct {
+	Transponders []integrations.TransponderCalibrateResult
+}
+
 // ScanBranch scans all resources in the FILO hierarchy for entityID.
 // Resources dispatch in role order (filesystem → manager → runtime → remote → tool).
 // After resources, transponders at each level also dispatch Scan.
@@ -117,6 +127,62 @@ func (sc *StarChart) CalibrateBranch(ctx context.Context, entityID string) (Bran
 		}
 	}
 	return result, nil
+}
+
+// ScanCallsign scans all transponders attached to callsignID in isolation.
+// No branch resources are provided — only the transponder's own config is available.
+// Updates beacons as a side effect.
+func (sc *StarChart) ScanCallsign(ctx context.Context, callsignID string) (CallsignScanResult, error) {
+	tps, err := sc.transpondersAttachedTo(ctx, callsignID)
+	if err != nil {
+		return CallsignScanResult{}, fmt.Errorf("list transponders for callsign %s: %w", callsignID, err)
+	}
+	emptyLB := LeveledBranch{Platform: currentPlatform()}
+	var result CallsignScanResult
+	for _, tp := range tps {
+		tr, err := sc.scanTransponder(ctx, tp, emptyLB)
+		if err != nil {
+			return CallsignScanResult{}, err
+		}
+		result.Transponders = append(result.Transponders, tr)
+	}
+	return result, nil
+}
+
+// CalibrateCallsign scans then calibrates drifted/failed transponders in callsignID.
+func (sc *StarChart) CalibrateCallsign(ctx context.Context, callsignID string) (CallsignCalibrateResult, error) {
+	tps, err := sc.transpondersAttachedTo(ctx, callsignID)
+	if err != nil {
+		return CallsignCalibrateResult{}, fmt.Errorf("list transponders for callsign %s: %w", callsignID, err)
+	}
+	emptyLB := LeveledBranch{Platform: currentPlatform()}
+	var result CallsignCalibrateResult
+	for _, tp := range tps {
+		tr, err := sc.calibrateTransponder(ctx, tp, emptyLB)
+		if err != nil {
+			return CallsignCalibrateResult{}, err
+		}
+		result.Transponders = append(result.Transponders, tr)
+	}
+	return result, nil
+}
+
+// ScanTransponder scans a single transponder in isolation.
+func (sc *StarChart) ScanTransponder(ctx context.Context, transponderID string) (integrations.TransponderScanResult, error) {
+	var tp models.Transponder
+	if err := sc.Get(ctx, "transponders", transponderID, &tp); err != nil {
+		return integrations.TransponderScanResult{}, fmt.Errorf("get transponder %s: %w", transponderID, err)
+	}
+	return sc.scanTransponder(ctx, tp, LeveledBranch{Platform: currentPlatform()})
+}
+
+// CalibrateTransponder calibrates a single transponder in isolation.
+func (sc *StarChart) CalibrateTransponder(ctx context.Context, transponderID string) (integrations.TransponderCalibrateResult, error) {
+	var tp models.Transponder
+	if err := sc.Get(ctx, "transponders", transponderID, &tp); err != nil {
+		return integrations.TransponderCalibrateResult{}, fmt.Errorf("get transponder %s: %w", transponderID, err)
+	}
+	return sc.calibrateTransponder(ctx, tp, LeveledBranch{Platform: currentPlatform()})
 }
 
 // sortedResources returns resources sorted by resourceRoleOrder.

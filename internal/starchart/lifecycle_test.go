@@ -193,6 +193,48 @@ func TestScanBranch_GalaxyCallsignFlowsToPlanet(t *testing.T) {
 	assert.NotEmpty(t, result.Transponders[0].BeaconStatus)
 }
 
+func TestScanCallsign_NoTransponders(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	cs, err := sc.CreateCallsign(ctx, "empty-keys")
+	require.NoError(t, err)
+
+	result, err := sc.ScanCallsign(ctx, cs.ID)
+	require.NoError(t, err)
+	assert.Empty(t, result.Transponders)
+}
+
+func TestScanCallsign_WithTransponder(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	cs, _ := sc.CreateCallsign(ctx, "my-keys")
+	tp, _ := sc.CreateTransponder(ctx, "gh-token", "file", "github", `{"location":"/tmp/token"}`)
+	_, _ = sc.Attach(ctx, "gh-token", "my-keys")
+
+	result, err := sc.ScanCallsign(ctx, cs.ID)
+	require.NoError(t, err)
+	require.Len(t, result.Transponders, 1)
+	assert.Equal(t, tp.ID, result.Transponders[0].Transponder.ID)
+	// no integration registered → beacon status failed
+	assert.Equal(t, models.BeaconStatusFailed, result.Transponders[0].BeaconStatus)
+}
+
+func TestScanTransponder_Isolation(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	tp, err := sc.CreateTransponder(ctx, "solo-token", "file", "github", `{"location":"/tmp/token"}`)
+	require.NoError(t, err)
+	// No callsign, no entity attachment — isolated scan
+
+	result, err := sc.ScanTransponder(ctx, tp.ID)
+	require.NoError(t, err)
+	assert.Equal(t, tp.ID, result.Transponder.ID)
+	assert.Equal(t, models.BeaconStatusFailed, result.BeaconStatus) // no integration
+}
+
 func TestScanBranch_DirectTransponderSupersedesCallsign(t *testing.T) {
 	sc := testDB(t)
 	ctx := context.Background()
