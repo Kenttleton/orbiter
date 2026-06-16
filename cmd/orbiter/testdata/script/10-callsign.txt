@@ -1,0 +1,63 @@
+# Callsign lifecycle: add, attach transponders, scan, FILO inheritance.
+
+# --- 1. callsign add + survey shows zero transponders ---
+exec orbiter callsign add acme-keys
+stdout 'callsign.*acme-keys.*registered'
+
+exec orbiter survey acme-keys
+stdout 'callsign'
+stdout 'acme-keys'
+stdout 'transponders.*0'
+
+# --- 2. transponder add ---
+exec orbiter transponder add corp-gh --role file --brand github --location /tmp/token
+stdout 'transponder.*corp-gh.*registered'
+stdout 'file/github'
+
+# --- 3. attach transponder → callsign; survey shows 1 transponder ---
+exec orbiter attach corp-gh acme-keys
+stdout 'attached'
+
+exec orbiter survey acme-keys
+stdout 'transponders.*1'
+
+# --- 4. scan callsign direct — runs, exits 0 ---
+exec orbiter scan acme-keys
+stdout 'file/github'
+
+# --- 5. galaxy + planet hierarchy with callsign + resource ---
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+exec orbiter attach acme-keys payments-api
+stdout 'attached'
+
+exec orbiter resource add git-tool --role tool --brand git
+exec orbiter attach git-tool payments-api
+
+# scan planet — both resource and transponder (via callsign) are visible
+exec orbiter scan payments-api
+stdout 'tool/git'
+
+# survey planet shows transponders >= 1 (via attached callsign)
+exec orbiter survey payments-api
+stdout 'transponders.*[1-9]'
+
+# --- 6. Galaxy-level callsign flows down to planet with no own callsign ---
+exec orbiter galaxy add beta-corp
+exec orbiter callsign add beta-keys
+exec orbiter transponder add beta-gh --role file --brand github --location /tmp/beta-token
+exec orbiter attach beta-gh beta-keys
+exec orbiter attach beta-keys beta-corp
+exec orbiter planet add beta-api --galaxy beta-corp
+
+# scan planet inherits galaxy callsign → exits 0
+exec orbiter scan beta-api
+stdout 'file/github|no resources attached'
+
+# --- 7. Direct transponder on planet supersedes callsign lookup ---
+exec orbiter transponder add direct-gh --role file --brand github --location /tmp/direct
+exec orbiter attach direct-gh beta-api
+
+exec orbiter scan beta-api
+stdout 'file/github'
