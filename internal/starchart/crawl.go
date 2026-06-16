@@ -136,20 +136,33 @@ func (sc *StarChart) LeveledBranchCrawl(ctx context.Context, entityID string) (L
 		effectiveCallsign[levelID] = &callsignEntry{cs: cs, tps: tps}
 	}
 
-	// Pass 2: FILO — target first, vessel last. Skip levels with no resources.
+	// Pass 2: FILO — target first, vessel last.
+	// Include a level if it has resources OR transponders (direct or via callsign).
 	lb := LeveledBranch{Platform: currentPlatform()}
 	for _, levelID := range chain {
 		resources, err := sc.resourcesAttachedTo(ctx, levelID)
 		if err != nil {
 			return LeveledBranch{}, fmt.Errorf("resources at level %s: %w", levelID, err)
 		}
-		if len(resources) == 0 {
+		directTPs, err := sc.directTranspondersAttachedTo(ctx, levelID)
+		if err != nil {
+			return LeveledBranch{}, fmt.Errorf("direct transponders at level %s: %w", levelID, err)
+		}
+		var callsignTPs []models.Transponder
+		var cs *models.Callsign
+		if ce := effectiveCallsign[levelID]; ce != nil {
+			cs = &ce.cs
+			callsignTPs = ce.tps
+		}
+		if len(resources) == 0 && len(directTPs) == 0 && len(callsignTPs) == 0 {
 			continue
 		}
-		level := BranchLevel{EntityID: levelID, Resources: resources}
-		if ce := effectiveCallsign[levelID]; ce != nil {
-			level.Callsign = &ce.cs
-			level.Transponders = ce.tps
+		level := BranchLevel{
+			EntityID:  levelID,
+			Resources: resources,
+			Callsign:  cs,
+			// direct first (specific — supersedes callsign transponders on FILO pop)
+			Transponders: append(directTPs, callsignTPs...),
 		}
 		lb.Levels = append(lb.Levels, level)
 	}
@@ -298,6 +311,31 @@ func (sc *StarChart) callsignsAttachedTo(ctx context.Context, nodeID string) ([]
 			return nil, err
 		}
 		result = append(result, cs)
+	}
+	return result, rows.Err()
+}
+
+// directTranspondersAttachedTo returns transponders attached directly to entityID,
+// without going through a callsign.
+func (sc *StarChart) directTranspondersAttachedTo(ctx context.Context, entityID string) ([]models.Transponder, error) {
+	const q = `
+        SELECT tp.id, tp.role, tp.brand, tp.config, tp.created_at
+        FROM transponders tp
+        JOIN attachments a ON a.from_id = tp.id
+        WHERE a.to_id = ?
+    `
+	rows, err := sc.db.QueryContext(ctx, q, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []models.Transponder
+	for rows.Next() {
+		var tp models.Transponder
+		if err := rows.Scan(&tp.ID, &tp.Role, &tp.Brand, &tp.Config, &tp.CreatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, tp)
 	}
 	return result, rows.Err()
 }

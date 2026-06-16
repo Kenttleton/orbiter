@@ -74,8 +74,9 @@ type ResolvedTransponder struct {
 
 // TransponderScanResult pairs a transponder with its scan report.
 type TransponderScanResult struct {
-	Transponder models.Transponder
-	Report      StateReport
+	Transponder  models.Transponder
+	Report       StateReport
+	BeaconStatus string // "healthy" | "drifted" | "failed"
 }
 
 // TransponderCalibrateResult pairs a transponder with its calibration report.

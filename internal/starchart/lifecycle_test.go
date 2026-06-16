@@ -167,3 +167,55 @@ func TestScanBranch_TransponderPass(t *testing.T) {
 	assert.Equal(t, tp.ID, results.Transponders[0].Transponder.ID,
 		"transponder should match what was attached")
 }
+
+func TestScanBranch_GalaxyCallsignFlowsToPlanet(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, _ := sc.CreateGalaxy(ctx, "acme")
+	p, _ := sc.CreatePlanet(ctx, "payments", g.ID, "")
+
+	// resource on planet so its level is included
+	_, _ = sc.CreateResource(ctx, "gh-remote", "remote", "github", "[]", "{}")
+	_, _ = sc.Attach(ctx, "gh-remote", "payments")
+
+	// callsign on galaxy — galaxy has NO resources, was previously skipped
+	_, _ = sc.CreateCallsign(ctx, "corp-keys")
+	tp, _ := sc.CreateTransponder(ctx, "corp-token", "file", "github", `{"location":"/tmp/token"}`)
+	_, _ = sc.Attach(ctx, "corp-token", "corp-keys")
+	_, _ = sc.Attach(ctx, "corp-keys", "acme")
+
+	result, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+	require.Len(t, result.Transponders, 1,
+		"galaxy callsign transponder must flow to planet scan even when galaxy has no resources")
+	assert.Equal(t, tp.ID, result.Transponders[0].Transponder.ID)
+	assert.NotEmpty(t, result.Transponders[0].BeaconStatus)
+}
+
+func TestScanBranch_DirectTransponderSupersedesCallsign(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, _ := sc.CreateGalaxy(ctx, "acme")
+	p, _ := sc.CreatePlanet(ctx, "payments", g.ID, "")
+
+	_, _ = sc.CreateResource(ctx, "gh-remote", "remote", "github", "[]", "{}")
+	_, _ = sc.Attach(ctx, "gh-remote", "payments")
+
+	// callsign with file/github transponder on planet
+	_, _ = sc.CreateCallsign(ctx, "corp-keys")
+	_, _ = sc.CreateTransponder(ctx, "corp-token", "file", "github", `{"location":"/tmp/corp"}`)
+	_, _ = sc.Attach(ctx, "corp-token", "corp-keys")
+	_, _ = sc.Attach(ctx, "corp-keys", "payments")
+
+	// direct file/github transponder on planet — same role/brand, should supersede
+	direct, _ := sc.CreateTransponder(ctx, "personal-token", "file", "github", `{"location":"/tmp/personal"}`)
+	_, _ = sc.Attach(ctx, "personal-token", "payments")
+
+	result, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+	require.Len(t, result.Transponders, 1,
+		"direct transponder supersedes callsign transponder of same role/brand")
+	assert.Equal(t, direct.ID, result.Transponders[0].Transponder.ID)
+}
