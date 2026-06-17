@@ -1,0 +1,17 @@
+[integration]
+brand = "dotenv"
+name = ".env File"
+description = "Detects and validates .env credential files"
+roles = ["file"]
+
+[detection]
+files = [".env"]
+
+[commands]
+allowed = ["which"]
+timeout_seconds = 10
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

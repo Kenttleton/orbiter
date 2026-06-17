@@ -17,7 +17,7 @@ import (
 	"github.com/Kenttleton/orbiter/internal/wasm"
 )
 
-//go:embed golang/golang.wasm golang/manifest.toml git/git.wasm git/manifest.toml node/node.wasm node/manifest.toml make/make.wasm make/manifest.toml
+//go:embed golang/golang.wasm golang/manifest.toml git/git.wasm git/manifest.toml node/node.wasm node/manifest.toml make/make.wasm make/manifest.toml dotenv/dotenv.wasm dotenv/manifest.toml
 var bundleFS embed.FS
 
 // CatalogEntry describes a bundled integration available for installation.

@@ -303,3 +303,39 @@ func TestBundledIntegrations_Make(t *testing.T) {
 		}
 	})
 }
+
+func TestBundledIntegrations_Dotenv(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("file", "dotenv")
+	if !ok {
+		t.Fatal("dotenv integration not registered")
+	}
+
+	t.Run("detect_hit", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".env": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .env file")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without .env")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		// dotenv scan reports present if .env is readable — on CI there may not be a .env
+		// so we only verify the shape of the response, not present=true
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
