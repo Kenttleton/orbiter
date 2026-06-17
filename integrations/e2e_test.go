@@ -819,3 +819,46 @@ func TestBundledIntegrations_EnvShell(t *testing.T) {
 		}
 	})
 }
+
+func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("filesystem", "local")
+	if !ok {
+		t.Fatal("local filesystem integration not registered")
+	}
+
+	t.Run("detect_always", func(t *testing.T) {
+		// filesystem/local is always detected — it overrides the native filesystem
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for filesystem/local (always active)")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "filesystem" {
+			t.Error("expected role=filesystem suggestion")
+		}
+	})
+
+	t.Run("scan_cwd", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (CWD always exists)")
+		}
+		if report.InstallDir == "" {
+			t.Error("expected non-empty install_dir (CWD path)")
+		}
+	})
+
+	t.Run("calibrate_sets_install_dir", func(t *testing.T) {
+		report := i.Calibrate(core.ResolvedContext{})
+		t.Logf("Calibrate: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true after calibrate")
+		}
+		if report.InstallDir == "" {
+			t.Error("expected install_dir to be set by calibrate (triggers cd in Jump)")
+		}
+	})
+}

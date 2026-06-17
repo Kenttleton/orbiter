@@ -1,0 +1,14 @@
+[integration]
+brand = "local"
+name = "Local Filesystem"
+description = "Manages local directory state and working directory for the jump lifecycle"
+roles = ["filesystem"]
+
+[commands]
+allowed = ["stat", "mkdir", "pwd"]
+timeout_seconds = 15
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8
