@@ -1,0 +1,14 @@
+[integration]
+brand = "onepassword"
+name = "1Password"
+description = "Verifies 1Password CLI authentication state for vault access"
+roles = ["vault"]
+
+[commands]
+allowed = ["op", "which"]
+timeout_seconds = 15
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

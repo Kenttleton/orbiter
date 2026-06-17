@@ -581,6 +581,23 @@ func TestBundledIntegrations_KeychainMacOS(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_OnePassword(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("vault", "onepassword")
+	if !ok {
+		t.Fatal("onepassword integration not registered")
+	}
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		// op may not be installed everywhere; just verify shape
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")
