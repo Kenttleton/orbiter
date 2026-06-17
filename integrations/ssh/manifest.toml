@@ -1,0 +1,14 @@
+[integration]
+brand = "ssh"
+name = "SSH Agent"
+description = "Verifies SSH agent availability and loaded key count"
+roles = ["agent"]
+
+[commands]
+allowed = ["ssh-agent", "ssh-add", "which"]
+timeout_seconds = 15
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

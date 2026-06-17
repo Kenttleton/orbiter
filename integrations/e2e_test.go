@@ -598,6 +598,24 @@ func TestBundledIntegrations_OnePassword(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_SSHAgent(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("agent", "ssh")
+	if !ok {
+		t.Fatal("ssh agent integration not registered")
+	}
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+		// ssh-agent may or may not be running in CI
+		t.Logf("SSH agent present: %v, reachable: %v", report.Present, report.Reachable)
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")
