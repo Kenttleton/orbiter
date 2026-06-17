@@ -49,16 +49,17 @@ It must be declared in `[shell] exports` in the manifest like any other export. 
 
 ## Catalog
 
-### 6-Spec Structure
+### 7-Spec Structure
 
 | Spec | Integrations |
 |---|---|
 | TinyGo (phased) | `runtime/golang` (updated), `runtime/node`, `tool/make`, `file/dotenv` |
-| Rust | `runtime/python`, `runtime/rust`, `manager/brew`, `manager/uv`, `manager/rustup`, `tool/docker`, `remote/google-drive`, `keychain/macos`, `vault/onepassword`, `agent/ssh` |
+| Rust | `runtime/python`, `runtime/rust`, `manager/brew`, `manager/uv`, `manager/rustup`, `tool/docker`, `keychain/macos`, `vault/onepassword`, `agent/ssh` |
 | AssemblyScript | `manager/nvm`, `tool/just`, `env/shell` |
 | Zig | `manager/asdf`, `filesystem/local` |
 | C/wasi-sdk | `tool/vscode` |
 | GitHub (standalone) | `tool`+`remote`+`agent` / `github` |
+| Google (standalone) | `agent/google-auth`, `remote/google-drive` |
 
 ---
 
@@ -149,13 +150,7 @@ Rust's `wasm32-unknown-unknown` target is the recommended path for new integrati
 - Calibrate: verify daemon running; report context name
 - `docker version --format json` is a rich serde_json showcase
 
-**`remote/google-drive`**
-
-- Detect: Google Drive desktop app installed (`/Applications/Google Drive.app` on macOS) and sync folder present at the path stored in the resource config
-- Scan: stat the stored sync folder path; report present/reachable
-- Calibrate: if the folder is missing, report the expected path and surface instructions — Orbiter cannot re-link a GUI sync app; the captain acts
-- The Drive app manages its own OAuth; no credential transponder dependency
-- Brand name establishes the `<brand>-<application>` convention for future Google suite integrations (e.g. `google-calendar`, `google-cloud`)
+*`remote/google-drive` and `agent/google-auth` are covered in the standalone Google spec.*
 
 **`keychain/macos`** *(transponder)*
 - Detect: platform is `darwin`
@@ -255,6 +250,34 @@ The standalone GitHub spec covers: manifest design for multi-role declarations, 
 
 ---
 
+### Google Integration (Standalone Spec)
+
+Google's brand warrants a standalone spec for the same reason as GitHub: it spans multiple integrations with shared auth infrastructure, and the OAuth workflow has enough design surface to be underspecified in a language-grouped doc.
+
+All Google integrations follow the `<brand>-<application>` naming convention — `google-auth`, `google-drive`, `google-calendar`, `google-cloud`. Orbiter sees each full string as the brand key. This catalog delivers the first two.
+
+**`agent/google-auth`** *(transponder, Rust)*
+
+Orbiter's role is auth assistance — getting the captain through the authentication workflow so their environment is ready to use, not managing the resulting secrets. Google OAuth tokens are stored by the OS or the app itself; Orbiter verifies the auth state and guides the captain through the flow if it is absent.
+
+- Detect: Google Drive desktop app installed (`/Applications/Google Drive.app` on macOS; equivalent paths on Linux/Windows) or `gcloud` CLI present
+- Scan: verify the captain is authenticated — check Drive app login state or `gcloud auth list`; report the active account if present
+- Calibrate: if not authenticated, guide the captain through the Google sign-in flow via the Drive app or `gcloud auth login`; uses `NeedsInput` for account selection when multiple accounts are available
+- No token storage — authentication state is owned by the Drive app or gcloud credential store
+- All future `google-*` resource integrations declare `agent = ["google-auth"]` in `[dependencies.transponders]`
+
+**`remote/google-drive`** *(Rust)*
+
+- Detect: Google Drive desktop app installed and sync folder present at the path stored in the resource config
+- Scan: stat the stored sync folder path; report present/reachable; verify `google-auth` is authenticated
+- Calibrate: if sync folder is missing, report the expected path and surface instructions — Orbiter cannot re-link a GUI sync app, the captain acts; auth calibration is delegated to the `google-auth` transponder dependency
+- Declares dependency on `agent/google-auth`
+- Brand name and pattern document the `<brand>-<application>` convention for community contributors extending the Google suite
+
+The standalone Google spec covers: the `<brand>-<application>` naming convention, the `google-auth` OAuth assistance workflow, Drive sync folder linkage, and the shared auth dependency pattern for future `google-*` integrations.
+
+---
+
 ## Implementation Plans
 
 Each spec above maps to one implementation plan:
@@ -266,7 +289,8 @@ Each spec above maps to one implementation plan:
 | AssemblyScript integrations | This doc — AS section | |
 | Zig integrations | This doc — Zig section | `ORBITER_CWD` convention is a host-side change |
 | C/wasi-sdk integration | This doc — C section | |
-| GitHub integration | Separate standalone spec | Full OAuth flow coverage |
+| GitHub integration | Separate standalone spec | Multi-role, full OAuth flow |
+| Google integration | Separate standalone spec | `google-auth` transponder gates `google-drive` |
 
 The Zig plan has one cross-cutting task: implementing `ORBITER_CWD` interception in the host (`internal/integrations/wasm/host.go`) before the `filesystem/local` integration can be fully tested. This host change is small but must land before the Zig integration's calibrate handler is verified end-to-end.
 
