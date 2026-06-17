@@ -1,0 +1,17 @@
+[integration]
+brand = "rust"
+name = "Rust"
+description = "Scans and verifies the Rust compiler and Cargo toolchain"
+roles = ["runtime"]
+
+[detection]
+files = ["Cargo.toml"]
+
+[commands]
+allowed = ["rustc", "cargo", "rustup", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

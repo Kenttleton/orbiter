@@ -353,6 +353,49 @@ func TestBundledIntegrations_Python(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Rust(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("runtime", "rust")
+	if !ok {
+		t.Fatal("rust integration not registered")
+	}
+
+	t.Run("detect_hit", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Cargo.toml": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for Cargo.toml")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "runtime" {
+			t.Error("expected role=runtime suggestion")
+		}
+		if report.Resources[0].Brand != "rust" {
+			t.Errorf("expected brand=rust, got %q", report.Resources[0].Brand)
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without Cargo.toml")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (rustc is installed)")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")
