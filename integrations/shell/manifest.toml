@@ -1,0 +1,14 @@
+[integration]
+brand = "shell"
+name = "Shell Environment"
+description = "Validates shell environment variables for dependent resources"
+roles = ["env"]
+
+[commands]
+allowed = ["sh"]
+timeout_seconds = 10
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

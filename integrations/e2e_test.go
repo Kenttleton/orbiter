@@ -746,3 +746,36 @@ func TestBundledIntegrations_Dotenv(t *testing.T) {
 		}
 	})
 }
+
+func TestBundledIntegrations_EnvShell(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("env", "shell")
+	if !ok {
+		t.Fatal("shell env integration not registered")
+	}
+
+	t.Run("detect_always", func(t *testing.T) {
+		// env/shell is always detected — every environment has shell variables
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for env/shell (always active)")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "env" {
+			t.Error("expected role=env suggestion")
+		}
+	})
+
+	t.Run("scan_with_env", func(t *testing.T) {
+		// Set up context with some env vars to check
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true for env/shell")
+		}
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
