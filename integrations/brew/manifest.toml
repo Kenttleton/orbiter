@@ -1,0 +1,14 @@
+[integration]
+brand = "brew"
+name = "Homebrew"
+description = "Scans and verifies the Homebrew package manager"
+roles = ["manager"]
+
+[commands]
+allowed = ["brew", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

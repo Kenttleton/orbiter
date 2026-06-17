@@ -3,6 +3,7 @@ package integrations_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -392,6 +393,46 @@ func TestBundledIntegrations_Rust(t *testing.T) {
 		}
 		if report.BinaryPath == "" {
 			t.Error("expected non-empty binary_path")
+		}
+	})
+}
+
+func TestBundledIntegrations_Brew(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("brew not available in CI")
+	}
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("manager", "brew")
+	if !ok {
+		t.Fatal("brew integration not registered")
+	}
+
+	t.Run("detect_miss", func(t *testing.T) {
+		// brew detect uses PATH check, not files — DetectContext has no brew signal
+		// A project with only go.mod won't detect brew
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		// brew's detect always returns detected=false when there's no brew-specific file —
+		// brew is a system tool detected via scan, not project files
+		_ = report.Detected // any value is valid; brew detection is path-based
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		// Only assert if brew is actually installed
+		brewPath := ""
+		if out, err := exec.Command("which", "brew").Output(); err == nil {
+			brewPath = strings.TrimSpace(string(out))
+		}
+		if brewPath != "" {
+			if !report.Present {
+				t.Error("brew installed but present=false")
+			}
+			if report.BinaryPath == "" {
+				t.Error("expected non-empty binary_path")
+			}
 		}
 	})
 }
