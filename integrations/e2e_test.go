@@ -472,6 +472,28 @@ func TestBundledIntegrations_UV(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Rustup(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("manager", "rustup")
+	if !ok {
+		t.Fatal("rustup integration not registered")
+	}
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (rustup is installed)")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+		if len(report.Observations) == 0 {
+			t.Error("expected observations (toolchain info)")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")
