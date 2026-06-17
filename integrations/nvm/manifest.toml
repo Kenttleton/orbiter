@@ -1,0 +1,21 @@
+[integration]
+brand = "nvm"
+name = "nvm"
+description = "Scans and verifies the Node Version Manager"
+roles = ["manager"]
+
+[detection]
+files = [".nvmrc", ".node-version"]
+
+[dependencies]
+  [dependencies.resources]
+  runtime = ["node"]
+
+[commands]
+allowed = ["node", "nvm", "sh", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

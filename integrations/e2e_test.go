@@ -616,6 +616,55 @@ func TestBundledIntegrations_SSHAgent(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_NVM(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("manager", "nvm")
+	if !ok {
+		t.Fatal("nvm integration not registered")
+	}
+
+	t.Run("detect_nvmrc", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".nvmrc": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .nvmrc")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "manager" {
+			t.Error("expected role=manager suggestion")
+		}
+		if report.Resources[0].Brand != "nvm" {
+			t.Errorf("expected brand=nvm, got %q", report.Resources[0].Brand)
+		}
+	})
+
+	t.Run("detect_node_version", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".node-version": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .node-version")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without nvm files")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")

@@ -42,7 +42,23 @@ var bannedCommands = []string{
 func newRuntime(ctx context.Context) (wazero.Runtime, error) {
 	rt := wazero.NewRuntime(ctx)
 
-	_, err := rt.NewHostModuleBuilder("orbiter").
+	// AssemblyScript modules always import env.abort (message, fileName, line, col).
+	// Provide a no-op implementation so AS-compiled guests can be instantiated.
+	_, err := rt.NewHostModuleBuilder("env").
+		NewFunctionBuilder().
+		WithGoModuleFunction(
+			api.GoModuleFunc(func(_ context.Context, _ api.Module, _ []uint64) {}),
+			[]api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32},
+			[]api.ValueType{},
+		).
+		Export("abort").
+		Instantiate(ctx)
+	if err != nil {
+		rt.Close(ctx)
+		return nil, err
+	}
+
+	_, err = rt.NewHostModuleBuilder("orbiter").
 		NewFunctionBuilder().
 		WithGoModuleFunction(
 			api.GoModuleFunc(readInputFn),
