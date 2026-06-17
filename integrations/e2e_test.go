@@ -494,6 +494,49 @@ func TestBundledIntegrations_Rustup(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Docker(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "docker")
+	if !ok {
+		t.Fatal("docker integration not registered")
+	}
+
+	t.Run("detect_dockerfile", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Dockerfile": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for Dockerfile")
+		}
+	})
+
+	t.Run("detect_compose", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"docker-compose.yml": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for docker-compose.yml")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without docker files")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")

@@ -1,0 +1,17 @@
+[integration]
+brand = "docker"
+name = "Docker"
+description = "Scans and verifies the Docker container runtime"
+roles = ["tool"]
+
+[detection]
+files = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
+
+[commands]
+allowed = ["docker", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 16
