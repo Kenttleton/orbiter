@@ -24,7 +24,7 @@ Each integration ships as a WASM module + `manifest.toml` under `integrations/<b
 - `runtime` — language runtimes (node, python, go, rust)
 - `manager` — version and package managers (nvm, brew, asdf, uv, rustup)
 - `tool` — CLI tools (git, docker, vscode, make, just)
-- `remote` — remote services (github, googledrive)
+- `remote` — remote services (github, google-drive)
 - `filesystem` — filesystem resources (local paths)
 
 **Transponder roles** — auth/credential providers:
@@ -54,7 +54,7 @@ It must be declared in `[shell] exports` in the manifest like any other export. 
 | Spec | Integrations |
 |---|---|
 | TinyGo (phased) | `runtime/golang` (updated), `runtime/node`, `tool/make`, `file/dotenv` |
-| Rust | `runtime/python`, `runtime/rust`, `manager/brew`, `manager/uv`, `manager/rustup`, `tool/docker`, `remote/googledrive`, `keychain/macos`, `vault/onepassword`, `agent/ssh` |
+| Rust | `runtime/python`, `runtime/rust`, `manager/brew`, `manager/uv`, `manager/rustup`, `tool/docker`, `remote/google-drive`, `keychain/macos`, `vault/onepassword`, `agent/ssh` |
 | AssemblyScript | `manager/nvm`, `tool/just`, `env/shell` |
 | Zig | `manager/asdf`, `filesystem/local` |
 | C/wasi-sdk | `tool/vscode` |
@@ -94,6 +94,18 @@ Either path produces a single verified JSON pattern. All new TinyGo integrations
 - Scan: verify `.env` exists and is readable; report key count without exposing values
 - Calibrate: same as scan (file transponders are read-only from Orbiter's perspective)
 - Demonstrates gjson for structured field extraction from a flat key=value format
+
+---
+
+## Remote Integration Model
+
+Remote integrations check existence and linkage — they do not sync content. Orbiter is not a CI/CD or DevOps tool. Sync status is the captain's responsibility.
+
+- **Detect:** the remote tool is installed and/or the expected path is reachable
+- **Scan:** verify the stored path or resource is still present and reachable
+- **Calibrate:** if missing, attempt to establish the link (e.g. clone a repo) or surface instructions when Orbiter cannot act autonomously (e.g. a GUI sync app)
+
+The git integration is the reference: it checks whether the expected repo exists at the stored path and clones it if not. Google Drive follows the same shape — check the tool is installed and the sync folder is at the stored path; guide the captain if not.
 
 ---
 
@@ -137,11 +149,13 @@ Rust's `wasm32-unknown-unknown` target is the recommended path for new integrati
 - Calibrate: verify daemon running; report context name
 - `docker version --format json` is a rich serde_json showcase
 
-**`remote/googledrive`**
-- Detect: Google Drive sync folder present (`~/Google Drive/` or `~/Library/CloudStorage/GoogleDrive-*/`) or `rclone` configured with a Drive remote
-- Scan: verify sync folder is reachable and mounted
-- Calibrate: `rclone lsd <remote>:` to verify connectivity if rclone is present; otherwise stat the sync folder
-- Declares dependency on `keychain` or `env` transponder for OAuth token storage
+**`remote/google-drive`**
+
+- Detect: Google Drive desktop app installed (`/Applications/Google Drive.app` on macOS) and sync folder present at the path stored in the resource config
+- Scan: stat the stored sync folder path; report present/reachable
+- Calibrate: if the folder is missing, report the expected path and surface instructions — Orbiter cannot re-link a GUI sync app; the captain acts
+- The Drive app manages its own OAuth; no credential transponder dependency
+- Brand name establishes the `<brand>-<application>` convention for future Google suite integrations (e.g. `google-calendar`, `google-cloud`)
 
 **`keychain/macos`** *(transponder)*
 - Detect: platform is `darwin`
