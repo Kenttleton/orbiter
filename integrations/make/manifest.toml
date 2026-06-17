@@ -1,0 +1,17 @@
+[integration]
+brand = "make"
+name = "Make"
+description = "Detects and verifies the make build tool"
+roles = ["tool"]
+
+[detection]
+files = ["Makefile", "GNUmakefile"]
+
+[commands]
+allowed = ["make", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

@@ -257,3 +257,49 @@ func TestBundledIntegrations_Go(t *testing.T) {
 		}
 	})
 }
+
+func TestBundledIntegrations_Make(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "make")
+	if !ok {
+		t.Fatal("make integration not registered")
+	}
+
+	t.Run("detect_makefile", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Makefile": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for Makefile")
+		}
+	})
+
+	t.Run("detect_gnumakefile", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"GNUmakefile": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for GNUmakefile")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Justfile": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without Makefile")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (make is installed)")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+	})
+}
