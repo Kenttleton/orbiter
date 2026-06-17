@@ -1,0 +1,14 @@
+[integration]
+brand = "macos"
+name = "macOS Keychain"
+description = "Verifies macOS Keychain availability for credential access"
+roles = ["keychain"]
+
+[commands]
+allowed = ["security", "which"]
+timeout_seconds = 15
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

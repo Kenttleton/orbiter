@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -533,6 +534,49 @@ func TestBundledIntegrations_Docker(t *testing.T) {
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
+func TestBundledIntegrations_KeychainMacOS(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("keychain", "macos")
+	if !ok {
+		t.Fatal("macos keychain integration not registered")
+	}
+
+	t.Run("detect_darwin", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Platform: core.Platform{OS: "darwin"},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true on darwin")
+		}
+		if len(report.Resources) == 0 {
+			t.Fatal("expected suggested resource")
+		}
+		if report.Resources[0].Role != "keychain" {
+			t.Errorf("expected role=keychain, got %q", report.Resources[0].Role)
+		}
+	})
+
+	t.Run("detect_linux", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Platform: core.Platform{OS: "linux"},
+		})
+		if report.Detected {
+			t.Error("expected detected=false on linux")
+		}
+	})
+
+	t.Run("scan_darwin", func(t *testing.T) {
+		if runtime.GOOS != "darwin" {
+			t.Skip("keychain scan only valid on darwin")
+		}
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true on darwin (security binary should exist)")
 		}
 	})
 }
