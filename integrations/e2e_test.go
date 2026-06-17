@@ -304,6 +304,55 @@ func TestBundledIntegrations_Make(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Python(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("runtime", "python")
+	if !ok {
+		t.Fatal("python integration not registered")
+	}
+
+	t.Run("detect_pyproject", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"pyproject.toml": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for pyproject.toml")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "runtime" {
+			t.Error("expected role=runtime suggestion")
+		}
+	})
+
+	t.Run("detect_requirements", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"requirements.txt": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for requirements.txt")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without python files")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (python3 is installed)")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")
