@@ -1,0 +1,17 @@
+[integration]
+brand = "uv"
+name = "uv"
+description = "Scans and verifies the uv Python package manager"
+roles = ["manager"]
+
+[detection]
+files = ["uv.lock"]
+
+[commands]
+allowed = ["uv", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8

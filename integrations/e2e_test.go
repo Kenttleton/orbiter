@@ -437,6 +437,41 @@ func TestBundledIntegrations_Brew(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_UV(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("manager", "uv")
+	if !ok {
+		t.Fatal("uv integration not registered")
+	}
+
+	t.Run("detect_lock", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"uv.lock": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for uv.lock")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without uv files")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		// uv may not be installed everywhere; just verify shape
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")

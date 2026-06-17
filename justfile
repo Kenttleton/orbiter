@@ -21,7 +21,7 @@ clean:
 # ── Integration WASM builds ────────────────────────────────────────────────────
 
 # Build all integration WASM plugins
-build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew
+build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew build-integration-uv
 
 build-integration-git:
     cd integrations/git && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/git.wasm .
@@ -46,6 +46,9 @@ build-integration-rust:
 
 build-integration-brew:
     cd integrations/brew && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/brew.wasm .
+
+build-integration-uv:
+    cd integrations/uv && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/uv.wasm .
 
 # Cross-compilation target for CI release builds.
 # Usage: just build-release orbiter linux amd64 v1.2.3
