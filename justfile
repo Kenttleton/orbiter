@@ -18,6 +18,35 @@ lint:
 clean:
     rm -f bin/orbiter
 
+# ── Integration WASM builds ────────────────────────────────────────────────────
+
+# Build all integration WASM plugins
+build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew
+
+build-integration-git:
+    cd integrations/git && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/git.wasm .
+
+build-integration-golang:
+    cd integrations/golang && tinygo build -o golang.wasm -target=wasm-unknown ./guest/
+
+build-integration-node:
+    cd integrations/node && tinygo build -o node.wasm -target=wasm-unknown ./guest/
+
+build-integration-make:
+    cd integrations/make && tinygo build -o make.wasm -target=wasm-unknown ./guest/
+
+build-integration-dotenv:
+    cd integrations/dotenv && tinygo build -o dotenv.wasm -target=wasm-unknown ./guest/
+
+build-integration-python:
+    cd integrations/python && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/python.wasm .
+
+build-integration-rust:
+    cd integrations/rust && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/rust.wasm .
+
+build-integration-brew:
+    cd integrations/brew && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/brew.wasm .
+
 # Cross-compilation target for CI release builds.
 # Usage: just build-release orbiter linux amd64 v1.2.3
 build-release binary goos goarch version:
