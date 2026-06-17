@@ -665,6 +665,52 @@ func TestBundledIntegrations_NVM(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Just(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "just")
+	if !ok {
+		t.Fatal("just integration not registered")
+	}
+
+	t.Run("detect_justfile", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Justfile": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for Justfile")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "tool" {
+			t.Error("expected role=tool suggestion")
+		}
+	})
+
+	t.Run("detect_lowercase", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"justfile": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for lowercase justfile")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"Makefile": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without Justfile")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_Dotenv(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("file", "dotenv")

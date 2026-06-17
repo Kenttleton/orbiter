@@ -1,0 +1,17 @@
+[integration]
+brand = "just"
+name = "just"
+description = "Detects and verifies the just command runner"
+roles = ["tool"]
+
+[detection]
+files = ["Justfile", "justfile"]
+
+[commands]
+allowed = ["just", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8
