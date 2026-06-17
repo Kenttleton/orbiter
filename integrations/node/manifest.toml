@@ -1,0 +1,17 @@
+[integration]
+brand = "node"
+name = "Node.js"
+description = "Scans and verifies the Node.js runtime"
+roles = ["runtime"]
+
+[detection]
+files = ["package.json"]
+
+[commands]
+allowed = ["node", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8
