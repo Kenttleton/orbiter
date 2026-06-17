@@ -18,8 +18,6 @@ func hostRunCommand(specPtr, specLen, outPtr, max uint32) uint32
 
 func main() {}
 
-// --- ABI helpers (no encoding/json, no strings.Builder — both unstable on wasm-unknown) ---
-
 func ptrOf(b []byte) uint32 { return uint32(uintptr(unsafe.Pointer(&b[0]))) }
 
 func readInput() []byte {
@@ -32,8 +30,8 @@ func writeRaw(b []byte) {
 	hostWriteOutput(ptrOf(b), uint32(len(b)))
 }
 
-// runCmd executes a host command. The spec is a hand-built JSON byte slice to
-// avoid both encoding/json reflection and strings.Builder (both crash on wasm-unknown).
+// runCmd builds a {"cmd":"...","args":[...]} spec with hand-rolled JSON.
+// sjson array append (-1) triggers gjson's UTF-16 path and crashes on wasm-unknown.
 func runCmd(cmd string, args ...string) string {
 	spec := append(append(append([]byte(nil), `{"cmd":`...), jsonBytes(cmd)...), `,"args":[`...)
 	for i, a := range args {
@@ -43,7 +41,6 @@ func runCmd(cmd string, args ...string) string {
 		spec = append(spec, jsonBytes(a)...)
 	}
 	spec = append(spec, `]}`...)
-
 	out := make([]byte, 64*1024)
 	n := hostRunCommand(ptrOf(spec), uint32(len(spec)), ptrOf(out), uint32(len(out)))
 	return strings.TrimSpace(string(out[:n]))
@@ -77,53 +74,6 @@ func jsonBytes(s string) []byte {
 	return append(buf, '"')
 }
 
-// hasKey checks whether the JSON byte slice contains a given key.
-func hasKey(input []byte, key string) bool {
-	needle := `"` + key + `"`
-	return strings.Contains(string(input), needle)
-}
-
-// --- output builders ([]byte append only) ---
-
-type suggestedResource struct {
-	Role    string
-	Brand   string
-	Version string
-}
-
-func writeDetectReport(detected bool, resources []suggestedResource) {
-	if !detected {
-		writeRaw([]byte(`{"detected":false}`))
-		return
-	}
-	buf := []byte(`{"detected":true,"resources":[`)
-	for i, r := range resources {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-		buf = append(buf, `{"role":`...)
-		buf = append(buf, jsonBytes(r.Role)...)
-		buf = append(buf, `,"brand":`...)
-		buf = append(buf, jsonBytes(r.Brand)...)
-		if r.Version != "" {
-			buf = append(buf, `,"version":`...)
-			buf = append(buf, jsonBytes(r.Version)...)
-		}
-		buf = append(buf, '}')
-	}
-	writeRaw(append(buf, `]}`...))
-}
-
-type stateReport struct {
-	Present      bool
-	Reachable    bool
-	BinaryPath   string
-	InPath       bool
-	Manager      string
-	Error        string
-	Observations []string
-}
-
 func boolBytes(v bool) []byte {
 	if v {
 		return []byte("true")
@@ -131,24 +81,24 @@ func boolBytes(v bool) []byte {
 	return []byte("false")
 }
 
-func writeStateReport(r stateReport) {
-	buf := append(append([]byte(`{"present":`), boolBytes(r.Present)...), `,"reachable":`...)
-	buf = append(buf, boolBytes(r.Reachable)...)
-	if r.BinaryPath != "" {
-		buf = append(buf, `,"binary_path":`...)
-		buf = append(buf, jsonBytes(r.BinaryPath)...)
-	}
+func writeState(present, reachable, inPath bool, binaryPath, manager, errMsg string, observations []string) {
+	buf := append(append([]byte(`{"present":`), boolBytes(present)...), `,"reachable":`...)
+	buf = append(buf, boolBytes(reachable)...)
 	buf = append(buf, `,"in_path":`...)
-	buf = append(buf, boolBytes(r.InPath)...)
+	buf = append(buf, boolBytes(inPath)...)
 	buf = append(buf, `,"manager":`...)
-	buf = append(buf, jsonBytes(r.Manager)...)
-	if r.Error != "" {
-		buf = append(buf, `,"error":`...)
-		buf = append(buf, jsonBytes(r.Error)...)
+	buf = append(buf, jsonBytes(manager)...)
+	if binaryPath != "" {
+		buf = append(buf, `,"binary_path":`...)
+		buf = append(buf, jsonBytes(binaryPath)...)
 	}
-	if len(r.Observations) > 0 {
+	if errMsg != "" {
+		buf = append(buf, `,"error":`...)
+		buf = append(buf, jsonBytes(errMsg)...)
+	}
+	if len(observations) > 0 {
 		buf = append(buf, `,"observations":[`...)
-		for i, o := range r.Observations {
+		for i, o := range observations {
 			if i > 0 {
 				buf = append(buf, ',')
 			}
@@ -159,21 +109,20 @@ func writeStateReport(r stateReport) {
 	writeRaw(append(buf, '}'))
 }
 
-// --- exported handlers (Lambda-style: stateless, independently callable) ---
-
 //export detect
 func detect() {
 	input := readInput()
-	if !hasKey(input, "go.mod") {
-		writeDetectReport(false, nil)
+	// Use strings.Contains to find "go.mod" key in the files map — gjson's
+	// backslash-escaped path handling for keys with dots is unreliable on
+	// wasm-unknown. The raw JSON will contain the literal string `"go.mod"`.
+	if !strings.Contains(string(input), `"go.mod"`) {
+		writeRaw([]byte(`{"detected":false}`))
 		return
 	}
 	version := runCmd("go", "version")
-	writeDetectReport(true, []suggestedResource{{
-		Role:    "runtime",
-		Brand:   "golang",
-		Version: parseGoVersion(version),
-	}})
+	buf := append([]byte(`{"detected":true,"resources":[{"role":"runtime","brand":"golang","version":`),
+		jsonBytes(parseGoVersion(version))...)
+	writeRaw(append(buf, `}]}`...))
 }
 
 //export initialize
@@ -181,18 +130,11 @@ func initialize() {
 	readInput()
 	binaryPath := runCmd("which", "go")
 	if binaryPath == "" {
-		writeStateReport(stateReport{Manager: "system", Error: "go binary not found in PATH"})
+		writeState(false, false, false, "", "system", "go binary not found in PATH", nil)
 		return
 	}
 	version := runCmd("go", "version")
-	writeStateReport(stateReport{
-		Present:    true,
-		Reachable:  true,
-		BinaryPath: binaryPath,
-		InPath:     true,
-		Manager:    "system",
-		Observations: []string{version},
-	})
+	writeState(true, true, true, binaryPath, "system", "", []string{version})
 }
 
 //export scan
@@ -203,16 +145,10 @@ func calibrate() {
 	readInput()
 	version := runCmd("go", "version")
 	if version == "" {
-		writeStateReport(stateReport{Manager: "system", Error: "go binary not found"})
+		writeState(false, false, false, "", "system", "go binary not found", nil)
 		return
 	}
-	writeStateReport(stateReport{
-		Present:   true,
-		Reachable: true,
-		InPath:    true,
-		Manager:   "system",
-		Observations: []string{"calibrated: " + version},
-	})
+	writeState(true, true, true, "", "system", "", []string{"calibrated: " + version})
 }
 
 func parseGoVersion(s string) string {

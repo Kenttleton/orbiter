@@ -287,7 +287,20 @@ The WASM binary is embedded at compile time and shipped with the `orbit` binary.
 
 The guest must have build tag `//go:build tinygo` so the standard Go toolchain ignores it (it imports `unsafe` in ways that only TinyGo handles correctly for this target). Keep `func main() {}` — TinyGo requires it.
 
-**JSON helper pattern** (copy this into new integrations):
+### JSON on wasm-unknown
+
+`encoding/json`, `strings.Builder`, `github.com/tidwall/gjson`, and
+`github.com/tidwall/sjson` all have runtime issues on `wasm-unknown`. Use
+hand-rolled `[]byte` append for both reading and writing JSON.
+
+**Input parsing** — use `strings.Contains` to detect keys:
+
+```go
+// Detect whether "go.mod" appears as a JSON key in the files map.
+if !strings.Contains(string(input), `"go.mod"`) { ... }
+```
+
+**Output building** — use `jsonBytes` and `[]byte` append:
 
 ```go
 // jsonBytes returns a JSON-quoted []byte without encoding/json or strings.Builder.
@@ -313,6 +326,10 @@ func jsonBytes(s string) []byte {
     return append(buf, '"')
 }
 ```
+
+Note: `github.com/tidwall/gjson` and `github.com/tidwall/sjson` compile under
+TinyGo but crash at runtime on `wasm-unknown` due to their use of
+`unicode/utf16` internals. Do not use them in guest code.
 
 ---
 
