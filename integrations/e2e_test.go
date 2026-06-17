@@ -747,6 +747,46 @@ func TestBundledIntegrations_Dotenv(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_Asdf(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("manager", "asdf")
+	if !ok {
+		t.Fatal("asdf integration not registered")
+	}
+
+	t.Run("detect_tool_versions", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".tool-versions": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .tool-versions")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "manager" {
+			t.Error("expected role=manager suggestion")
+		}
+		if report.Resources[0].Brand != "asdf" {
+			t.Errorf("expected brand=asdf, got %q", report.Resources[0].Brand)
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without .tool-versions")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_EnvShell(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("env", "shell")

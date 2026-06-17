@@ -1,0 +1,17 @@
+[integration]
+brand = "asdf"
+name = "asdf"
+description = "Scans and verifies the asdf version manager"
+roles = ["manager"]
+
+[detection]
+files = [".tool-versions"]
+
+[commands]
+allowed = ["asdf", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8
