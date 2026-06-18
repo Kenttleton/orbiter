@@ -972,6 +972,47 @@ func TestBundledIntegrations_GitHub_Remote(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_GitHub_Agent(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("agent", "github")
+	if !ok {
+		t.Fatal("github agent not registered")
+	}
+
+	t.Run("scan_agent", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{
+			Self: models.Resource{Role: "agent"},
+		})
+		t.Logf("Agent Scan: %+v", report)
+		// Agent scan reports present=true if gh binary exists, reachable=true if authenticated
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+		// Binary should be in PATH on this machine
+		if !report.Present {
+			t.Error("expected present=true (gh is installed)")
+		}
+	})
+
+	t.Run("calibrate_agent_authenticated", func(t *testing.T) {
+		// This test only runs a meaningful assertion if gh is authenticated.
+		// In CI, gh auth login is performed via GH_TOKEN env var.
+		report := i.Calibrate(core.ResolvedContext{
+			Self: models.Resource{Role: "agent"},
+		})
+		t.Logf("Agent Calibrate: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+		// If authenticated, GH_TOKEN export should be set
+		if report.Reachable {
+			if report.Exports["GH_TOKEN"] == "" {
+				t.Error("expected GH_TOKEN in exports when authenticated")
+			}
+		}
+	})
+}
+
 func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("filesystem", "local")
