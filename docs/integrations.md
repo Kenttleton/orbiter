@@ -379,6 +379,44 @@ This path does not exist yet — it is Phase 3 scope.
 
 ---
 
+## Brand Naming: Multi-Application Suites
+
+When a service provider offers multiple distinct applications or APIs, use the
+`<provider>-<application>` convention:
+
+- `google-auth` — transponder for Google OAuth assistance
+- `google-drive` — remote integration for Google Drive sync folder
+- `google-calendar` — (future) remote integration for Google Calendar
+
+The full hyphenated string is the brand key. Orbiter sees `google-auth` and
+`google-drive` as separate, independent brands.
+
+**Go package names:** Directory names may contain hyphens but Go package names
+cannot. Use a concatenated identifier in `generate.go`:
+
+```go
+// integrations/google-auth/generate.go
+package googleauth
+
+// integrations/google-drive/generate.go
+package googledrive
+```
+
+**Shared auth dependency:** All Google Suite resource integrations declare a
+dependency on the `google-auth` agent transponder:
+
+```toml
+[dependencies]
+  [dependencies.transponders]
+  agent = ["google-auth"]
+```
+
+This ensures the captain is authenticated before the resource integration runs.
+The `google-auth` transponder handles the OAuth workflow; resource integrations
+focus on their domain (sync folder, calendar events, etc.).
+
+---
+
 ## Multi-Role Integrations
 
 A single brand can serve multiple roles by listing them in `[integration] roles`:
