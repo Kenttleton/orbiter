@@ -820,6 +820,55 @@ func TestBundledIntegrations_EnvShell(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_VSCode(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "vscode")
+	if !ok {
+		t.Fatal("vscode integration not registered")
+	}
+
+	t.Run("detect_vscode_dir", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".vscode/settings.json": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .vscode/ directory")
+		}
+		if len(report.Resources) == 0 || report.Resources[0].Role != "tool" {
+			t.Error("expected role=tool suggestion")
+		}
+		if report.Resources[0].Brand != "vscode" {
+			t.Errorf("expected brand=vscode, got %q", report.Resources[0].Brand)
+		}
+	})
+
+	t.Run("detect_vscode_launch", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".vscode/launch.json": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .vscode/launch.json")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without .vscode/")
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("filesystem", "local")

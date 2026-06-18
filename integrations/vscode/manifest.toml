@@ -1,0 +1,17 @@
+[integration]
+brand = "vscode"
+name = "Visual Studio Code"
+description = "Detects and verifies the Visual Studio Code editor"
+roles = ["tool"]
+
+[detection]
+files = [".vscode/settings.json", ".vscode/launch.json", ".vscode/extensions.json"]
+
+[commands]
+allowed = ["code", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 8
+output_buffer_kb = 8
