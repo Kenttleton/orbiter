@@ -1,0 +1,17 @@
+[integration]
+brand = "tmux"
+name = "tmux"
+description = "Propagates Orbiter context to the tmux session environment"
+roles = ["multiplexer"]
+
+[detection]
+# Not auto-detected — attach explicitly to a planet.
+
+[commands]
+allowed = ["tmux", "which"]
+timeout_seconds = 5
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8

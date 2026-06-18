@@ -75,6 +75,19 @@ func TestCatalog_ContainsJSON(t *testing.T) {
 	t.Fatal("json integration not found in catalog")
 }
 
+func TestCatalog_ContainsTmux(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "tmux" {
+			if !slices.Contains(e.Roles, "multiplexer") {
+				t.Fatalf("tmux integration found but missing multiplexer role; roles: %v", e.Roles)
+			}
+			return
+		}
+	}
+	t.Fatal("tmux integration not found in catalog")
+}
+
 func TestLoadInstalled_AfterExtract(t *testing.T) {
 	dir := t.TempDir()
 	entries := integrations.CatalogEntries()
