@@ -1,5 +1,7 @@
 package integrations
 
+import "strings"
+
 // Manifest is the parsed content of an integration's manifest.toml.
 // All sections are optional — the host applies defaults where fields are zero.
 type Manifest struct {
@@ -21,9 +23,41 @@ type ManifestIntegration struct {
 	Roles       []string `toml:"roles"`
 }
 
+// ManifestEnvRule is one env-var detection condition in the [detection] section.
+// If Pattern is non-empty, the env var's value must contain it as a substring.
+// If Pattern is empty, the env var need only be present with a non-empty value.
+type ManifestEnvRule struct {
+	Key     string `toml:"key"`
+	Pattern string `toml:"pattern"`
+}
+
 // ManifestDetection is the [detection] section.
 type ManifestDetection struct {
-	Files []string `toml:"files"`
+	Files []string          `toml:"files"`
+	Env   []ManifestEnvRule `toml:"env"`
+}
+
+// MatchesAny reports whether at least one detection rule is satisfied.
+// Returns true when there are no rules — the integration may have custom WASM detect logic.
+func (d ManifestDetection) MatchesAny(files map[string]string, env map[string]string) bool {
+	if len(d.Files) == 0 && len(d.Env) == 0 {
+		return true
+	}
+	for _, f := range d.Files {
+		if _, ok := files[f]; ok {
+			return true
+		}
+	}
+	for _, rule := range d.Env {
+		val, ok := env[rule.Key]
+		if !ok || val == "" {
+			continue
+		}
+		if rule.Pattern == "" || strings.Contains(val, rule.Pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // ManifestDependencies is the [dependencies] section.
