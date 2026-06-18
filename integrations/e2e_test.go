@@ -869,6 +869,31 @@ func TestBundledIntegrations_VSCode(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_GitHub_Registration(t *testing.T) {
+	reg := setupBundleRegistry(t)
+
+	t.Run("tool_role", func(t *testing.T) {
+		_, ok := reg.Get("tool", "github")
+		if !ok {
+			t.Fatal("github not registered as tool")
+		}
+	})
+
+	t.Run("remote_role", func(t *testing.T) {
+		_, ok := reg.Get("remote", "github")
+		if !ok {
+			t.Fatal("github not registered as remote")
+		}
+	})
+
+	t.Run("agent_role", func(t *testing.T) {
+		_, ok := reg.Get("agent", "github")
+		if !ok {
+			t.Fatal("github not registered as agent")
+		}
+	})
+}
+
 func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("filesystem", "local")

@@ -1,0 +1,20 @@
+[integration]
+brand = "github"
+name = "GitHub"
+description = "Manages the GitHub CLI (gh), remote repo access, and GitHub auth token"
+roles = ["tool", "remote", "agent"]
+
+[detection]
+files = [".git/config"]
+
+[commands]
+allowed = ["gh", "git", "which"]
+timeout_seconds = 60
+
+[shell]
+exports = ["GH_TOKEN"]
+
+[runtime]
+pool_size = 4
+input_buffer_kb = 16
+output_buffer_kb = 16

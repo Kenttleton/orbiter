@@ -21,7 +21,7 @@ clean:
 # ── Integration WASM builds ────────────────────────────────────────────────────
 
 # Build all integration WASM plugins
-build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew build-integration-uv build-integration-rustup build-integration-docker build-integration-macos build-integration-onepassword build-integration-ssh build-integration-nvm build-integration-just build-integration-shell build-integration-asdf build-integration-local build-integration-vscode
+build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew build-integration-uv build-integration-rustup build-integration-docker build-integration-macos build-integration-onepassword build-integration-ssh build-integration-nvm build-integration-just build-integration-shell build-integration-asdf build-integration-local build-integration-vscode build-integration-github
 
 build-integration-git:
     cd integrations/git && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/git.wasm .
@@ -82,6 +82,9 @@ build-integration-local:
 
 build-integration-vscode:
     cd integrations/vscode && ${WASI_SDK_PATH}/bin/clang --target=wasm32-unknown-unknown -O2 -nostdlib -Wl,--no-entry -Wl,--export=detect -Wl,--export=initialize -Wl,--export=scan -Wl,--export=calibrate -o vscode.wasm src/vscode.c
+
+build-integration-github:
+    cd integrations/github && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/github.wasm .
 
 # Cross-compilation target for CI release builds.
 # Usage: just build-release orbiter linux amd64 v1.2.3
