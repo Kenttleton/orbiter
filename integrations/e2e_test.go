@@ -1048,6 +1048,40 @@ func TestBundledIntegrations_GoogleAuth(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_GoogleDrive(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("remote", "google-drive")
+	if !ok {
+		t.Fatal("google-drive integration not registered")
+	}
+
+	t.Run("detect_drive_app", func(t *testing.T) {
+		if runtime.GOOS != "darwin" {
+			t.Skip("Google Drive app detection only on darwin")
+		}
+		report := i.Detect(core.DetectContext{
+			Platform: core.Platform{OS: "darwin"},
+		})
+		t.Logf("Detect: %+v", report)
+		if report.Detected && len(report.Resources) > 0 {
+			if report.Resources[0].Role != "remote" {
+				t.Errorf("expected role=remote, got %q", report.Resources[0].Role)
+			}
+			if report.Resources[0].Brand != "google-drive" {
+				t.Errorf("expected brand=google-drive, got %q", report.Resources[0].Brand)
+			}
+		}
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Scan: %+v", report)
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
+		}
+	})
+}
+
 func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("filesystem", "local")

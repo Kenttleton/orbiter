@@ -1,0 +1,18 @@
+[integration]
+brand = "google-drive"
+name = "Google Drive"
+description = "Verifies Google Drive app installation and sync folder linkage"
+roles = ["remote"]
+
+[dependencies]
+  [dependencies.transponders]
+  agent = ["google-auth"]
+
+[commands]
+allowed = ["stat", "pgrep"]
+timeout_seconds = 15
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8
