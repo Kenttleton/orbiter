@@ -95,20 +95,16 @@ export function detect(): void {
 
 export function initialize(): void {
   readInput();
-  const nvmDir = runCmd("sh", ["-c", "echo $NVM_DIR"]);
-  const nvmPath = nvmDir.length > 0 ? nvmDir : runCmd("which", ["nvm"]);
-  if (nvmPath.length == 0) {
-    writeState(false, false, false, "", "system", "nvm not found — NVM_DIR not set", []);
-    return;
-  }
+  // nvm is a shell function, not a binary — we cannot reliably resolve NVM_DIR
+  // from a WASM guest without calling `sh` (which is banned). Instead, report
+  // nvm as present when detected (context had .nvmrc/.node-version). Report the
+  // active node version as an observation if node is in PATH.
   const nodeVersion = runCmd("node", ["--version"]);
-  const observations: string[] = [
-    "nvm dir: " + nvmPath,
-  ];
+  const observations: string[] = ["manager: nvm"];
   if (nodeVersion.length > 0) {
     observations.push("active node: " + nodeVersion);
   }
-  writeState(true, true, true, nvmPath, "nvm", "", observations);
+  writeState(true, true, false, "", "nvm", "", observations);
 }
 
 export function scan(): void {
@@ -117,14 +113,10 @@ export function scan(): void {
 
 export function calibrate(): void {
   readInput();
-  const nvmDir = runCmd("sh", ["-c", "echo $NVM_DIR"]);
-  if (nvmDir.length == 0) {
-    writeState(false, false, false, "", "system", "nvm not found", []);
-    return;
-  }
   const nodeVersion = runCmd("node", ["--version"]);
-  writeState(true, true, true, nvmDir, "nvm", "", [
-    "calibrated: nvm at " + nvmDir,
-    "active node: " + nodeVersion,
-  ]);
+  const observations: string[] = ["calibrated: nvm"];
+  if (nodeVersion.length > 0) {
+    observations.push("active node: " + nodeVersion);
+  }
+  writeState(true, true, false, "", "nvm", "", observations);
 }

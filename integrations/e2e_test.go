@@ -660,8 +660,11 @@ func TestBundledIntegrations_NVM(t *testing.T) {
 	t.Run("scan", func(t *testing.T) {
 		report := i.Scan(core.ResolvedContext{})
 		t.Logf("Scan: %+v", report)
-		if report.Manager == "" {
-			t.Error("expected non-empty manager field")
+		if report.Manager != "nvm" {
+			t.Errorf("expected manager=nvm, got %q", report.Manager)
+		}
+		if !report.Present {
+			t.Error("expected present=true for nvm")
 		}
 	})
 }
@@ -815,8 +818,8 @@ func TestBundledIntegrations_EnvShell(t *testing.T) {
 		if !report.Present {
 			t.Error("expected present=true for env/shell")
 		}
-		if report.Manager == "" {
-			t.Error("expected non-empty manager field")
+		if report.Manager != "shell" {
+			t.Errorf("expected manager=shell, got %q", report.Manager)
 		}
 	})
 }

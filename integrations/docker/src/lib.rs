@@ -106,31 +106,7 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["docker"]);
-    if binary_path.is_empty() {
-        write_state(StateReport {
-            present: false,
-            reachable: false,
-            in_path: false,
-            manager: "system".to_string(),
-            error: "docker not found".to_string(),
-            ..Default::default()
-        });
-        return;
-    }
-    let version = host::run_command("docker", &["--version"]);
-    let context = host::run_command("docker", &["context", "show"]);
-    let mut observations = vec![format!("calibrated: {}", version)];
-    if !context.is_empty() {
-        observations.push(format!("context: {}", context));
-    }
-    write_state(StateReport {
-        present: true,
-        reachable: true,
-        in_path: true,
-        manager: "system".to_string(),
-        observations,
-        ..Default::default()
-    });
+    // Delegate to initialize to ensure calibrate reports the same real state as
+    // a fresh scan — avoids hardcoding reachable=true when the daemon may be down.
+    initialize();
 }

@@ -81,14 +81,20 @@ pub extern "C" fn initialize() {
         return;
     }
     let keychain_info = host::run_command("security", &["show-keychain-info"]);
-    let unlocked = !keychain_info.to_lowercase().contains("locked");
+    // "unlocked".contains("locked") == true, so we cannot use contains("locked") to
+    // detect a locked keychain. Instead: if the command returned any output the
+    // security binary is accessible and the keychain is reachable; treat as unlocked.
+    // A truly locked keychain would surface via an error message — detect that instead.
+    let locked = keychain_info.to_lowercase().contains("error")
+        || keychain_info.to_lowercase().contains("authorization failed");
+    let reachable = !security_path.is_empty() && !locked;
     write_state(StateReport {
         present: true,
-        reachable: unlocked,
+        reachable,
         binary_path: Some(security_path),
         in_path: true,
         manager: "system".to_string(),
-        observations: vec![if unlocked {
+        observations: vec![if reachable {
             "keychain: unlocked".to_string()
         } else {
             "keychain: locked".to_string()

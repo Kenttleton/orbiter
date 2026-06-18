@@ -4,9 +4,6 @@ name = "rustup"
 description = "Scans and verifies the Rust toolchain manager"
 roles = ["manager"]
 
-[detection]
-files = ["rust-toolchain.toml", "rust-toolchain"]
-
 [dependencies]
   [dependencies.resources]
   runtime = ["rust"]

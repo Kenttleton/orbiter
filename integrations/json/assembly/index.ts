@@ -6,9 +6,6 @@ declare function read_input(ptr: i32, max: i32): i32;
 @external("orbiter", "write_output")
 declare function write_output(ptr: i32, len: i32): void;
 
-@external("orbiter", "run_command")
-declare function run_command(specPtr: i32, specLen: i32, outPtr: i32, outMax: i32): i32;
-
 const BUF_SIZE: i32 = 131072; // 128 KB — larger than default for JSON payloads
 
 function readInput(): Uint8Array {
@@ -21,23 +18,6 @@ function writeStr(s: string): void {
   const encoded = String.UTF8.encode(s, false);
   const buf = Uint8Array.wrap(encoded);
   write_output(buf.dataStart, buf.byteLength);
-}
-
-// runCmd is declared to keep run_command live in the WASM binary.
-function runCmd(cmd: string, args: string[]): string {
-  const spec = new JSON.Obj();
-  spec.set("cmd", cmd);
-  const argsArr = new JSON.Arr();
-  for (let i = 0; i < args.length; i++) {
-    argsArr.push(new JSON.Str(args[i]));
-  }
-  spec.set("args", argsArr);
-  const specStr = spec.stringify();
-  const specEncoded = String.UTF8.encode(specStr, false);
-  const specBuf = Uint8Array.wrap(specEncoded);
-  const outBuf = new Uint8Array(BUF_SIZE);
-  const n = run_command(specBuf.dataStart, specBuf.byteLength, outBuf.dataStart, outBuf.byteLength);
-  return String.UTF8.decode(outBuf.buffer.slice(0, n)).trimEnd();
 }
 
 // extractPath parses path out of a config JSON string like {"path":"/output/context.json"}.
@@ -59,17 +39,12 @@ export function initialize(): void {
 }
 
 export function scan(): void {
-  // Keep run_command live.
-  runCmd("which", ["ls"]);
-  writeStr('{"present":true,"reachable":true,"manager":""}');
+  writeStr('{"present":true,"reachable":true,"manager":"json"}');
 }
 
 export function calibrate(): void {
   const inputBytes = readInput();
   const inputStr = String.UTF8.decode(inputBytes.buffer);
-
-  // Keep run_command live.
-  runCmd("which", ["ls"]);
 
   const parsed = JSON.parse(inputStr);
   if (!parsed.isObj) {

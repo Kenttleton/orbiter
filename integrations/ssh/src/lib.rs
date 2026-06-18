@@ -94,58 +94,7 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let input = host::read_input();
-    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
-        env: HashMap::new(),
-    });
-    let ssh_auth_sock = ctx.env.get("SSH_AUTH_SOCK").cloned().unwrap_or_default();
-
-    if ssh_auth_sock.is_empty() {
-        // Try to start ssh-agent
-        let agent_path = host::run_command("which", &["ssh-agent"]);
-        if agent_path.is_empty() {
-            write_state(StateReport {
-                present: false,
-                reachable: false,
-                in_path: false,
-                manager: "system".to_string(),
-                error: "ssh-agent not available".to_string(),
-                ..Default::default()
-            });
-            return;
-        }
-        // Report that the captain needs to start ssh-agent and add to their shell profile
-        write_state(StateReport {
-            present: true,
-            reachable: false,
-            binary_path: Some(agent_path),
-            in_path: true,
-            manager: "system".to_string(),
-            observations: vec![
-                "ssh-agent not running — add 'eval $(ssh-agent -s)' to your shell profile"
-                    .to_string(),
-            ],
-            ..Default::default()
-        });
-        return;
-    }
-
-    let key_list = host::run_command("ssh-add", &["-l"]);
-    let no_keys = key_list.contains("no identities");
-    let mut observations = vec![format!("calibrated: SSH_AUTH_SOCK={}", ssh_auth_sock)];
-    if no_keys {
-        observations.push("no keys loaded — run 'ssh-add ~/.ssh/id_rsa' to load a key".to_string());
-    } else {
-        let key_count = key_list.lines().count();
-        observations.push(format!("keys loaded: {}", key_count));
-    }
-
-    write_state(StateReport {
-        present: true,
-        reachable: true,
-        in_path: true,
-        manager: "system".to_string(),
-        observations,
-        ..Default::default()
-    });
+    // Delegate to initialize to ensure calibrate reports real state (SSH_AUTH_SOCK
+    // reachability, key count) rather than hardcoding reachable=true.
+    initialize();
 }
