@@ -1,6 +1,7 @@
 package integrations_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/integrations"
@@ -65,12 +66,9 @@ func TestCatalog_ContainsJSON(t *testing.T) {
 	entries := integrations.CatalogEntries()
 	for _, e := range entries {
 		if e.Brand == "json" {
-			for _, role := range e.Roles {
-				if role == "export" {
-					return
-				}
+			if !slices.Contains(e.Roles, "export") {
+				t.Fatalf("json integration found but missing export role; roles: %v", e.Roles)
 			}
-			t.Fatalf("json integration found but missing export role; roles: %v", e.Roles)
 			return
 		}
 	}
