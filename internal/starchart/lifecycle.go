@@ -3,6 +3,7 @@ package starchart
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -11,13 +12,35 @@ import (
 
 // resourceRoleOrder defines the dispatch sequence for resources within a branch level.
 // Filesystem must initialize before managers, managers before runtimes,
-// runtimes before remotes, remotes before tools.
+// runtimes before remotes, remotes before tools. Export runs after tools
+// (reads their state); multiplexer runs after export.
 var resourceRoleOrder = []string{
 	integrations.ResourceRoleFilesystem,
+	integrations.ResourceRoleShell,
 	integrations.ResourceRoleManager,
 	integrations.ResourceRoleRuntime,
 	integrations.ResourceRoleRemote,
 	integrations.ResourceRoleTool,
+	integrations.ResourceRoleExport,
+	integrations.ResourceRoleMultiplexer,
+}
+
+// writeConfigFiles writes path→content pairs declared in StateReport.Config["write_files"]
+// by an export-role integration.
+func writeConfigFiles(report integrations.StateReport) {
+	raw, ok := report.Config["write_files"]
+	if !ok {
+		return
+	}
+	files, ok := raw.(map[string]any)
+	if !ok {
+		return
+	}
+	for path, v := range files {
+		if content, ok := v.(string); ok {
+			_ = os.WriteFile(path, []byte(content), 0644)
+		}
+	}
 }
 
 // ResourceScanResult is the scan outcome for one resource.
@@ -250,6 +273,9 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 	afterStatus := scanBeaconStatus(after)
 	if err := sc.setBeaconStatus(ctx, r.ID, afterStatus, after.Observations); err != nil {
 		return ResourceCalibrateResult{}, err
+	}
+	if r.Role == integrations.ResourceRoleExport {
+		writeConfigFiles(after)
 	}
 	action := "calibrated"
 	if afterStatus == models.BeaconStatusFailed || after.Error != "" {

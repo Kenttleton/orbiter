@@ -264,6 +264,23 @@ func TestCalibrateTransponder_SetsBeacon(t *testing.T) {
 	assert.Equal(t, models.BeaconStatusFailed, b.Status)
 }
 
+func TestResourceRoleOrder_ContainsExportAndMultiplexer(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	g, _ := sc.CreateGalaxy(ctx, "acme")
+	p, _ := sc.CreatePlanet(ctx, "app", g.ID, "")
+
+	_, _ = sc.CreateResource(ctx, "ctx-export", "export", "json", "[]", `{"path":"/tmp/test.json"}`)
+	_, _ = sc.Attach(ctx, "ctx-export", "app")
+
+	_, _ = sc.CreateResource(ctx, "mux", "multiplexer", "tmux", "[]", `{}`)
+	_, _ = sc.Attach(ctx, "mux", "app")
+
+	_, err := sc.ScanBranch(ctx, p.ID)
+	assert.NoError(t, err, "ScanBranch must not fail with export/multiplexer resources")
+}
+
 func TestScanBranch_DirectTransponderSupersedesCallsign(t *testing.T) {
 	sc := testDB(t)
 	ctx := context.Background()

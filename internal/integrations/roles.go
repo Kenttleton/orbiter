@@ -1,11 +1,14 @@
 package integrations
 
 const (
-	ResourceRoleManager    = "manager"
-	ResourceRoleRuntime    = "runtime"
-	ResourceRoleTool       = "tool"
-	ResourceRoleRemote     = "remote"
-	ResourceRoleFilesystem = "filesystem"
+	ResourceRoleManager     = "manager"
+	ResourceRoleRuntime     = "runtime"
+	ResourceRoleTool        = "tool"
+	ResourceRoleRemote      = "remote"
+	ResourceRoleFilesystem  = "filesystem"
+	ResourceRoleShell       = "shell"
+	ResourceRoleExport      = "export"
+	ResourceRoleMultiplexer = "multiplexer"
 )
 
 const (
@@ -29,6 +32,9 @@ var RoleTypes = map[string]string{
 	ResourceRoleTool:        IntegrationTypeResource,
 	ResourceRoleRemote:      IntegrationTypeResource,
 	ResourceRoleFilesystem:  IntegrationTypeResource,
+	ResourceRoleShell:       IntegrationTypeResource,
+	ResourceRoleExport:      IntegrationTypeResource,
+	ResourceRoleMultiplexer: IntegrationTypeResource,
 	TransponderRoleFile:     IntegrationTypeTransponder,
 	TransponderRoleEnv:      IntegrationTypeTransponder,
 	TransponderRoleKeychain: IntegrationTypeTransponder,
