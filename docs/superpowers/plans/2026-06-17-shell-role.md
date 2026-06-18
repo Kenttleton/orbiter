@@ -1,20 +1,22 @@
-# Shell Role: filesystem→shell Rename + Hook Command + PowerShell
+# Shell Role: filesystem→shell Rename + Hook Command + Shell Integrations
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename the `filesystem` resource role to `shell`, add an `orbiter hook` command for automatic context detection on directory change, add per-shell native integrations with manifest env detection rules, and add PowerShell support.
+**Goal:** Rename the `filesystem` resource role to `shell`, add an `orbiter hook` command for automatic context detection on directory change, add per-shell WASM integrations with manifest env detection rules, and add PowerShell support.
 
-**Architecture:** The `shell` role replaces `filesystem` — the resource still holds a `{"path":"..."}` config but is now explicitly about shell context entry, not generic filesystem state. Native Go integrations for bash/zsh/fish/powershell each embed their hook script and declare env detection rules in their manifest, enabling `init shell` to match the running shell without branded code in the binary. The `hook` subcommand is a fast, no-WASM path: resolve CWD → emit neutral directives → exit.
+**Architecture:** The `shell` role replaces `filesystem` — the resource still holds a `{"path":"..."}` config but is now explicitly about shell context entry, not generic filesystem state. Per-shell integrations (bash/zsh/fish/powershell) are AssemblyScript WASM at `integrations/<brand>/`, following the same pattern as all other integrations: `manifest.toml` + `assembly/index.ts` + pre-built `<brand>.wasm`. Each integration also includes a static hook script file (e.g. `hook.bash`) declared in the manifest as a verbose export entry: `exports = [{ hook = "hook.bash", description = "..." }]`. `printShellScript` finds the matching shell integration by detection env rules, calls `manifest.Shell.HookFile()` to get the filename, then reads that file from the embedded bundle FS. The `hook` subcommand is a fast, no-WASM path: resolve CWD → emit neutral directives → exit. The `env/shell` transponder declares `[dependencies.resources] shell = []` to formalize that env var management flows through the shell resource.
 
-**Tech Stack:** Go 1.23+, `go:embed`, bash/zsh/fish/PowerShell scripts.
+**Tech Stack:** Go 1.23+, AssemblyScript (`asc`), `assemblyscript-json`.
 
 ## Global Constraints
 
 - Depends on Plan 1 (neutral `Directive` protocol and `ManifestDetection.Env` must already be merged).
 - No database migration — old `filesystem` resources will not match after the rename. This is intentional; the codebase has no production users.
 - `orbiter hook` must not call any WASM integration — pure Go only, latency budget is <20ms on a cold start.
-- The hook must be silent on errors (non-zero exit must not break the user's prompt).
+- The hook shell function must never corrupt `$?` — always save the previous exit status before running and restore it before returning. The Go binary exits non-zero on real failures (DB error, timeout, dependency missing) and writes to stderr; stderr passes through naturally from the subshell so the Captain sees infrastructure errors. Empty stdout + exit 0 is the no-op case (directory not a planet).
 - PowerShell script targets pwsh (cross-platform PowerShell 7+), not Windows PowerShell 5.
+- Shell WASM integrations follow the exact same `integrations/<brand>/` pattern as all other integrations: `manifest.toml` + `assembly/index.ts` + `package.json` + `asconfig.json` + `<brand>.wasm` + `hook.<ext>`. They are added to `bundle.go`'s `//go:embed` line and loaded via `InstallSelected` like any other WASM integration.
+- The hook script is a static file declared as a verbose export entry: `exports = [{ hook = "hook.bash", description = "..." }]`. `printShellScript` calls `manifest.Shell.HookFile()` and reads the file from the embedded bundle FS — no WASM invocation, no `Config["script"]`.
 
 ---
 
@@ -27,30 +29,52 @@
 | `internal/starchart/resolve_cwd.go` | Update SQL query from `role = 'filesystem'` to `role = 'shell'` |
 | `internal/starchart/resolve_cwd_test.go` | Update all `"filesystem"` literals to `"shell"` |
 | `internal/starchart/lifecycle_test.go` | Update `"filesystem"` literals to `"shell"` |
-| `internal/integrations/native/filesystem.go` | Delete (replaced by shell_orbiter.go) |
-| `internal/integrations/native/filesystem_test.go` | Delete (replaced by shell_orbiter_test.go) |
-| `internal/integrations/native/shell_orbiter.go` | New — native `shell/orbiter` integration (directory presence check) |
-| `internal/integrations/native/shell_orbiter_test.go` | New — tests for shell/orbiter |
-| `internal/integrations/native/shell_bash.go` | New — native `shell/bash` integration with embedded script + env detection |
-| `internal/integrations/native/shell_zsh.go` | New — native `shell/zsh` integration with embedded script + env detection |
-| `internal/integrations/native/shell_fish.go` | New — native `shell/fish` integration with embedded script + env detection |
-| `internal/integrations/native/shell_powershell.go` | New — native `shell/powershell` integration with embedded script + env detection |
-| `internal/integrations/native/shell/bash.sh` | New — bash hook script (moved from `internal/commands/shell/orbiter.bash`) |
-| `internal/integrations/native/shell/zsh.sh` | New — zsh hook script (moved from `internal/commands/shell/orbiter.zsh`) |
-| `internal/integrations/native/shell/fish.fish` | New — fish hook script (moved from `internal/commands/shell/orbiter.fish`) |
-| `internal/integrations/native/shell/powershell.ps1` | New — PowerShell hook script |
-| `internal/integrations/types.go` | Add `ShellScripter` interface |
-| `internal/commands/shell.go` | Update `printShellScript` to use manifest env detection |
-| `internal/commands/shell/orbiter.bash` | Delete (script now lives in `native/shell/bash.sh`) |
-| `internal/commands/shell/orbiter.zsh` | Delete (script now lives in `native/shell/zsh.sh`) |
-| `internal/commands/shell/orbiter.fish` | Delete (script now lives in `native/shell/fish.fish`) |
-| `internal/commands/executor.go` | Add `Hook` method, update Jump role reference |
-| `internal/commands/executor_test.go` | Add Hook tests, update Jump role reference |
+| `internal/commands/executor.go` | Update Jump role reference; add `Hook` method; add `DEPART` to `Directive.String()` |
+| `internal/commands/executor_test.go` | Update Jump role reference; add Hook tests |
 | `internal/commands/lifecycle.go` | Add `hook` subcommand |
+| `internal/integrations/native/filesystem.go` | Delete — entire `native` package removed |
+| `internal/integrations/native/filesystem_test.go` | Delete |
+| `integrations/orbiter/shell.go` | New — native `shell/orbiter` integration (directory presence check; no script artifact) |
+| `integrations/orbiter/shell_test.go` | New — tests for shell/orbiter |
+| `cmd/orbiter/main.go` | Update blank import from `internal/integrations/native` → `integrations/orbiter` |
+| `integrations/local/manifest.toml` | Update `roles = ["filesystem"]` → `roles = ["shell"]` |
+| `integrations/shell/manifest.toml` | Add `[dependencies.resources] shell = []` (env transponder declares shell dependency) |
+| `integrations/bash/manifest.toml` | New — brand=bash, roles=[shell], detection env=[BASH_VERSION], exports=[{hook="hook.bash",...}] |
+| `integrations/bash/hook.bash` | New — static bash hook script (PROMPT_COMMAND, $? preservation) |
+| `integrations/bash/assembly/index.ts` | New — AssemblyScript: detect only; scan/calibrate return present/reachable |
+| `integrations/bash/package.json` | New — same pattern as integrations/nvm/package.json |
+| `integrations/bash/asconfig.json` | New — outFile = "bash.wasm" |
+| `integrations/bash/bash.wasm` | New — pre-built (built with `just build-integration-bash`) |
+| `integrations/zsh/manifest.toml` | New — brand=zsh, roles=[shell], detection env=[ZSH_VERSION], exports=[{hook="hook.zsh",...}] |
+| `integrations/zsh/hook.zsh` | New — static zsh hook script (chpwd, $? preservation) |
+| `integrations/zsh/assembly/index.ts` | New — AssemblyScript: detect only |
+| `integrations/zsh/package.json` | New |
+| `integrations/zsh/asconfig.json` | New — outFile = "zsh.wasm" |
+| `integrations/zsh/zsh.wasm` | New — pre-built |
+| `integrations/fish/manifest.toml` | New — brand=fish, roles=[shell], detection env=[FISH_VERSION], exports=[{hook="hook.fish",...}] |
+| `integrations/fish/hook.fish` | New — static fish hook script (--on-variable PWD, $status preservation) |
+| `integrations/fish/assembly/index.ts` | New — AssemblyScript: detect only |
+| `integrations/fish/package.json` | New |
+| `integrations/fish/asconfig.json` | New — outFile = "fish.wasm" |
+| `integrations/fish/fish.wasm` | New — pre-built |
+| `integrations/powershell/manifest.toml` | New — brand=powershell, roles=[shell], detection env=[PSHOME], exports=[{hook="hook.ps1",...}] |
+| `integrations/powershell/hook.ps1` | New — static PowerShell hook script (LocationChangedAction, $LASTEXITCODE preservation) |
+| `integrations/powershell/assembly/index.ts` | New — AssemblyScript: detect only |
+| `integrations/powershell/package.json` | New |
+| `integrations/powershell/asconfig.json` | New — outFile = "powershell.wasm" |
+| `integrations/powershell/powershell.wasm` | New — pre-built |
+| `integrations/bundle.go` | Add `bash/bash.wasm bash/manifest.toml bash/hook.bash zsh/zsh.wasm zsh/manifest.toml zsh/hook.zsh fish/fish.wasm fish/manifest.toml fish/hook.fish powershell/powershell.wasm powershell/manifest.toml powershell/hook.ps1` to `//go:embed` line |
+| `integrations/catalog_test.go` | Add tests asserting bash/zsh/fish/powershell appear in catalog with `shell` role |
+| `internal/commands/shell.go` | Rewrite `printShellScript` to use `AllForRole("shell")` + `manifest.Shell.HookFile()` + `bundleFS.ReadFile`; remove old `//go:embed` vars |
+| `internal/commands/shell_test.go` | Update tests |
+| `internal/commands/shell/orbiter.bash` | Delete (script now lives in `integrations/bash/hook.bash`) |
+| `internal/commands/shell/orbiter.zsh` | Delete (script now lives in `integrations/zsh/hook.zsh`) |
+| `internal/commands/shell/orbiter.fish` | Delete (script now lives in `integrations/fish/hook.fish`) |
+| `Justfile` | Add `build-integration-bash`, `build-integration-zsh`, `build-integration-fish`, `build-integration-powershell` recipes; add to `build-integrations` deps |
 
 ---
 
-### Task 1: Rename filesystem → shell role throughout
+### Task 1: Rename filesystem → shell throughout + fix manifest alignment
 
 **Files:**
 - Modify: `internal/integrations/roles.go`
@@ -61,8 +85,11 @@
 - Modify: `internal/commands/executor.go` (one reference)
 - Delete: `internal/integrations/native/filesystem.go`
 - Delete: `internal/integrations/native/filesystem_test.go`
-- Create: `internal/integrations/native/shell_orbiter.go`
-- Create: `internal/integrations/native/shell_orbiter_test.go`
+- Create: `integrations/orbiter/shell.go`
+- Create: `integrations/orbiter/shell_test.go`
+- Modify: `cmd/orbiter/main.go`
+- Modify: `integrations/local/manifest.toml`
+- Modify: `integrations/shell/manifest.toml`
 
 **Interfaces:**
 - Produces: `ResourceRoleShell = "shell"` constant, `shell/orbiter` native integration registered
@@ -109,7 +136,7 @@ with:
 WHERE r.role = 'shell' AND r.brand = 'orbiter'
 ```
 
-Also update the error message at the bottom:
+Also update the error message:
 ```go
 return models.Alias{}, fmt.Errorf("%w: no shell resource path matches %q", ErrNotFound, cwd)
 ```
@@ -125,7 +152,7 @@ sc.CreateResource(ctx, "acme-path", "filesystem", "orbiter", ...)
 sc.CreateResource(ctx, "acme-path", "shell", "orbiter", ...)
 ```
 
-Also update the helper function name and role string:
+Also rename the helper:
 ```go
 func shellConfig(t *testing.T, path string) string {  // was: filesystemConfig
     t.Helper()
@@ -164,12 +191,12 @@ with:
 if r.Resource.Role != integrations.ResourceRoleShell {
 ```
 
-- [ ] **Step 7: Create shell_orbiter.go (replaces filesystem.go)**
+- [ ] **Step 7: Create integrations/orbiter/shell.go (replaces filesystem.go)**
 
-Create `internal/integrations/native/shell_orbiter.go`:
+Create `integrations/orbiter/shell.go`:
 
 ```go
-package native
+package orbiter
 
 import (
     "encoding/json"
@@ -178,30 +205,30 @@ import (
     "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
-var shellOrbiterManifest = integrations.Manifest{
+var shellManifest = integrations.Manifest{
     Integration: integrations.ManifestIntegration{
         Brand: "orbiter",
         Roles: []string{integrations.ResourceRoleShell},
     },
 }
 
-type shellOrbiter struct{}
+type shellIntegration struct{}
 
-// NewShellOrbiter returns a shellOrbiter for testing.
-func NewShellOrbiter() integrations.Integration {
-    return &shellOrbiter{}
+// NewShell returns a shellIntegration for testing.
+func NewShell() integrations.Integration {
+    return &shellIntegration{}
 }
 
-func (f *shellOrbiter) Meta() integrations.Manifest {
-    return shellOrbiterManifest
+func (s *shellIntegration) Meta() integrations.Manifest {
+    return shellManifest
 }
 
-func (f *shellOrbiter) Detect(_ integrations.DetectContext) integrations.DetectReport {
+func (s *shellIntegration) Detect(_ integrations.DetectContext) integrations.DetectReport {
     return integrations.DetectReport{Detected: false}
 }
 
-func (f *shellOrbiter) Init(ctx integrations.ResolvedContext) integrations.StateReport {
-    path := shellPathFromSelf(ctx)
+func (s *shellIntegration) Init(ctx integrations.ResolvedContext) integrations.StateReport {
+    path := pathFromSelf(ctx)
     if path == "" {
         return integrations.StateReport{Error: "no path in resource config"}
     }
@@ -211,8 +238,8 @@ func (f *shellOrbiter) Init(ctx integrations.ResolvedContext) integrations.State
     return integrations.StateReport{Present: true, Reachable: true, InstallDir: path}
 }
 
-func (f *shellOrbiter) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
-    path := shellPathFromSelf(ctx)
+func (s *shellIntegration) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
+    path := pathFromSelf(ctx)
     if path == "" {
         return integrations.StateReport{Error: "no path in resource config"}
     }
@@ -221,17 +248,17 @@ func (f *shellOrbiter) Scan(ctx integrations.ResolvedContext) integrations.State
         return integrations.StateReport{Present: false, InstallDir: path}
     }
     return integrations.StateReport{
-        Present:   true,
-        Reachable: info.IsDir(),
+        Present:    true,
+        Reachable:  info.IsDir(),
         InstallDir: path,
     }
 }
 
-func (f *shellOrbiter) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
-    return f.Init(ctx)
+func (s *shellIntegration) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
+    return s.Init(ctx)
 }
 
-func shellPathFromSelf(ctx integrations.ResolvedContext) string {
+func pathFromSelf(ctx integrations.ResolvedContext) string {
     if ctx.Self == nil {
         return ""
     }
@@ -245,24 +272,24 @@ func shellPathFromSelf(ctx integrations.ResolvedContext) string {
 }
 
 func init() {
-    integrations.Register(integrations.ResourceRoleShell, "orbiter", &shellOrbiter{})
+    integrations.Register(integrations.ResourceRoleShell, "orbiter", &shellIntegration{})
 }
 ```
 
-- [ ] **Step 8: Create shell_orbiter_test.go**
+- [ ] **Step 8: Create integrations/orbiter/shell_test.go**
 
-Create `internal/integrations/native/shell_orbiter_test.go`:
+Create `integrations/orbiter/shell_test.go`:
 
 ```go
-package native_test
+package orbiter_test
 
 import (
     "os"
     "path/filepath"
     "testing"
 
+    "github.com/Kenttleton/orbiter/integrations/orbiter"
     "github.com/Kenttleton/orbiter/internal/integrations"
-    "github.com/Kenttleton/orbiter/internal/integrations/native"
     "github.com/Kenttleton/orbiter/internal/models"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
@@ -282,25 +309,25 @@ func makeShellRC(path string) integrations.ResolvedContext {
     }
 }
 
-func TestShellOrbiter_Scan_Present(t *testing.T) {
+func TestShell_Scan_Present(t *testing.T) {
     dir := t.TempDir()
-    si := native.NewShellOrbiter()
+    si := orbiter.NewShell()
     report := si.Scan(makeShellRC(dir))
     assert.True(t, report.Present)
     assert.True(t, report.Reachable)
     assert.Equal(t, dir, report.InstallDir)
 }
 
-func TestShellOrbiter_Scan_Missing(t *testing.T) {
-    si := native.NewShellOrbiter()
+func TestShell_Scan_Missing(t *testing.T) {
+    si := orbiter.NewShell()
     report := si.Scan(makeShellRC("/tmp/orbiter-does-not-exist-xyz-999"))
     assert.False(t, report.Present)
     assert.Equal(t, "/tmp/orbiter-does-not-exist-xyz-999", report.InstallDir)
 }
 
-func TestShellOrbiter_Init_CreatesDir(t *testing.T) {
+func TestShell_Init_CreatesDir(t *testing.T) {
     dir := filepath.Join(t.TempDir(), "newproject")
-    si := native.NewShellOrbiter()
+    si := orbiter.NewShell()
     report := si.Init(makeShellRC(dir))
     require.True(t, report.Present)
     assert.Equal(t, dir, report.InstallDir)
@@ -308,7 +335,7 @@ func TestShellOrbiter_Init_CreatesDir(t *testing.T) {
     assert.NoError(t, err)
 }
 
-func TestShellOrbiter_Registered(t *testing.T) {
+func TestShell_Registered(t *testing.T) {
     i, ok := integrations.Default.Get("shell", "orbiter")
     require.True(t, ok, "shell/orbiter should be registered")
     m := i.Meta()
@@ -318,21 +345,52 @@ func TestShellOrbiter_Registered(t *testing.T) {
 }
 ```
 
-- [ ] **Step 9: Delete filesystem.go and filesystem_test.go**
+- [ ] **Step 9: Delete filesystem.go and filesystem_test.go; update main.go import**
 
 ```bash
-rm internal/integrations/native/filesystem.go
-rm internal/integrations/native/filesystem_test.go
+git rm internal/integrations/native/filesystem.go
+git rm internal/integrations/native/filesystem_test.go
 ```
 
-- [ ] **Step 10: Run full test suite**
+In `cmd/orbiter/main.go`, replace:
+```go
+_ "github.com/Kenttleton/orbiter/internal/integrations/native"
+```
+with:
+```go
+_ "github.com/Kenttleton/orbiter/integrations/orbiter"
+```
+
+- [ ] **Step 10: Update integrations/local/manifest.toml**
+
+In `integrations/local/manifest.toml`, replace:
+```toml
+roles = ["filesystem"]
+```
+with:
+```toml
+roles = ["shell"]
+```
+
+- [ ] **Step 11: Add shell dependency to integrations/shell/manifest.toml**
+
+In `integrations/shell/manifest.toml`, append:
+```toml
+[dependencies]
+  [dependencies.resources]
+  shell = []
+```
+
+This formalizes that the env transponder flows through the shell resource: a resource depending on `env` will have shell resources available in its resolved context.
+
+- [ ] **Step 12: Run full test suite**
 
 ```
 go test ./...
 ```
 Expected: all pass.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add internal/integrations/roles.go \
@@ -342,48 +400,86 @@ git add internal/integrations/roles.go \
         internal/starchart/lifecycle_test.go \
         internal/commands/executor.go \
         internal/integrations/native/shell_orbiter.go \
-        internal/integrations/native/shell_orbiter_test.go
-git rm internal/integrations/native/filesystem.go \
-       internal/integrations/native/filesystem_test.go
-git commit -m "feat: rename filesystem role to shell throughout"
+        internal/integrations/native/shell_orbiter_test.go \
+        integrations/local/manifest.toml \
+        integrations/shell/manifest.toml
+git commit -m "feat: rename filesystem role to shell; align local and env/shell manifests"
 ```
 
 ---
 
-### Task 2: Create per-shell native integrations with scripts and env detection
+### Task 2: Add per-shell WASM integrations (bash, zsh, fish, powershell)
 
 **Files:**
-- Add `ShellScripter` interface to `internal/integrations/types.go`
-- Create dir `internal/integrations/native/shell/`
-- Create `internal/integrations/native/shell/bash.sh`
-- Create `internal/integrations/native/shell/zsh.sh`
-- Create `internal/integrations/native/shell/fish.fish`
-- Create `internal/integrations/native/shell/powershell.ps1`
-- Create `internal/integrations/native/shell_bash.go`
-- Create `internal/integrations/native/shell_zsh.go`
-- Create `internal/integrations/native/shell_fish.go`
-- Create `internal/integrations/native/shell_powershell.go`
+- Create: `integrations/bash/`, `integrations/zsh/`, `integrations/fish/`, `integrations/powershell/` — each with `manifest.toml`, `assembly/index.ts`, `package.json`, `asconfig.json`, `<brand>.wasm`
+- Modify: `integrations/bundle.go` — add four new brands to `//go:embed`
+- Modify: `integrations/catalog_test.go` — assert four new catalog entries
+- Modify: `Justfile` — add four build recipes
 
 **Interfaces:**
-- Produces: `integrations.ShellScripter` interface with `Script() string`; four integrations registered under `shell/bash`, `shell/zsh`, `shell/fish`, `shell/powershell`
+- Produces: four WASM integrations registered under `shell/bash`, `shell/zsh`, `shell/fish`, `shell/powershell`; each returns `Config["script"]` from `calibrate()`
 
-- [ ] **Step 1: Add ShellScripter to types.go**
+> **Pattern:** copy `package.json` and `asconfig.json` from `integrations/nvm/` as starting point; change `outFile` in `asconfig.json` to `<brand>.wasm`. The AssemblyScript FFI boilerplate (read_input, write_output, readInput, writeStr) is identical across all four; only the script constant and brand strings differ.
 
-In `internal/integrations/types.go`, append:
+- [ ] **Step 1: Create integrations/bash/**
 
-```go
-// ShellScripter is implemented by native shell integrations that embed a hook script.
-// printShellScript uses this interface to retrieve the script without a type assertion
-// on a concrete type from the native package.
-type ShellScripter interface {
-    Script() string
+Create `integrations/bash/manifest.toml`:
+```toml
+[integration]
+brand = "bash"
+name = "Bash Shell"
+description = "Integrates Orbiter with bash via PROMPT_COMMAND hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "BASH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.bash", description = "PROMPT_COMMAND hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16
+```
+
+Create `integrations/bash/asconfig.json` (copy from nvm, change outFile):
+```json
+{
+  "targets": {
+    "release": {
+      "outFile": "bash.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 1,
+      "converge": false,
+      "noAssert": false
+    }
+  },
+  "options": {
+    "bindings": "esm"
+  }
 }
 ```
 
-- [ ] **Step 2: Create bash hook script**
+Create `integrations/bash/package.json` (copy from nvm, change name):
+```json
+{
+  "name": "orbiter-integration-bash",
+  "version": "1.0.0",
+  "scripts": {
+    "asbuild:release": "asc assembly/index.ts --target release"
+  },
+  "dependencies": {
+    "assemblyscript": "^0.27.0",
+    "assemblyscript-json": "^1.1.0"
+  }
+}
+```
 
-Create `internal/integrations/native/shell/bash.sh`:
-
+Create `integrations/bash/hook.bash` (the static hook script — this is what `printShellScript` will emit):
 ```bash
 # Orbiter shell integration — bash
 # Source this in ~/.bashrc or ~/.bash_profile:
@@ -410,12 +506,13 @@ function orbiter() {
 }
 
 function _orbiter_hook() {
-    [[ "$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"* ]] && return 0
+    local _prev=$?
+    [[ "$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"* ]] && return $_prev
     local _out _exit
     _out="$(::ORBITER:: hook --cwd "$PWD" --current "${ORBITER_PLANET:-}")"
     _exit=$?
-    [[ $_exit -ne 0 ]] && return 0
-    [[ -z "$_out" ]] && return 0
+    if [[ $_exit -ne 0 ]]; then echo "$_out" >&2; return $_prev; fi
+    [[ -z "$_out" ]] && return $_prev
     local _new_exports=()
     while IFS= read -r _line; do
         [[ -z "$_line" ]] && continue
@@ -435,6 +532,7 @@ function _orbiter_hook() {
     done <<< "$_out"
     export ORBITER_CWD="$PWD"
     [[ ${#_new_exports[@]} -gt 0 ]] && export ORBITER_EXPORTS="${_new_exports[*]}"
+    return $_prev
 }
 
 if [[ "$PROMPT_COMMAND" != *"_orbiter_hook"* ]]; then
@@ -442,10 +540,87 @@ if [[ "$PROMPT_COMMAND" != *"_orbiter_hook"* ]]; then
 fi
 ```
 
-- [ ] **Step 3: Create zsh hook script**
+Create `integrations/bash/assembly/index.ts`:
+```typescript
+import { JSON } from "assemblyscript-json/assembly";
 
-Create `internal/integrations/native/shell/zsh.sh`:
+@external("orbiter", "read_input")
+declare function read_input(ptr: i32, max: i32): i32;
 
+@external("orbiter", "write_output")
+declare function write_output(ptr: i32, len: i32): void;
+
+const BUF_SIZE: i32 = 65536;
+
+function readInput(): Uint8Array {
+  const buf = new Uint8Array(BUF_SIZE);
+  const n = read_input(buf.dataStart, buf.byteLength);
+  return buf.slice(0, n);
+}
+
+function writeStr(s: string): void {
+  const encoded = String.UTF8.encode(s, false);
+  const buf = Uint8Array.wrap(encoded);
+  write_output(buf.dataStart, buf.byteLength);
+}
+
+export function detect(): void {
+  readInput();
+  const out = new JSON.Obj();
+  out.set("detected", true);
+  const resources = new JSON.Arr();
+  const resource = new JSON.Obj();
+  resource.set("role", "shell");
+  resource.set("brand", "bash");
+  resources.push(resource);
+  out.set("resources", resources);
+  writeStr(out.stringify());
+}
+
+function report(): void {
+  readInput();
+  const obj = new JSON.Obj();
+  obj.set("present", true);
+  obj.set("reachable", true);
+  obj.set("manager", "shell");
+  writeStr(obj.stringify());
+}
+
+export function initialize(): void { report(); }
+export function scan(): void { report(); }
+export function calibrate(): void { report(); }
+```
+
+- [ ] **Step 2: Create integrations/zsh/**
+
+Create `integrations/zsh/manifest.toml`:
+```toml
+[integration]
+brand = "zsh"
+name = "Zsh Shell"
+description = "Integrates Orbiter with zsh via chpwd hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "ZSH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.zsh", description = "chpwd hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16
+```
+
+Create `integrations/zsh/asconfig.json` (same as bash, change outFile to `zsh.wasm`).
+
+Create `integrations/zsh/package.json` (same as bash, change name to `orbiter-integration-zsh`).
+
+Create `integrations/zsh/hook.zsh`:
 ```zsh
 # Orbiter shell integration — zsh
 # Source this in ~/.zshrc:
@@ -472,12 +647,13 @@ function orbiter() {
 }
 
 function _orbiter_chpwd() {
-    [[ "$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"* ]] && return 0
+    local _prev=$?
+    [[ "$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"* ]] && return $_prev
     local _out _exit
     _out="$(::ORBITER:: hook --cwd "$PWD" --current "${ORBITER_PLANET:-}")"
     _exit=$?
-    [[ $_exit -ne 0 ]] && return 0
-    [[ -z "$_out" ]] && return 0
+    if [[ $_exit -ne 0 ]]; then print "$_out" >&2; return $_prev; fi
+    [[ -z "$_out" ]] && return $_prev
     local -a _new_exports
     while IFS= read -r _line; do
         [[ -z "$_line" ]] && continue
@@ -497,16 +673,94 @@ function _orbiter_chpwd() {
     done <<< "$_out"
     export ORBITER_CWD="$PWD"
     [[ ${#_new_exports[@]} -gt 0 ]] && export ORBITER_EXPORTS="${_new_exports[*]}"
+    return $_prev
 }
 
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _orbiter_chpwd
 ```
 
-- [ ] **Step 4: Create fish hook script**
+Create `integrations/zsh/assembly/index.ts` (detect only — same boilerplate as bash, brand = "zsh"):
+```typescript
+import { JSON } from "assemblyscript-json/assembly";
 
-Create `internal/integrations/native/shell/fish.fish`:
+@external("orbiter", "read_input")
+declare function read_input(ptr: i32, max: i32): i32;
 
+@external("orbiter", "write_output")
+declare function write_output(ptr: i32, len: i32): void;
+
+const BUF_SIZE: i32 = 65536;
+
+function readInput(): Uint8Array {
+  const buf = new Uint8Array(BUF_SIZE);
+  const n = read_input(buf.dataStart, buf.byteLength);
+  return buf.slice(0, n);
+}
+
+function writeStr(s: string): void {
+  const encoded = String.UTF8.encode(s, false);
+  const buf = Uint8Array.wrap(encoded);
+  write_output(buf.dataStart, buf.byteLength);
+}
+
+export function detect(): void {
+  readInput();
+  const out = new JSON.Obj();
+  out.set("detected", true);
+  const resources = new JSON.Arr();
+  const resource = new JSON.Obj();
+  resource.set("role", "shell");
+  resource.set("brand", "zsh");
+  resources.push(resource);
+  out.set("resources", resources);
+  writeStr(out.stringify());
+}
+
+function report(): void {
+  readInput();
+  const obj = new JSON.Obj();
+  obj.set("present", true);
+  obj.set("reachable", true);
+  obj.set("manager", "shell");
+  writeStr(obj.stringify());
+}
+
+export function initialize(): void { report(); }
+export function scan(): void { report(); }
+export function calibrate(): void { report(); }
+```
+
+- [ ] **Step 3: Create integrations/fish/**
+
+Create `integrations/fish/manifest.toml`:
+```toml
+[integration]
+brand = "fish"
+name = "Fish Shell"
+description = "Integrates Orbiter with fish via PWD variable hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "FISH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.fish", description = "PWD variable hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16
+```
+
+Create `integrations/fish/asconfig.json` (outFile = `fish.wasm`).
+
+Create `integrations/fish/package.json` (name = `orbiter-integration-fish`).
+
+Create `integrations/fish/hook.fish`:
 ```fish
 # Orbiter shell integration — fish
 # Source this in ~/.config/fish/config.fish:
@@ -537,13 +791,15 @@ function orbiter
 end
 
 function _orbiter_hook --on-variable PWD
+    set _prev $status
     set _cwd (pwd)
     if string match -q "$ORBITER_CWD*" -- $_cwd
-        return 0
+        return $_prev
     end
     set _out (::ORBITER:: hook --cwd $_cwd --current "$ORBITER_PLANET")
-    test $status -ne 0; and return 0
-    test -z "$_out"; and return 0
+    set _exit $status
+    if test $_exit -ne 0; echo $_out >&2; return $_prev; end
+    test -z "$_out"; and return $_prev
     set -l _new_exports
     for _line in (string split \n -- $_out)
         test -z "$_line"; and continue
@@ -568,13 +824,91 @@ function _orbiter_hook --on-variable PWD
     if test (count $_new_exports) -gt 0
         set -gx ORBITER_EXPORTS (string join ' ' $_new_exports)
     end
+    return $_prev
 end
 ```
 
-- [ ] **Step 5: Create PowerShell hook script**
+Create `integrations/fish/assembly/index.ts` (detect only — same boilerplate as bash, brand = "fish"):
+```typescript
+import { JSON } from "assemblyscript-json/assembly";
 
-Create `internal/integrations/native/shell/powershell.ps1`:
+@external("orbiter", "read_input")
+declare function read_input(ptr: i32, max: i32): i32;
 
+@external("orbiter", "write_output")
+declare function write_output(ptr: i32, len: i32): void;
+
+const BUF_SIZE: i32 = 65536;
+
+function readInput(): Uint8Array {
+  const buf = new Uint8Array(BUF_SIZE);
+  const n = read_input(buf.dataStart, buf.byteLength);
+  return buf.slice(0, n);
+}
+
+function writeStr(s: string): void {
+  const encoded = String.UTF8.encode(s, false);
+  const buf = Uint8Array.wrap(encoded);
+  write_output(buf.dataStart, buf.byteLength);
+}
+
+export function detect(): void {
+  readInput();
+  const out = new JSON.Obj();
+  out.set("detected", true);
+  const resources = new JSON.Arr();
+  const resource = new JSON.Obj();
+  resource.set("role", "shell");
+  resource.set("brand", "fish");
+  resources.push(resource);
+  out.set("resources", resources);
+  writeStr(out.stringify());
+}
+
+function report(): void {
+  readInput();
+  const obj = new JSON.Obj();
+  obj.set("present", true);
+  obj.set("reachable", true);
+  obj.set("manager", "shell");
+  writeStr(obj.stringify());
+}
+
+export function initialize(): void { report(); }
+export function scan(): void { report(); }
+export function calibrate(): void { report(); }
+```
+
+- [ ] **Step 4: Create integrations/powershell/**
+
+Create `integrations/powershell/manifest.toml`:
+```toml
+[integration]
+brand = "powershell"
+name = "PowerShell"
+description = "Integrates Orbiter with pwsh (PowerShell 7+) via LocationChangedAction hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "PSHOME"
+
+[shell]
+exports = [
+  { hook = "hook.ps1", description = "LocationChangedAction hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16
+```
+
+Create `integrations/powershell/asconfig.json` (outFile = `powershell.wasm`).
+
+Create `integrations/powershell/package.json` (name = `orbiter-integration-powershell`).
+
+Create `integrations/powershell/hook.ps1`:
 ```powershell
 # Orbiter shell integration — PowerShell (pwsh 7+)
 # Add to your $PROFILE:
@@ -604,11 +938,15 @@ function Invoke-Orbiter {
 Set-Alias orbiter Invoke-Orbiter
 
 function _OrbiterHook {
+    $prevEC = $LASTEXITCODE
     $cwd = (Get-Location).Path
     $planet = $env:ORBITER_CWD
-    if ($planet -and ($cwd -eq $planet -or $cwd.StartsWith("$planet/"))) { return }
+    if ($planet -and ($cwd -eq $planet -or $cwd.StartsWith("$planet/"))) {
+        $global:LASTEXITCODE = $prevEC; return
+    }
     $out = & ::ORBITER:: hook --cwd $cwd --current "$($env:ORBITER_PLANET)"
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($out)) { return }
+    if ($LASTEXITCODE -ne 0) { Write-Error $out; $global:LASTEXITCODE = $prevEC; return }
+    if ([string]::IsNullOrWhiteSpace($out)) { $global:LASTEXITCODE = $prevEC; return }
     $newExports = @()
     foreach ($line in ($out -split "`n")) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -631,327 +969,202 @@ function _OrbiterHook {
     }
     $env:ORBITER_CWD = $cwd
     if ($newExports.Count -gt 0) { $env:ORBITER_EXPORTS = $newExports -join ' ' }
+    $global:LASTEXITCODE = $prevEC
 }
 
 $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = { _OrbiterHook }
 ```
 
-- [ ] **Step 6: Create shell_bash.go**
+Create `integrations/powershell/assembly/index.ts` (detect only — same boilerplate as bash, brand = "powershell"):
+```typescript
+import { JSON } from "assemblyscript-json/assembly";
 
-Create `internal/integrations/native/shell_bash.go`:
+@external("orbiter", "read_input")
+declare function read_input(ptr: i32, max: i32): i32;
 
-```go
-package native
+@external("orbiter", "write_output")
+declare function write_output(ptr: i32, len: i32): void;
 
-import (
-    _ "embed"
+const BUF_SIZE: i32 = 65536;
 
-    "github.com/Kenttleton/orbiter/internal/integrations"
-)
-
-//go:embed shell/bash.sh
-var bashScript string
-
-var shellBashManifest = integrations.Manifest{
-    Integration: integrations.ManifestIntegration{
-        Brand:       "bash",
-        Name:        "Bash Shell",
-        Description: "Integrates Orbiter with bash via PROMPT_COMMAND hook",
-        Roles:       []string{integrations.ResourceRoleShell},
-    },
-    Detection: integrations.ManifestDetection{
-        Env: []integrations.ManifestEnvRule{
-            {Key: "BASH_VERSION"},
-        },
-    },
+function readInput(): Uint8Array {
+  const buf = new Uint8Array(BUF_SIZE);
+  const n = read_input(buf.dataStart, buf.byteLength);
+  return buf.slice(0, n);
 }
 
-type shellBash struct{}
-
-func (s *shellBash) Meta() integrations.Manifest         { return shellBashManifest }
-func (s *shellBash) Script() string                      { return bashScript }
-func (s *shellBash) Detect(_ integrations.DetectContext) integrations.DetectReport {
-    return integrations.DetectReport{Detected: false}
-}
-func (s *shellBash) Init(ctx integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellBash) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellBash) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
+function writeStr(s: string): void {
+  const encoded = String.UTF8.encode(s, false);
+  const buf = Uint8Array.wrap(encoded);
+  write_output(buf.dataStart, buf.byteLength);
 }
 
-func init() {
-    integrations.Register(integrations.ResourceRoleShell, "bash", &shellBash{})
+export function detect(): void {
+  readInput();
+  const out = new JSON.Obj();
+  out.set("detected", true);
+  const resources = new JSON.Arr();
+  const resource = new JSON.Obj();
+  resource.set("role", "shell");
+  resource.set("brand", "powershell");
+  resources.push(resource);
+  out.set("resources", resources);
+  writeStr(out.stringify());
 }
+
+function report(): void {
+  readInput();
+  const obj = new JSON.Obj();
+  obj.set("present", true);
+  obj.set("reachable", true);
+  obj.set("manager", "shell");
+  writeStr(obj.stringify());
+}
+
+export function initialize(): void { report(); }
+export function scan(): void { report(); }
+export function calibrate(): void { report(); }
 ```
 
-- [ ] **Step 7: Create shell_zsh.go**
-
-Create `internal/integrations/native/shell_zsh.go`:
-
-```go
-package native
-
-import (
-    _ "embed"
-
-    "github.com/Kenttleton/orbiter/internal/integrations"
-)
-
-//go:embed shell/zsh.sh
-var zshScript string
-
-var shellZshManifest = integrations.Manifest{
-    Integration: integrations.ManifestIntegration{
-        Brand:       "zsh",
-        Name:        "Zsh Shell",
-        Description: "Integrates Orbiter with zsh via chpwd hook",
-        Roles:       []string{integrations.ResourceRoleShell},
-    },
-    Detection: integrations.ManifestDetection{
-        Env: []integrations.ManifestEnvRule{
-            {Key: "ZSH_VERSION"},
-        },
-    },
-}
-
-type shellZsh struct{}
-
-func (s *shellZsh) Meta() integrations.Manifest         { return shellZshManifest }
-func (s *shellZsh) Script() string                      { return zshScript }
-func (s *shellZsh) Detect(_ integrations.DetectContext) integrations.DetectReport {
-    return integrations.DetectReport{Detected: false}
-}
-func (s *shellZsh) Init(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellZsh) Scan(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellZsh) Calibrate(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-
-func init() {
-    integrations.Register(integrations.ResourceRoleShell, "zsh", &shellZsh{})
-}
-```
-
-- [ ] **Step 8: Create shell_fish.go**
-
-Create `internal/integrations/native/shell_fish.go`:
-
-```go
-package native
-
-import (
-    _ "embed"
-
-    "github.com/Kenttleton/orbiter/internal/integrations"
-)
-
-//go:embed shell/fish.fish
-var fishScript string
-
-var shellFishManifest = integrations.Manifest{
-    Integration: integrations.ManifestIntegration{
-        Brand:       "fish",
-        Name:        "Fish Shell",
-        Description: "Integrates Orbiter with fish via PWD variable hook",
-        Roles:       []string{integrations.ResourceRoleShell},
-    },
-    Detection: integrations.ManifestDetection{
-        Env: []integrations.ManifestEnvRule{
-            {Key: "FISH_VERSION"},
-        },
-    },
-}
-
-type shellFish struct{}
-
-func (s *shellFish) Meta() integrations.Manifest         { return shellFishManifest }
-func (s *shellFish) Script() string                      { return fishScript }
-func (s *shellFish) Detect(_ integrations.DetectContext) integrations.DetectReport {
-    return integrations.DetectReport{Detected: false}
-}
-func (s *shellFish) Init(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellFish) Scan(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellFish) Calibrate(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-
-func init() {
-    integrations.Register(integrations.ResourceRoleShell, "fish", &shellFish{})
-}
-```
-
-- [ ] **Step 9: Create shell_powershell.go**
-
-Create `internal/integrations/native/shell_powershell.go`:
-
-```go
-package native
-
-import (
-    _ "embed"
-
-    "github.com/Kenttleton/orbiter/internal/integrations"
-)
-
-//go:embed shell/powershell.ps1
-var powershellScript string
-
-var shellPowershellManifest = integrations.Manifest{
-    Integration: integrations.ManifestIntegration{
-        Brand:       "powershell",
-        Name:        "PowerShell",
-        Description: "Integrates Orbiter with pwsh via LocationChangedAction hook",
-        Roles:       []string{integrations.ResourceRoleShell},
-    },
-    Detection: integrations.ManifestDetection{
-        Env: []integrations.ManifestEnvRule{
-            {Key: "PSHOME"},
-        },
-    },
-}
-
-type shellPowershell struct{}
-
-func (s *shellPowershell) Meta() integrations.Manifest         { return shellPowershellManifest }
-func (s *shellPowershell) Script() string                      { return powershellScript }
-func (s *shellPowershell) Detect(_ integrations.DetectContext) integrations.DetectReport {
-    return integrations.DetectReport{Detected: false}
-}
-func (s *shellPowershell) Init(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellPowershell) Scan(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-func (s *shellPowershell) Calibrate(_ integrations.ResolvedContext) integrations.StateReport {
-    return integrations.StateReport{Present: true, Reachable: true}
-}
-
-func init() {
-    integrations.Register(integrations.ResourceRoleShell, "powershell", &shellPowershell{})
-}
-```
-
-- [ ] **Step 10: Write registration tests**
-
-Create `internal/integrations/native/shell_brands_test.go`:
-
-```go
-package native_test
-
-import (
-    "testing"
-
-    "github.com/Kenttleton/orbiter/internal/integrations"
-    _ "github.com/Kenttleton/orbiter/internal/integrations/native"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
-)
-
-func TestShellBrands_Registered(t *testing.T) {
-    for _, brand := range []string{"bash", "zsh", "fish", "powershell"} {
-        t.Run(brand, func(t *testing.T) {
-            i, ok := integrations.Default.Get("shell", brand)
-            require.True(t, ok, "shell/%s should be registered", brand)
-            m := i.Meta()
-            assert.Equal(t, brand, m.Integration.Brand)
-            require.Len(t, m.Integration.Roles, 1)
-            assert.Equal(t, "shell", m.Integration.Roles[0])
-            require.NotEmpty(t, m.Detection.Env, "shell/%s must declare env detection rules", brand)
-        })
-    }
-}
-
-func TestShellBrands_ScriptNonEmpty(t *testing.T) {
-    for _, brand := range []string{"bash", "zsh", "fish", "powershell"} {
-        t.Run(brand, func(t *testing.T) {
-            i, ok := integrations.Default.Get("shell", brand)
-            require.True(t, ok)
-            ss, ok := i.(integrations.ShellScripter)
-            require.True(t, ok, "shell/%s must implement ShellScripter", brand)
-            script := ss.Script()
-            assert.NotEmpty(t, script)
-            assert.Contains(t, script, "::ORBITER::", "script must contain ::ORBITER:: token")
-        })
-    }
-}
-
-func TestShellBrands_EnvDetection(t *testing.T) {
-    cases := []struct {
-        brand   string
-        envKey  string
-        envVal  string
-    }{
-        {"bash", "BASH_VERSION", "5.2.15"},
-        {"zsh", "ZSH_VERSION", "5.9"},
-        {"fish", "FISH_VERSION", "3.6.0"},
-        {"powershell", "PSHOME", "/usr/local/microsoft/powershell/7"},
-    }
-    for _, tc := range cases {
-        t.Run(tc.brand, func(t *testing.T) {
-            i, _ := integrations.Default.Get("shell", tc.brand)
-            m := i.Meta()
-            env := map[string]string{tc.envKey: tc.envVal}
-            assert.True(t, m.Detection.MatchesAny(nil, env),
-                "shell/%s detection should match when %s is set", tc.brand, tc.envKey)
-            assert.False(t, m.Detection.MatchesAny(nil, map[string]string{}),
-                "shell/%s detection should not match when %s is absent", tc.brand, tc.envKey)
-        })
-    }
-}
-```
-
-- [ ] **Step 11: Run tests**
-
-```
-go test ./internal/integrations/... -v
-```
-Expected: PASS
-
-- [ ] **Step 12: Commit**
+- [ ] **Step 5: Build all four WASM files**
 
 ```bash
-git add internal/integrations/types.go \
-        internal/integrations/native/shell_bash.go \
-        internal/integrations/native/shell_zsh.go \
-        internal/integrations/native/shell_fish.go \
-        internal/integrations/native/shell_powershell.go \
-        internal/integrations/native/shell_brands_test.go \
-        internal/integrations/native/shell/bash.sh \
-        internal/integrations/native/shell/zsh.sh \
-        internal/integrations/native/shell/fish.fish \
-        internal/integrations/native/shell/powershell.ps1
-git commit -m "feat: add per-shell native integrations with env detection and hook scripts"
+cd integrations/bash && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+cd integrations/zsh && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+cd integrations/fish && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+cd integrations/powershell && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+```
+
+Verify each produces `<brand>.wasm` in the integration directory.
+
+- [ ] **Step 6: Add Justfile build recipes**
+
+In `Justfile`, add four recipes following the same pattern as `build-integration-shell`:
+```just
+build-integration-bash:
+    cd integrations/bash && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+
+build-integration-zsh:
+    cd integrations/zsh && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+
+build-integration-fish:
+    cd integrations/fish && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+
+build-integration-powershell:
+    cd integrations/powershell && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+```
+
+Add all four to the `build-integrations` dependency list.
+
+- [ ] **Step 7: Update bundle.go //go:embed line**
+
+In `integrations/bundle.go`, add to the `//go:embed` line:
+```
+bash/bash.wasm bash/manifest.toml zsh/zsh.wasm zsh/manifest.toml fish/fish.wasm fish/manifest.toml powershell/powershell.wasm powershell/manifest.toml
+```
+
+- [ ] **Step 8: Add catalog tests**
+
+In `integrations/catalog_test.go`, add:
+
+```go
+func TestCatalog_ContainsBash(t *testing.T) {
+    entries := CatalogEntries()
+    for _, e := range entries {
+        if e.Brand == "bash" {
+            if !slices.Contains(e.Roles, "shell") {
+                t.Fatalf("bash integration found but missing shell role; roles: %v", e.Roles)
+            }
+            return
+        }
+    }
+    t.Fatal("bash integration not found in catalog")
+}
+
+func TestCatalog_ContainsZsh(t *testing.T) {
+    entries := CatalogEntries()
+    for _, e := range entries {
+        if e.Brand == "zsh" {
+            if !slices.Contains(e.Roles, "shell") {
+                t.Fatalf("zsh integration found but missing shell role; roles: %v", e.Roles)
+            }
+            return
+        }
+    }
+    t.Fatal("zsh integration not found in catalog")
+}
+
+func TestCatalog_ContainsFish(t *testing.T) {
+    entries := CatalogEntries()
+    for _, e := range entries {
+        if e.Brand == "fish" {
+            if !slices.Contains(e.Roles, "shell") {
+                t.Fatalf("fish integration found but missing shell role; roles: %v", e.Roles)
+            }
+            return
+        }
+    }
+    t.Fatal("fish integration not found in catalog")
+}
+
+func TestCatalog_ContainsPowershell(t *testing.T) {
+    entries := CatalogEntries()
+    for _, e := range entries {
+        if e.Brand == "powershell" {
+            if !slices.Contains(e.Roles, "shell") {
+                t.Fatalf("powershell integration found but missing shell role; roles: %v", e.Roles)
+            }
+            return
+        }
+    }
+    t.Fatal("powershell integration not found in catalog")
+}
+```
+
+- [ ] **Step 9: Run tests**
+
+```bash
+go test ./integrations/... -v
+```
+Expected: PASS — four new catalog entries found.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add integrations/bash/ integrations/zsh/ integrations/fish/ integrations/powershell/ \
+        integrations/bundle.go integrations/catalog_test.go Justfile
+git commit -m "feat: add bash/zsh/fish/powershell WASM shell integrations"
 ```
 
 ---
 
-### Task 3: Update printShellScript to use manifest detection, remove old embedded scripts
+### Task 3: Update printShellScript to use WASM shell integrations
 
 **Files:**
 - Modify: `internal/commands/shell.go`
+- Modify: `internal/commands/shell_test.go`
 - Delete: `internal/commands/shell/orbiter.bash`
 - Delete: `internal/commands/shell/orbiter.zsh`
 - Delete: `internal/commands/shell/orbiter.fish`
 
 **Interfaces:**
-- Consumes: `integrations.ShellScripter`, `integrations.Default.AllForRole("shell")`
+- Consumes: `integrations.Default.AllForRole(integrations.ResourceRoleShell)`, `manifest.Shell.HookFile()`, `integrations.BundleFS` (the exported embed.FS from `integrations/bundle.go`)
 
-- [ ] **Step 1: Write test for manifest-based detection in init shell**
+- [ ] **Step 1: Export BundleFS from bundle.go**
 
-In `internal/commands/shell_test.go`, replace the existing tests with:
+In `integrations/bundle.go`, export the embedded FS so `printShellScript` can read hook files:
+
+```go
+// BundleFS is the embedded filesystem containing all bundled integration files.
+// Exported so commands can read declared hook scripts via manifest.Shell.HookFile().
+var BundleFS = bundleFS
+```
+
+Add this immediately after the `var bundleFS embed.FS` declaration.
+
+- [ ] **Step 2: Write failing test**
+
+In `internal/commands/shell_test.go`, replace existing tests:
 
 ```go
 package commands_test
@@ -960,7 +1173,6 @@ import (
     "testing"
 
     "github.com/Kenttleton/orbiter/internal/commands"
-    _ "github.com/Kenttleton/orbiter/internal/integrations/native"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
@@ -970,37 +1182,14 @@ func TestInitCmd_Shell_CommandExists(t *testing.T) {
     initCmd, _, err := root.Find([]string{"init"})
     require.NoError(t, err)
     assert.NotNil(t, initCmd)
-    assert.Equal(t, "init [shell|vessel]", initCmd.Use)
-}
-
-func TestInitCmd_Shell_NoOrbiterToken(t *testing.T) {
-    root := commands.NewRootCommand()
-    shellCmd, _, err := root.Find([]string{"shell", "init"})
-    require.NoError(t, err)
-    assert.NotNil(t, shellCmd)
 }
 ```
 
-- [ ] **Step 2: Rewrite printShellScript in shell.go**
+- [ ] **Step 3: Rewrite printShellScript in shell.go**
 
-Replace the entire `printShellScript` function and remove the three `go:embed` declarations for the old scripts in `internal/commands/shell.go`:
+Replace the `printShellScript` function and remove the old `//go:embed` variable declarations in `internal/commands/shell.go`. The function reads the hook script from the bundle FS using the filename declared in the manifest:
 
 ```go
-package commands
-
-import (
-    "fmt"
-    "os"
-    "path/filepath"
-    "strings"
-
-    tea "github.com/charmbracelet/bubbletea"
-    "github.com/spf13/cobra"
-
-    bundle "github.com/Kenttleton/orbiter/integrations"
-    "github.com/Kenttleton/orbiter/internal/integrations"
-)
-
 func printShellScript() error {
     self, err := os.Executable()
     if err != nil {
@@ -1012,32 +1201,28 @@ func printShellScript() error {
     }
 
     env := osEnvMap()
-    shellIntegrations := integrations.Default.AllForRole(integrations.ResourceRoleShell)
+    all := integrations.Default.AllForRole(integrations.ResourceRoleShell)
 
-    var matches []integrations.Integration
-    for _, i := range shellIntegrations {
-        if i.Meta().Detection.MatchesAny(nil, env) {
-            matches = append(matches, i)
+    for _, i := range all {
+        m := i.Meta()
+        if !m.Detection.MatchesAny(nil, env) {
+            continue
         }
+        hookFile := m.Shell.HookFile()
+        if hookFile == "" {
+            continue
+        }
+        script, err := bundleintegrations.BundleFS.ReadFile(m.Integration.Brand + "/" + hookFile)
+        if err != nil {
+            continue
+        }
+        fmt.Print(strings.ReplaceAll(string(script), "::ORBITER::", self))
+        return nil
     }
-
-    if len(matches) == 0 {
-        return fmt.Errorf(
-            "no shell detected — run 'orbiter init shell bash|zsh|fish|powershell' to specify one",
-        )
-    }
-
-    // Use first match; multiple matches are uncommon and the first is most specific.
-    ss, ok := matches[0].(integrations.ShellScripter)
-    if !ok {
-        return fmt.Errorf("shell integration %q does not provide a hook script", matches[0].Meta().Integration.Brand)
-    }
-    fmt.Print(strings.ReplaceAll(ss.Script(), "::ORBITER::", self))
-    return nil
+    return fmt.Errorf("no shell detected — run 'orbiter init shell bash|zsh|fish|powershell' to specify one")
 }
 
 // osEnvMap parses os.Environ() into a key→value map.
-// Defined here for use by printShellScript; starchart/discover.go has its own copy.
 func osEnvMap() map[string]string {
     raw := os.Environ()
     m := make(map[string]string, len(raw))
@@ -1049,24 +1234,20 @@ func osEnvMap() map[string]string {
 }
 ```
 
-Note: the rest of `shell.go` (vesselInitRun, newInitCmd, newShellCmd) remains unchanged.
+Add `bundleintegrations "github.com/Kenttleton/orbiter/integrations"` to imports (use an alias to avoid collision with `internal/integrations`). Remove the old `//go:embed` variable declarations and the `"runtime"` import if it was only used for `currentPlatform()`.
 
 - [ ] **Step 3: Delete old embedded shell scripts**
 
 ```bash
-rm internal/commands/shell/orbiter.bash
-rm internal/commands/shell/orbiter.zsh
-rm internal/commands/shell/orbiter.fish
-```
-
-If the `internal/commands/shell/` directory is now empty, remove it:
-```bash
-rmdir internal/commands/shell/
+git rm internal/commands/shell/orbiter.bash \
+       internal/commands/shell/orbiter.zsh \
+       internal/commands/shell/orbiter.fish
+rmdir internal/commands/shell/  # if now empty
 ```
 
 - [ ] **Step 4: Run full test suite**
 
-```
+```bash
 go test ./...
 ```
 Expected: all pass.
@@ -1074,11 +1255,8 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/commands/shell.go
-git rm internal/commands/shell/orbiter.bash \
-       internal/commands/shell/orbiter.zsh \
-       internal/commands/shell/orbiter.fish
-git commit -m "feat: init shell uses manifest env detection; scripts move to native integrations"
+git add internal/commands/shell.go internal/commands/shell_test.go
+git commit -m "feat: init shell reads hook script from manifest-declared static file"
 ```
 
 ---
@@ -1092,7 +1270,7 @@ git commit -m "feat: init shell uses manifest env detection; scripts move to nat
 
 **Interfaces:**
 - Produces: `(Executor).Hook(ctx, cwd, currentPlanet string) ([]Directive, error)`
-- The `hook` subcommand calls `Hook` and prints neutral directives to stdout, exits 0 on all errors (silent)
+- The `hook` subcommand calls `Hook`, prints neutral directives to stdout, and returns the error (cobra writes to stderr, exits non-zero) on infrastructure failures; empty stdout + exit 0 is the no-op case
 
 - [ ] **Step 1: Write failing tests**
 
@@ -1129,7 +1307,6 @@ func TestExecutor_Hook_NewPlanet_EmitsSet(t *testing.T) {
     require.NoError(t, err)
     require.NotEmpty(t, directives)
 
-    // Must include SET ORBITER_PLANET=<id>
     var foundPlanet bool
     for _, d := range directives {
         if d.Op == "SET" && d.Key == "ORBITER_PLANET" {
@@ -1150,7 +1327,6 @@ func TestExecutor_Hook_LeavingPlanet_EmitsDepart(t *testing.T) {
     r, _ := exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
     _, _ = exec.SC().Attach(ctx, r.Name, p.Name)
 
-    // "currently in" the planet, moving to /tmp (no planet)
     directives, err := exec.Hook(ctx, "/tmp", p.ID)
     require.NoError(t, err)
     require.Len(t, directives, 1)
@@ -1169,7 +1345,7 @@ func TestExecutor_Hook_NoMatchNoCurrent_Silent(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-```
+```bash
 go test ./internal/commands/... -run "TestExecutor_Hook" -v
 ```
 Expected: FAIL — `exec.Hook` undefined, `"DEPART"` op doesn't exist.
@@ -1184,7 +1360,9 @@ func (d Directive) String() string {
     case "DIR":
         return "DIR " + d.Value
     case "SET":
-        return "SET " + d.Key + "=" + d.Value
+        key := strings.ReplaceAll(d.Key, "\n", "\\n")
+        val := strings.ReplaceAll(d.Value, "\n", "\\n")
+        return "SET " + key + "=" + val
     case "UNSET":
         return "UNSET " + d.Key
     case "DEPART":
@@ -1201,15 +1379,14 @@ Add to `internal/commands/executor.go`:
 ```go
 // Hook resolves cwd to a planet and returns directives for the shell hook to eval.
 // Returns DEPART if currentPlanet is set but cwd no longer matches any planet.
-// Returns SET ORBITER_PLANET + any shell exports if a new planet is entered.
-// Returns nil if no context change occurred. Errors are swallowed — the hook
-// must never break the user's prompt.
+// Returns SET ORBITER_PLANET + any allowed shell exports if a new planet is entered.
+// Returns nil, nil if no context change occurred (cwd not a planet, none active).
+// Returns non-nil error only on infrastructure failures (DB, I/O); callers surface to stderr.
 func (e *Executor) Hook(ctx context.Context, cwd, currentPlanet string) ([]Directive, error) {
     cwd = filepath.Clean(cwd)
 
     alias, err := e.sc.ResolveCWD(ctx, cwd)
     if err != nil {
-        // No planet at cwd.
         if currentPlanet != "" {
             return []Directive{{Op: "DEPART"}}, nil
         }
@@ -1220,13 +1397,11 @@ func (e *Executor) Hook(ctx context.Context, cwd, currentPlanet string) ([]Direc
         return nil, nil
     }
 
-    // Entering a new planet — collect shell exports.
     var directives []Directive
     directives = append(directives, Directive{Op: "SET", Key: "ORBITER_PLANET", Value: alias.ID})
 
     scanResult, err := e.sc.ScanBranch(ctx, alias.ID)
     if err != nil {
-        // Return the planet directive even if scan fails.
         return directives, nil
     }
     for _, r := range scanResult.Resources {
@@ -1234,8 +1409,9 @@ func (e *Executor) Hook(ctx context.Context, cwd, currentPlanet string) ([]Direc
         if !ok {
             continue
         }
-        allowed := make(map[string]bool, len(i.Meta().Shell.Exports))
-        for _, k := range i.Meta().Shell.Exports {
+        allowedEnvs := i.Meta().Shell.AllowedEnvs()
+        allowed := make(map[string]bool, len(allowedEnvs))
+        for _, k := range allowedEnvs {
             allowed[k] = true
         }
         for k, v := range r.Report.Exports {
@@ -1252,7 +1428,7 @@ Add `"path/filepath"` to imports if not already present.
 
 - [ ] **Step 5: Add hook subcommand to lifecycle.go**
 
-In `internal/commands/lifecycle.go`, add a `newHookCmd` function and register it:
+In `internal/commands/lifecycle.go`, add:
 
 ```go
 func newHookCmd(exec *Executor) *cobra.Command {
@@ -1260,13 +1436,15 @@ func newHookCmd(exec *Executor) *cobra.Command {
     cmd := &cobra.Command{
         Use:    "hook",
         Short:  "Emit context directives for shell hook (called automatically on cd)",
-        Hidden: true, // not a user-facing command
+        Hidden: true,
         Args:   cobra.NoArgs,
-        // Override star chart requirement — hook must be silent on all errors.
         PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
         RunE: func(cmd *cobra.Command, args []string) error {
             ctx := cmd.Context()
-            directives, _ := exec.Hook(ctx, cwd, current)
+            directives, err := exec.Hook(ctx, cwd, current)
+            if err != nil {
+                return err
+            }
             for _, d := range directives {
                 fmt.Println(d.String())
             }
@@ -1279,22 +1457,21 @@ func newHookCmd(exec *Executor) *cobra.Command {
 }
 ```
 
-Register in the command tree (find where lifecycle commands are added to the root and add `newHookCmd`):
-
+Register in the command tree where other lifecycle commands are added:
 ```go
 root.AddCommand(newHookCmd(exec))
 ```
 
 - [ ] **Step 6: Run tests**
 
-```
+```bash
 go test ./internal/commands/... -run "TestExecutor_Hook" -v
 ```
 Expected: PASS
 
 - [ ] **Step 7: Run full test suite**
 
-```
+```bash
 go test ./...
 ```
 Expected: all pass.
