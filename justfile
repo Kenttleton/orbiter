@@ -21,7 +21,7 @@ clean:
 # ── Integration WASM builds ────────────────────────────────────────────────────
 
 # Build all integration WASM plugins
-build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew build-integration-uv build-integration-rustup build-integration-docker build-integration-macos build-integration-onepassword build-integration-ssh build-integration-nvm build-integration-just build-integration-shell build-integration-asdf build-integration-local build-integration-vscode build-integration-github build-integration-json build-integration-google-auth build-integration-google-drive
+build-integrations: build-integration-git build-integration-golang build-integration-node build-integration-make build-integration-dotenv build-integration-python build-integration-rust build-integration-brew build-integration-uv build-integration-rustup build-integration-docker build-integration-macos build-integration-onepassword build-integration-ssh build-integration-nvm build-integration-just build-integration-shell build-integration-asdf build-integration-local build-integration-vscode build-integration-github build-integration-json build-integration-google-auth build-integration-google-drive build-integration-tmux
 
 build-integration-git:
     cd integrations/git && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/git.wasm .
@@ -94,6 +94,9 @@ build-integration-json:
 
 build-integration-google-drive:
     cd integrations/google-drive && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/google_drive.wasm google-drive.wasm
+
+build-integration-tmux:
+    cd integrations/tmux && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/tmux.wasm .
 
 # Cross-compilation target for CI release builds.
 # Usage: just build-release orbiter linux amd64 v1.2.3
