@@ -894,6 +894,58 @@ func TestBundledIntegrations_GitHub_Registration(t *testing.T) {
 	})
 }
 
+func TestBundledIntegrations_GitHub_Tool(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("tool", "github")
+	if !ok {
+		t.Fatal("github tool not registered")
+	}
+
+	t.Run("detect_git_config_github", func(t *testing.T) {
+		// The detect handler checks for .git/config — if it also contains
+		// "github.com" that strengthens detection, but .git/config alone is enough.
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{".git/config": ""},
+		})
+		if !report.Detected {
+			t.Error("expected detected=true for .git/config")
+		}
+		if len(report.Resources) == 0 {
+			t.Fatal("expected suggested resources")
+		}
+		// Tool role should be first suggestion
+		found := false
+		for _, r := range report.Resources {
+			if r.Role == "tool" && r.Brand == "github" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("expected tool/github in suggested resources")
+		}
+	})
+
+	t.Run("detect_miss", func(t *testing.T) {
+		report := i.Detect(core.DetectContext{
+			Files: map[string]string{"go.mod": ""},
+		})
+		if report.Detected {
+			t.Error("expected detected=false without .git/config")
+		}
+	})
+
+	t.Run("scan_tool", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{})
+		t.Logf("Tool Scan: %+v", report)
+		if !report.Present {
+			t.Error("expected present=true (gh is installed)")
+		}
+		if report.BinaryPath == "" {
+			t.Error("expected non-empty binary_path")
+		}
+	})
+}
+
 func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("filesystem", "local")
