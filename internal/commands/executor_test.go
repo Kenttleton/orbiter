@@ -193,3 +193,68 @@ func TestExecutor_Jump_EmitsNeutralDirectives(t *testing.T) {
 	assert.Equal(t, "DIR "+path, directives[0].String())
 	assert.NotContains(t, directives[0].String(), "cd ")
 }
+
+func TestExecutor_Hook_SamePlanet_NoOutput(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+	path := t.TempDir()
+	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
+
+	alias, _ := exec.SC().Resolve(ctx, "payment-api")
+	directives, err := exec.Hook(ctx, path, alias.ID)
+	require.NoError(t, err)
+	assert.Empty(t, directives, "same planet should return no directives")
+}
+
+func TestExecutor_Hook_NewPlanet_EmitsSet(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	p, _ := exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+	path := t.TempDir()
+	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
+
+	directives, err := exec.Hook(ctx, path, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, directives)
+
+	var foundPlanet bool
+	for _, d := range directives {
+		if d.Op == "SET" && d.Key == "ORBITER_PLANET" {
+			foundPlanet = true
+			assert.Equal(t, p.ID, d.Value)
+		}
+	}
+	assert.True(t, foundPlanet, "Hook must emit SET ORBITER_PLANET")
+}
+
+func TestExecutor_Hook_LeavingPlanet_EmitsDepart(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
+	p, _ := exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
+	path := t.TempDir()
+	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
+
+	directives, err := exec.Hook(ctx, "/tmp", p.ID)
+	require.NoError(t, err)
+	require.Len(t, directives, 1)
+	assert.Equal(t, "DEPART", directives[0].Op)
+}
+
+func TestExecutor_Hook_NoMatchNoCurrent_Silent(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	directives, err := exec.Hook(ctx, "/tmp/orbiter-unknown-xyz", "")
+	require.NoError(t, err)
+	assert.Empty(t, directives)
+}

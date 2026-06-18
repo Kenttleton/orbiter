@@ -85,6 +85,32 @@ func newRetroCmd(d *deps) *cobra.Command {
 	return cmd
 }
 
+func newHookCmd(d *deps) *cobra.Command {
+	var cwd, current string
+	cmd := &cobra.Command{
+		Use:    "hook",
+		Short:  "Emit context directives for shell hook (called automatically on cd)",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			exec := NewExecutor(d.sc, d.renderer)
+			directives, err := exec.Hook(ctx, cwd, current)
+			if err != nil {
+				return err
+			}
+			for _, dir := range directives {
+				fmt.Println(dir.String())
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&cwd, "cwd", "", "current working directory")
+	cmd.Flags().StringVar(&current, "current", "", "currently active planet ID")
+	return cmd
+}
+
 func newJumpCmd(d *deps) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	bundle "github.com/Kenttleton/orbiter/integrations"
@@ -33,6 +34,8 @@ func (d Directive) String() string {
 		return "SET " + key + "=" + val
 	case "UNSET":
 		return "UNSET " + d.Key
+	case "DEPART":
+		return "DEPART"
 	}
 	return ""
 }
@@ -65,6 +68,51 @@ func (e *Executor) resolveTarget(ctx context.Context, target string) (models.Ali
 		return models.Alias{}, fmt.Errorf("no target found: not in a known entity directory (use an explicit target name)")
 	}
 	return alias, nil
+}
+
+// Hook resolves cwd to a planet and returns directives for the shell hook to eval.
+// Returns []Directive{{Op:"DEPART"}} if currentPlanet is set but cwd no longer matches any planet.
+// Returns SET ORBITER_PLANET + any allowed shell exports if a new planet is entered.
+// Returns nil, nil when no context change occurred (cwd not a planet and none was active).
+// Returns non-nil error only on infrastructure failures (DB, I/O); callers surface to stderr.
+func (e *Executor) Hook(ctx context.Context, cwd, currentPlanet string) ([]Directive, error) {
+	cwd = filepath.Clean(cwd)
+
+	alias, err := e.sc.ResolveCWD(ctx, cwd)
+	if err != nil {
+		if currentPlanet != "" {
+			return []Directive{{Op: "DEPART"}}, nil
+		}
+		return nil, nil
+	}
+
+	if alias.ID == currentPlanet {
+		return nil, nil
+	}
+
+	directives := []Directive{{Op: "SET", Key: "ORBITER_PLANET", Value: alias.ID}}
+
+	scanResult, err := e.sc.ScanBranch(ctx, alias.ID)
+	if err != nil {
+		return directives, nil
+	}
+	for _, r := range scanResult.Resources {
+		i, ok := integrations.Default.Get(r.Resource.Role, r.Resource.Brand)
+		if !ok {
+			continue
+		}
+		allowedEnvs := i.Meta().Shell.AllowedEnvs()
+		allowed := make(map[string]bool, len(allowedEnvs))
+		for _, k := range allowedEnvs {
+			allowed[k] = true
+		}
+		for k, v := range r.Report.Exports {
+			if allowed[k] {
+				directives = append(directives, Directive{Op: "SET", Key: k, Value: v})
+			}
+		}
+	}
+	return directives, nil
 }
 
 // isCatalogBrand returns true if target matches a bundled integration brand.
