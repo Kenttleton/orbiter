@@ -2,7 +2,9 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/Kenttleton/orbiter/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -92,9 +94,34 @@ func newHookCmd(d *deps) *cobra.Command {
 		Short:  "Emit context directives for shell hook (called automatically on cd)",
 		Hidden: true,
 		Args:   cobra.NoArgs,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			chartPath := os.Getenv("ORBITER_STARCHART")
+			if chartPath == "" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return nil
+				}
+				chartPath = home + "/.orbiter/starchart.db"
+			}
+			sc, err := starchart.Open(chartPath)
+			if err != nil {
+				return nil // not initialized; hook silently does nothing
+			}
+			d.sc = sc
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			if d.sc == nil {
+				return nil
+			}
+			if cwd == "" {
+				var err error
+				cwd, err = os.Getwd()
+				if err != nil {
+					return nil
+				}
+			}
 			exec := NewExecutor(d.sc, d.renderer)
 			directives, err := exec.Hook(ctx, cwd, current)
 			if err != nil {
