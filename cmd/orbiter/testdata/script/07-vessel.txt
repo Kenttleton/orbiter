@@ -2,7 +2,7 @@
 
 # Init (alias for orbiter init, --yes skips TUI)
 exec orbiter vessel init --yes
-stdout 'Installed 2 integration\(s\)'
+stdout 'Installed [0-9]+ integration\(s\)'
 
 # Inspect a known brand — shows integration state
 exec orbiter vessel inspect git

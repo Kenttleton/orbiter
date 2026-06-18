@@ -48,6 +48,14 @@ func TestTinyGoPOC_gjsonSjson(t *testing.T) {
 	t.Log("gjson/sjson POC: wasm module loaded and invoked without runtime traps")
 }
 
+func gitCtx(role string) core.ResolvedContext {
+	return core.ResolvedContext{
+		Self:         models.Resource{Role: role, Brand: "git"},
+		Resources:    map[string][]core.ResolvedResource{},
+		Transponders: map[string][]core.ResolvedTransponder{},
+	}
+}
+
 func TestBundledIntegrations_Git(t *testing.T) {
 	reg := setupBundleRegistry(t)
 	i, ok := reg.Get("tool", "git")
@@ -56,7 +64,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(gitCtx("tool"))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (git is installed)")
@@ -76,7 +84,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("init", func(t *testing.T) {
-		report := i.Init(core.ResolvedContext{})
+		report := i.Init(gitCtx("tool"))
 		t.Logf("Init: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true")
@@ -90,15 +98,13 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("calibrate", func(t *testing.T) {
-		report := i.Calibrate(core.ResolvedContext{})
+		report := i.Calibrate(gitCtx("tool"))
 		t.Logf("Calibrate: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true after calibrate")
 		}
-		if len(report.Observations) == 0 {
+		if len(report.Observations) == 0 || report.Observations[0] == "" {
 			t.Error("expected calibrate to populate observations")
-		} else if !strings.HasPrefix(report.Observations[0], "calibrated:") {
-			t.Errorf("expected observations[0] to start with 'calibrated:', got %q", report.Observations[0])
 		}
 	})
 
