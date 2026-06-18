@@ -15,7 +15,7 @@ function orbiter() {
         local _rest="${_line#* }"
         case "$_op" in
             DIR)   cd "$_rest" ;;
-            SET)   export "${_rest%%=*}=${_rest#*=}" ;;
+            SET)   local _val="${_rest#*=}"; _val="${_val//\\n/$'\n'}"; export "${_rest%%=*}=${_val}" ;;
             UNSET) unset "$_rest" ;;
         esac
     done <<< "$_out"

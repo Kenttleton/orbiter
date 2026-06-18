@@ -142,6 +142,11 @@ func TestDirective_String_SET_WithSpaces(t *testing.T) {
 	assert.Equal(t, "SET GREETING=hello world", d.String())
 }
 
+func TestDirective_String_SET_NewlineEscaped(t *testing.T) {
+	d := commands.Directive{Op: "SET", Key: "FOO", Value: "bar\nbaz"}
+	assert.Equal(t, `SET FOO=bar\nbaz`, d.String())
+}
+
 func TestDirective_String_UNSET(t *testing.T) {
 	d := commands.Directive{Op: "UNSET", Key: "NODE_VERSION"}
 	assert.Equal(t, "UNSET NODE_VERSION", d.String())

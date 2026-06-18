@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	bundle "github.com/Kenttleton/orbiter/integrations"
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -27,7 +28,9 @@ func (d Directive) String() string {
 	case "DIR":
 		return "DIR " + d.Value
 	case "SET":
-		return "SET " + d.Key + "=" + d.Value
+		key := strings.ReplaceAll(d.Key, "\n", "\\n")
+		val := strings.ReplaceAll(d.Value, "\n", "\\n")
+		return "SET " + key + "=" + val
 	case "UNSET":
 		return "UNSET " + d.Key
 	}

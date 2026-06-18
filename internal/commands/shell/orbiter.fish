@@ -17,7 +17,7 @@ function orbiter
                 cd $_rest
             case SET
                 set _key (string split -m 1 = -- $_rest)[1]
-                set _val (string split -m 1 = -- $_rest)[2]
+                set _val (string replace --all '\\n' "\n" -- (string split -m 1 = -- $_rest)[2])
                 set -gx $_key $_val
             case UNSET
                 set -e $_rest
