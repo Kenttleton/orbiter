@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -26,21 +27,35 @@ var resourceRoleOrder = []string{
 }
 
 // writeConfigFiles writes path→content pairs declared in StateReport.Config["write_files"]
-// by an export-role integration.
-func writeConfigFiles(report integrations.StateReport) {
+// by an export-role integration. It returns the (possibly modified) report with any write
+// errors appended to Observations and set on Error.
+func writeConfigFiles(report integrations.StateReport) integrations.StateReport {
 	raw, ok := report.Config["write_files"]
 	if !ok {
-		return
+		return report
 	}
 	files, ok := raw.(map[string]any)
 	if !ok {
-		return
+		return report
 	}
 	for path, v := range files {
-		if content, ok := v.(string); ok {
-			_ = os.WriteFile(path, []byte(content), 0644)
+		content, ok := v.(string)
+		if !ok {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			msg := fmt.Sprintf("writeConfigFiles: mkdir %s: %v", filepath.Dir(path), err)
+			report.Observations = append(report.Observations, msg)
+			report.Error = msg
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			msg := fmt.Sprintf("writeConfigFiles: write %s: %v", path, err)
+			report.Observations = append(report.Observations, msg)
+			report.Error = msg
 		}
 	}
+	return report
 }
 
 // ResourceScanResult is the scan outcome for one resource.
@@ -261,7 +276,9 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 	if err != nil {
 		return ResourceCalibrateResult{}, err
 	}
-	if scanResult.BeaconStatus == models.BeaconStatusHealthy {
+	// Export-role resources must always run Calibrate (to write config files),
+	// even when the scan already reports healthy.
+	if scanResult.BeaconStatus == models.BeaconStatusHealthy && r.Role != integrations.ResourceRoleExport {
 		return ResourceCalibrateResult{Resource: r, Before: scanResult.Report, Action: "healthy"}, nil
 	}
 	integration, ok := sc.integrations.Get(r.Role, r.Brand)
@@ -270,14 +287,17 @@ func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, l
 	}
 	rc := BuildResolvedContext(r, lb, integration.Meta())
 	after := integration.Calibrate(rc)
+	if r.Role == integrations.ResourceRoleExport {
+		after = writeConfigFiles(after)
+	}
 	afterStatus := scanBeaconStatus(after)
 	if err := sc.setBeaconStatus(ctx, r.ID, afterStatus, after.Observations); err != nil {
 		return ResourceCalibrateResult{}, err
 	}
-	if r.Role == integrations.ResourceRoleExport {
-		writeConfigFiles(after)
-	}
 	action := "calibrated"
+	if scanResult.BeaconStatus == models.BeaconStatusHealthy {
+		action = "healthy"
+	}
 	if afterStatus == models.BeaconStatusFailed || after.Error != "" {
 		action = "failed"
 	}

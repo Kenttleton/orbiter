@@ -2,6 +2,8 @@ package starchart_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -262,6 +264,63 @@ func TestCalibrateTransponder_SetsBeacon(t *testing.T) {
 	b, err := sc.GetBeacon(ctx, tp.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.BeaconStatusFailed, b.Status)
+}
+
+// exportIntegration simulates a healthy export-role integration that writes config files.
+type exportIntegration struct {
+	writeFiles map[string]any
+}
+
+func (e *exportIntegration) Meta() integrations.Manifest { return integrations.Manifest{} }
+func (e *exportIntegration) Detect(_ integrations.DetectContext) integrations.DetectReport {
+	return integrations.DetectReport{Detected: true}
+}
+func (e *exportIntegration) Init(_ integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: true, Reachable: true}
+}
+func (e *exportIntegration) Scan(_ integrations.ResolvedContext) integrations.StateReport {
+	// Reports healthy — proving the fix works even when scan is already healthy.
+	return integrations.StateReport{Present: true, Reachable: true}
+}
+func (e *exportIntegration) Calibrate(_ integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{
+		Present:   true,
+		Reachable: true,
+		Config:    map[string]any{"write_files": e.writeFiles},
+	}
+}
+
+func TestCalibrateBranch_ExportRole_WritesFilesEvenWhenHealthy(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	targetFile := filepath.Join(tmpDir, "export-out.txt")
+
+	reg := integrations.NewRegistry(nil)
+	reg.Register("export", "test-export", &exportIntegration{
+		writeFiles: map[string]any{targetFile: "hello from export"},
+	})
+	sc := testDBWithRegistry(t, reg)
+
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	p, err := sc.CreatePlanet(ctx, "app", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "ctx-export", "export", "test-export", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "ctx-export", "app")
+	require.NoError(t, err)
+
+	result, err := sc.CalibrateBranch(ctx, p.ID)
+	require.NoError(t, err)
+	require.Len(t, result.Resources, 1)
+
+	// Even though scan returned healthy, export-role must always calibrate and write files.
+	assert.NotEqual(t, "failed", result.Resources[0].Action, "export calibration must not fail")
+
+	got, err := os.ReadFile(targetFile)
+	require.NoError(t, err, "export integration must have written the config file")
+	assert.Equal(t, "hello from export", string(got))
 }
 
 func TestResourceRoleOrder_ContainsExportAndMultiplexer(t *testing.T) {
