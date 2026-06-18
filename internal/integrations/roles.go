@@ -5,7 +5,6 @@ const (
 	ResourceRoleRuntime     = "runtime"
 	ResourceRoleTool        = "tool"
 	ResourceRoleRemote      = "remote"
-	ResourceRoleFilesystem  = "filesystem"
 	ResourceRoleShell       = "shell"
 	ResourceRoleExport      = "export"
 	ResourceRoleMultiplexer = "multiplexer"
@@ -31,7 +30,6 @@ var RoleTypes = map[string]string{
 	ResourceRoleRuntime:     IntegrationTypeResource,
 	ResourceRoleTool:        IntegrationTypeResource,
 	ResourceRoleRemote:      IntegrationTypeResource,
-	ResourceRoleFilesystem:  IntegrationTypeResource,
 	ResourceRoleShell:       IntegrationTypeResource,
 	ResourceRoleExport:      IntegrationTypeResource,
 	ResourceRoleMultiplexer: IntegrationTypeResource,

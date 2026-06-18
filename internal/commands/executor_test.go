@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
-	_ "github.com/Kenttleton/orbiter/internal/integrations/native"
+	_ "github.com/Kenttleton/orbiter/integrations/orbiter"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/stretchr/testify/assert"
@@ -161,7 +161,7 @@ func TestExecutor_Jump_Confirmed(t *testing.T) {
 
 	path := t.TempDir()
 	config := `{"path":"` + path + `"}`
-	_, _ = exec.SC().CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", config)
+	_, _ = exec.SC().CreateResource(ctx, "payment-api-path", "shell", "orbiter", "[]", config)
 	_, _ = exec.SC().Attach(ctx, "payment-api-path", "payment-api")
 
 	// confirmed=true skips the interactive prompt
@@ -181,7 +181,7 @@ func TestExecutor_Jump_EmitsNeutralDirectives(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme2")
 	_, _ = exec.SC().CreatePlanet(ctx, "payment-api2", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "root-res", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "root-res", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "root-res", "payment-api2")
 
 	directives, err := exec.Jump(ctx, "payment-api2", true)

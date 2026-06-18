@@ -16,7 +16,6 @@ import (
 // runtimes before remotes, remotes before tools. Export runs after tools
 // (reads their state); multiplexer runs after export.
 var resourceRoleOrder = []string{
-	integrations.ResourceRoleFilesystem,
 	integrations.ResourceRoleShell,
 	integrations.ResourceRoleManager,
 	integrations.ResourceRoleRuntime,

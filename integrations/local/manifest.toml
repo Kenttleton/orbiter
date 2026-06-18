@@ -2,7 +2,7 @@
 brand = "local"
 name = "Local Filesystem"
 description = "Manages local directory state and working directory for the jump lifecycle"
-roles = ["filesystem"]
+roles = ["shell"]
 
 [commands]
 timeout_seconds = 15

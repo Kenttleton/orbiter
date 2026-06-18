@@ -1,4 +1,4 @@
-package native
+package orbiter
 
 import (
 	"encoding/json"
@@ -7,29 +7,29 @@ import (
 	"github.com/Kenttleton/orbiter/internal/integrations"
 )
 
-var filesystemOrbiterManifest = integrations.Manifest{
+var shellManifest = integrations.Manifest{
 	Integration: integrations.ManifestIntegration{
 		Brand: "orbiter",
-		Roles: []string{integrations.ResourceRoleFilesystem},
+		Roles: []string{integrations.ResourceRoleShell},
 	},
 }
 
-type filesystemOrbiter struct{}
+type shellIntegration struct{}
 
-// NewFilesystemOrbiter returns a filesystemOrbiter for testing.
-func NewFilesystemOrbiter() integrations.Integration {
-	return &filesystemOrbiter{}
+// NewShell returns a shellIntegration for testing.
+func NewShell() integrations.Integration {
+	return &shellIntegration{}
 }
 
-func (f *filesystemOrbiter) Meta() integrations.Manifest {
-	return filesystemOrbiterManifest
+func (s *shellIntegration) Meta() integrations.Manifest {
+	return shellManifest
 }
 
-func (f *filesystemOrbiter) Detect(ctx integrations.DetectContext) integrations.DetectReport {
+func (s *shellIntegration) Detect(_ integrations.DetectContext) integrations.DetectReport {
 	return integrations.DetectReport{Detected: false}
 }
 
-func (f *filesystemOrbiter) Init(ctx integrations.ResolvedContext) integrations.StateReport {
+func (s *shellIntegration) Init(ctx integrations.ResolvedContext) integrations.StateReport {
 	path := pathFromSelf(ctx)
 	if path == "" {
 		return integrations.StateReport{Error: "no path in resource config"}
@@ -40,7 +40,7 @@ func (f *filesystemOrbiter) Init(ctx integrations.ResolvedContext) integrations.
 	return integrations.StateReport{Present: true, Reachable: true, InstallDir: path}
 }
 
-func (f *filesystemOrbiter) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
+func (s *shellIntegration) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
 	path := pathFromSelf(ctx)
 	if path == "" {
 		return integrations.StateReport{Error: "no path in resource config"}
@@ -56,8 +56,8 @@ func (f *filesystemOrbiter) Scan(ctx integrations.ResolvedContext) integrations.
 	}
 }
 
-func (f *filesystemOrbiter) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
-	return f.Init(ctx)
+func (s *shellIntegration) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
+	return s.Init(ctx)
 }
 
 func pathFromSelf(ctx integrations.ResolvedContext) string {
@@ -74,5 +74,5 @@ func pathFromSelf(ctx integrations.ResolvedContext) string {
 }
 
 func init() {
-	integrations.Register(integrations.ResourceRoleFilesystem, "orbiter", &filesystemOrbiter{})
+	integrations.Register(integrations.ResourceRoleShell, "orbiter", &shellIntegration{})
 }

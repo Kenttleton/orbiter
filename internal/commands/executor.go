@@ -365,7 +365,7 @@ func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]D
 	var directives []Directive
 
 	for _, r := range calibResult.Resources {
-		if r.Resource.Role != integrations.ResourceRoleFilesystem {
+		if r.Resource.Role != integrations.ResourceRoleShell {
 			continue
 		}
 		dir := r.After.InstallDir

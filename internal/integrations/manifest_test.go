@@ -215,7 +215,7 @@ func TestRoleType(t *testing.T) {
 		{"runtime", "resource"},
 		{"tool", "resource"},
 		{"remote", "resource"},
-		{"filesystem", "resource"},
+		{"shell", "resource"},
 		{"file", "transponder"},
 		{"env", "transponder"},
 		{"keychain", "transponder"},

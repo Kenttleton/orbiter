@@ -8,3 +8,7 @@ roles = ["env"]
 pool_size = 2
 input_buffer_kb = 8
 output_buffer_kb = 8
+
+[dependencies]
+  [dependencies.resources]
+  shell = []
