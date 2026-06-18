@@ -1,0 +1,13 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "powershell.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 2,
+      "noAssert": true
+    }
+  },
+  "options": {
+    "exportRuntime": false
+  }
+}

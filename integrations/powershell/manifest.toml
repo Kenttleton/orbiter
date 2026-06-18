@@ -1,0 +1,19 @@
+[integration]
+brand = "powershell"
+name = "PowerShell"
+description = "Integrates Orbiter with pwsh (PowerShell 7+) via LocationChangedAction hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "PSHOME"
+
+[shell]
+exports = [
+  { hook = "hook.ps1", description = "LocationChangedAction hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16

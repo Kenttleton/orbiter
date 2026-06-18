@@ -1,0 +1,19 @@
+[integration]
+brand = "zsh"
+name = "Zsh Shell"
+description = "Integrates Orbiter with zsh via chpwd hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "ZSH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.zsh", description = "chpwd hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16

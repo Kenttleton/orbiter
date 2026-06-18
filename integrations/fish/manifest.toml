@@ -1,0 +1,19 @@
+[integration]
+brand = "fish"
+name = "Fish Shell"
+description = "Integrates Orbiter with fish via PWD variable hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "FISH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.fish", description = "PWD variable hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16

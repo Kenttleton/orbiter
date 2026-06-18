@@ -88,6 +88,58 @@ func TestCatalog_ContainsTmux(t *testing.T) {
 	t.Fatal("tmux integration not found in catalog")
 }
 
+func TestCatalog_ContainsBash(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "bash" {
+			if !slices.Contains(e.Roles, "shell") {
+				t.Fatalf("bash integration found but missing shell role; roles: %v", e.Roles)
+			}
+			return
+		}
+	}
+	t.Fatal("bash integration not found in catalog")
+}
+
+func TestCatalog_ContainsZsh(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "zsh" {
+			if !slices.Contains(e.Roles, "shell") {
+				t.Fatalf("zsh integration found but missing shell role; roles: %v", e.Roles)
+			}
+			return
+		}
+	}
+	t.Fatal("zsh integration not found in catalog")
+}
+
+func TestCatalog_ContainsFish(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "fish" {
+			if !slices.Contains(e.Roles, "shell") {
+				t.Fatalf("fish integration found but missing shell role; roles: %v", e.Roles)
+			}
+			return
+		}
+	}
+	t.Fatal("fish integration not found in catalog")
+}
+
+func TestCatalog_ContainsPowershell(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "powershell" {
+			if !slices.Contains(e.Roles, "shell") {
+				t.Fatalf("powershell integration found but missing shell role; roles: %v", e.Roles)
+			}
+			return
+		}
+	}
+	t.Fatal("powershell integration not found in catalog")
+}
+
 func TestLoadInstalled_AfterExtract(t *testing.T) {
 	dir := t.TempDir()
 	entries := integrations.CatalogEntries()

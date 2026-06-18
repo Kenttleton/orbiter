@@ -1,0 +1,13 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "fish.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 2,
+      "noAssert": true
+    }
+  },
+  "options": {
+    "exportRuntime": false
+  }
+}

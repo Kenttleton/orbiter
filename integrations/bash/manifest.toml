@@ -1,0 +1,19 @@
+[integration]
+brand = "bash"
+name = "Bash Shell"
+description = "Integrates Orbiter with bash via PROMPT_COMMAND hook"
+roles = ["shell"]
+
+[detection]
+[[detection.env]]
+key = "BASH_VERSION"
+
+[shell]
+exports = [
+  { hook = "hook.bash", description = "PROMPT_COMMAND hook for directory-change context detection" },
+]
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 16
