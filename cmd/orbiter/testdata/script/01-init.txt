@@ -12,7 +12,8 @@ stdout 'Installed [0-9]+ integration\(s\)'
 exec orbiter vessel init --yes
 stdout 'Installed [0-9]+ integration\(s\)'
 
-# Shell target via init
+# Shell target via init (set BASH_VERSION so bash detection fires)
+env BASH_VERSION=5.2.0
 exec orbiter init shell
 stdout 'function orbiter'
 

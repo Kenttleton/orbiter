@@ -20,6 +20,10 @@ import (
 //go:embed golang/golang.wasm golang/manifest.toml git/git.wasm git/manifest.toml node/node.wasm node/manifest.toml make/make.wasm make/manifest.toml dotenv/dotenv.wasm dotenv/manifest.toml python/python.wasm python/manifest.toml rust/rust.wasm rust/manifest.toml brew/brew.wasm brew/manifest.toml uv/uv.wasm uv/manifest.toml rustup/rustup.wasm rustup/manifest.toml docker/docker.wasm docker/manifest.toml macos/macos.wasm macos/manifest.toml onepassword/onepassword.wasm onepassword/manifest.toml ssh/ssh.wasm ssh/manifest.toml nvm/nvm.wasm nvm/manifest.toml just/just.wasm just/manifest.toml shell/shell.wasm shell/manifest.toml asdf/asdf.wasm asdf/manifest.toml local/local.wasm local/manifest.toml vscode/vscode.wasm vscode/manifest.toml github/github.wasm github/manifest.toml json/json.wasm json/manifest.toml google-auth/google-auth.wasm google-auth/manifest.toml google-drive/google-drive.wasm google-drive/manifest.toml tmux/tmux.wasm tmux/manifest.toml bash/bash.wasm bash/manifest.toml bash/hook.bash zsh/zsh.wasm zsh/manifest.toml zsh/hook.zsh fish/fish.wasm fish/manifest.toml fish/hook.fish powershell/powershell.wasm powershell/manifest.toml powershell/hook.ps1
 var bundleFS embed.FS
 
+// BundleFS is the embedded filesystem containing all bundled integration files.
+// Exported so commands can read hook scripts declared in manifests via HookFile().
+var BundleFS = bundleFS
+
 // CatalogEntry describes a bundled integration available for installation.
 type CatalogEntry struct {
 	Brand       string

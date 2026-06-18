@@ -1,27 +1,20 @@
 package commands
 
 import (
-	_ "embed"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	bundle "github.com/Kenttleton/orbiter/integrations"
+	core "github.com/Kenttleton/orbiter/internal/integrations"
 )
-
-//go:embed shell/orbiter.bash
-var bashScript string
-
-//go:embed shell/orbiter.zsh
-var zshScript string
-
-//go:embed shell/orbiter.fish
-var fishScript string
 
 func printShellScript() error {
 	self, err := os.Executable()
@@ -33,19 +26,46 @@ func printShellScript() error {
 		return fmt.Errorf("resolve symlinks: %w", err)
 	}
 
-	shell := os.Getenv("SHELL")
-	var script string
-	switch {
-	case strings.HasSuffix(shell, "fish"):
-		script = fishScript
-	case strings.HasSuffix(shell, "zsh"):
-		script = zshScript
-	default:
-		script = bashScript
-	}
+	env := osEnvMap()
 
-	fmt.Print(strings.ReplaceAll(script, "::ORBITER::", self))
-	return nil
+	for _, entry := range bundle.CatalogEntries() {
+		if !slices.Contains(entry.Roles, core.ResourceRoleShell) {
+			continue
+		}
+		manifestBytes, err := bundle.BundleFS.ReadFile(entry.Brand + "/manifest.toml")
+		if err != nil {
+			continue
+		}
+		var m core.Manifest
+		if _, err2 := toml.Decode(string(manifestBytes), &m); err2 != nil {
+			continue
+		}
+		if !m.Detection.MatchesAny(nil, env) {
+			continue
+		}
+		hookFile := m.Shell.HookFile()
+		if hookFile == "" {
+			continue
+		}
+		script, err := bundle.BundleFS.ReadFile(entry.Brand + "/" + hookFile)
+		if err != nil {
+			continue
+		}
+		fmt.Print(strings.ReplaceAll(string(script), "::ORBITER::", self))
+		return nil
+	}
+	return fmt.Errorf("no shell integration detected — run orbiter in bash, zsh, fish, or pwsh")
+}
+
+// osEnvMap parses os.Environ() into a key→value map.
+func osEnvMap() map[string]string {
+	raw := os.Environ()
+	m := make(map[string]string, len(raw))
+	for _, kv := range raw {
+		k, v, _ := strings.Cut(kv, "=")
+		m[k] = v
+	}
+	return m
 }
 
 func vesselInitRun(out io.Writer, yes bool) error {
