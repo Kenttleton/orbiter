@@ -29,7 +29,7 @@ end
 function _orbiter_hook --on-variable PWD
     set _prev $status
     set _cwd (pwd)
-    if string match -q "$ORBITER_CWD*" -- $_cwd
+    if test -n "$ORBITER_CWD"; and string match -q "$ORBITER_CWD*" -- $_cwd
         return $_prev
     end
     set _out (::ORBITER:: hook --cwd $_cwd --current "$ORBITER_PLANET")
