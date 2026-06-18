@@ -379,6 +379,45 @@ This path does not exist yet — it is Phase 3 scope.
 
 ---
 
+## Multi-Role Integrations
+
+A single brand can serve multiple roles by listing them in `[integration] roles`:
+
+```toml
+[integration]
+brand = "github"
+name = "GitHub"
+roles = ["tool", "remote", "agent"]
+```
+
+The registry registers the integration once per declared role. When a role-specific handler is invoked, the host passes `role` in the `ResolvedContext` so the guest can dispatch to role-specific behavior:
+
+```rust
+let role = ctx.role.as_str();
+match role {
+    "remote" => scan_remote(),
+    "agent"  => scan_agent(),
+    _        => scan_tool(),
+}
+```
+
+**Agent role exports:** Agents that need to export credentials to the shell declare the export key in `[shell] exports` in the manifest and write them to the `exports` map in `StateReport`. The host emits `export KEY=VALUE` to the shell eval output during `jump`:
+
+```toml
+[shell]
+exports = ["GH_TOKEN"]
+```
+
+Other integrations that consume this credential declare:
+
+```toml
+[dependencies]
+  [dependencies.transponders]
+  agent = ["github"]
+```
+
+---
+
 ## Guest Language Guide
 
 The guest ABI (`read_input`, `write_output`, `run_command`) is language-agnostic. Any language that compiles to WASM and can import host functions can implement an integration. Language choice matters most for binary size, standard library availability, and how much boilerplate you need to handle linear memory.
