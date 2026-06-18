@@ -56,6 +56,11 @@ func (sc *StarChart) Close() error {
 	return sc.db.Close()
 }
 
+// SetIntegrations replaces the integration registry (used in tests).
+func (sc *StarChart) SetIntegrations(r *integrations.Registry) {
+	sc.integrations = r
+}
+
 // SchemaVersion returns the highest applied migration version.
 // Returns 0 if no migrations have been applied.
 func (sc *StarChart) SchemaVersion() (int, error) {

@@ -4,12 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 )
 
 // DiscoverPlanet runs all registered integrations' Detect against cwd and returns
-// suggested resources. The caller is responsible for adding and attaching them.
+// suggested resources. Pre-filters by manifest detection rules before calling WASM.
 func (sc *StarChart) DiscoverPlanet(ctx context.Context, cwd string) ([]integrations.SuggestedResource, error) {
 	if sc.integrations == nil {
 		return nil, nil
@@ -19,21 +20,37 @@ func (sc *StarChart) DiscoverPlanet(ctx context.Context, cwd string) ([]integrat
 	if err != nil {
 		return nil, err
 	}
+	env := osEnvMap()
 
 	dc := integrations.DetectContext{
 		Platform: currentPlatform(),
 		CWD:      cwd,
 		Files:    files,
+		Env:      env,
 	}
 
 	var suggestions []integrations.SuggestedResource
 	for _, i := range sc.integrations.All() {
+		if !i.Meta().Detection.MatchesAny(files, env) {
+			continue
+		}
 		report := i.Detect(dc)
 		if report.Detected {
 			suggestions = append(suggestions, report.Resources...)
 		}
 	}
 	return suggestions, nil
+}
+
+// osEnvMap parses os.Environ() into a key→value map.
+func osEnvMap() map[string]string {
+	raw := os.Environ()
+	m := make(map[string]string, len(raw))
+	for _, kv := range raw {
+		k, v, _ := strings.Cut(kv, "=")
+		m[k] = v
+	}
+	return m
 }
 
 // listFiles returns a map of filename → "" for every file directly in dir.

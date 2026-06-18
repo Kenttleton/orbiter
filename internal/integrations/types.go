@@ -26,12 +26,13 @@ type Platform struct {
 }
 
 // DetectContext is passed to Detect. Files is populated only for file-pattern
-// roles (runtime, manager, tool). Remote and filesystem integrations receive
-// an empty Files map and inspect CWD directly.
+// roles (runtime, manager, tool). Remote and shell integrations receive
+// an empty Files map and inspect CWD or Env directly.
 type DetectContext struct {
 	Platform Platform          `json:"platform"`
 	CWD      string            `json:"cwd"`
 	Files    map[string]string `json:"files"`
+	Env      map[string]string `json:"env"`
 }
 
 // DetectReport is returned by Detect.
