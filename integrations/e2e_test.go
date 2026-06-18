@@ -10,6 +10,7 @@ import (
 
 	"github.com/Kenttleton/orbiter/integrations"
 	core "github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/wasm"
 )
 
@@ -946,6 +947,27 @@ func TestBundledIntegrations_GitHub_Tool(t *testing.T) {
 		}
 		if report.BinaryPath == "" {
 			t.Error("expected non-empty binary_path")
+		}
+	})
+}
+
+func TestBundledIntegrations_GitHub_Remote(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	i, ok := reg.Get("remote", "github")
+	if !ok {
+		t.Fatal("github remote not registered")
+	}
+
+	t.Run("scan_remote", func(t *testing.T) {
+		report := i.Scan(core.ResolvedContext{
+			Self: models.Resource{Role: "remote"},
+		})
+		t.Logf("Remote Scan: %+v", report)
+		// Remote scan is only meaningful in a git project with a github.com remote.
+		// In CI / generic checkout, it may return present=false — that's valid.
+		// We only assert the shape.
+		if report.Manager == "" {
+			t.Error("expected non-empty manager field")
 		}
 	})
 }
