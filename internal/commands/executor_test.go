@@ -7,11 +7,54 @@ import (
 
 	"github.com/Kenttleton/orbiter/internal/commands"
 	_ "github.com/Kenttleton/orbiter/integrations/orbiter"
+	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// stubExportIntegration is a test-only integration that declares MY_TOKEN in its
+// shell exports allowlist and returns both MY_TOKEN and SECRET in its scan report.
+// This lets us verify that Hook only emits SET for declared keys.
+type stubExportIntegration struct{}
+
+func (stubExportIntegration) Meta() integrations.Manifest {
+	return integrations.Manifest{
+		Integration: integrations.ManifestIntegration{
+			Brand: "stub-export",
+			Roles: []string{"env"},
+		},
+		Shell: integrations.ManifestShell{
+			Exports: []integrations.ManifestShellExport{
+				{Envs: []string{"MY_TOKEN"}, Description: "test token", Sensitive: false},
+			},
+		},
+	}
+}
+
+func (stubExportIntegration) Detect(_ integrations.DetectContext) integrations.DetectReport {
+	return integrations.DetectReport{}
+}
+
+func (stubExportIntegration) Init(_ integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: true, Reachable: true}
+}
+
+func (stubExportIntegration) Scan(_ integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{
+		Present:   true,
+		Reachable: true,
+		Exports: map[string]string{
+			"MY_TOKEN": "abc",
+			"SECRET":   "xyz",
+		},
+	}
+}
+
+func (stubExportIntegration) Calibrate(_ integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: true, Reachable: true}
+}
 
 func openTestExecutor(t *testing.T) *commands.Executor {
 	t.Helper()
@@ -257,4 +300,39 @@ func TestExecutor_Hook_NoMatchNoCurrent_Silent(t *testing.T) {
 	directives, err := exec.Hook(ctx, "/tmp/orbiter-unknown-xyz", "")
 	require.NoError(t, err)
 	assert.Empty(t, directives)
+}
+
+// TestExecutor_Hook_ExportAllowlist verifies that Hook only emits SET directives
+// for env vars declared in the integration's shell exports allowlist.
+// MY_TOKEN is declared; SECRET is not — the hook must emit the former and suppress the latter.
+func TestExecutor_Hook_ExportAllowlist(t *testing.T) {
+	// Register the stub integration into the process-wide Default registry.
+	// Deregister on cleanup so the stub doesn't bleed into other tests.
+	integrations.Default.Register("env", "stub-export", stubExportIntegration{})
+	t.Cleanup(func() { integrations.Default.Deregister("env", "stub-export") })
+
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "allowlist-galaxy")
+	_, _ = exec.SC().CreatePlanet(ctx, "allowlist-planet", g.ID, "")
+	path := t.TempDir()
+	_, _ = exec.SC().CreateResource(ctx, "allowlist-shell", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().Attach(ctx, "allowlist-shell", "allowlist-planet")
+	_, _ = exec.SC().CreateResource(ctx, "allowlist-env", "env", "stub-export", "[]", "{}")
+	_, _ = exec.SC().Attach(ctx, "allowlist-env", "allowlist-planet")
+
+	directives, err := exec.Hook(ctx, path, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, directives)
+
+	setKeys := map[string]string{}
+	for _, d := range directives {
+		if d.Op == "SET" {
+			setKeys[d.Key] = d.Value
+		}
+	}
+
+	assert.Equal(t, "abc", setKeys["MY_TOKEN"], "declared export MY_TOKEN must be emitted")
+	assert.NotContains(t, setKeys, "SECRET", "undeclared export SECRET must be suppressed")
 }

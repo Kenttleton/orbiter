@@ -12,7 +12,7 @@ import (
 )
 
 // resourceRoleOrder defines the dispatch sequence for resources within a branch level.
-// Filesystem must initialize before managers, managers before runtimes,
+// Shell must initialize before managers, managers before runtimes,
 // runtimes before remotes, remotes before tools. Export runs after tools
 // (reads their state); multiplexer runs after export.
 var resourceRoleOrder = []string{

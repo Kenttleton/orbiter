@@ -24,7 +24,7 @@ function orbiter() {
 
 function _orbiter_chpwd() {
     local _prev=$?
-    [[ "$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"* ]] && return $_prev
+    [[ -n "$ORBITER_CWD" && ("$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"*) ]] && return $_prev
     local _out _exit
     _out="$(::ORBITER:: hook --cwd "$PWD" --current "${ORBITER_PLANET:-}")"
     _exit=$?

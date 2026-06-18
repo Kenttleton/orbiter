@@ -11,7 +11,7 @@ import (
 // ResolveCWD finds the hierarchy entity whose attached shell/orbiter resource
 // most specifically matches cwd. Exact match takes priority; among prefix matches,
 // the longest matching path prefix wins (CSS selector specificity logic).
-// Returns ErrNotFound if no filesystem resource path matches or prefixes cwd.
+// Returns ErrNotFound if no shell resource path matches or prefixes cwd.
 func (sc *StarChart) ResolveCWD(ctx context.Context, cwd string) (models.Alias, error) {
 	const q = `
         SELECT a.entity, a.name, r.config
