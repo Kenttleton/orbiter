@@ -935,6 +935,10 @@ func TestBundledIntegrations_GitHub_Tool(t *testing.T) {
 	})
 
 	t.Run("scan_tool", func(t *testing.T) {
+		// Empty ResolvedContext serializes to {"self":{"role":""}} on the Go side,
+		// which the WASM deserializes to an empty role string — falling through to
+		// the default "tool" branch. This is intentional: the test exercises the
+		// tool scan path without needing to set Self.Role explicitly.
 		report := i.Scan(core.ResolvedContext{})
 		t.Logf("Tool Scan: %+v", report)
 		if !report.Present {

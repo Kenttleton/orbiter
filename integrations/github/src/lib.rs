@@ -12,9 +12,15 @@ struct DetectContext {
 }
 
 #[derive(Deserialize, Default)]
-struct ResolvedContext {
+struct SelfEntity {
     #[serde(default)]
     role: String,
+}
+
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(rename = "self", default)]
+    entity: SelfEntity,
 }
 
 #[derive(Serialize)]
@@ -79,7 +85,7 @@ pub extern "C" fn detect() {
 pub extern "C" fn initialize() {
     let input = host::read_input();
     let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
-    match ctx.role.as_str() {
+    match ctx.entity.role.as_str() {
         "remote" => scan_remote(),
         "agent"  => scan_agent(),
         _        => scan_tool(),  // "tool" and default
@@ -196,7 +202,7 @@ fn scan_agent() {
 pub extern "C" fn calibrate() {
     let input = host::read_input();
     let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
-    match ctx.role.as_str() {
+    match ctx.entity.role.as_str() {
         "remote" => calibrate_remote(),
         "agent"  => calibrate_agent(),
         _        => calibrate_tool(),
