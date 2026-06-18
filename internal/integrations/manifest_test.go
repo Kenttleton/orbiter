@@ -76,6 +76,34 @@ output_buffer_kb = 8
 	}
 }
 
+func TestManifestShell_HookFile(t *testing.T) {
+	const src = `
+[shell]
+exports = [
+  { hook = "hook.bash", description = "Bash hook script" },
+  { envs = ["MY_VAR"], description = "some env", sensitive = false },
+]
+`
+	var m integrations.Manifest
+	if _, err := toml.Decode(src, &m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := m.Shell.HookFile(); got != "hook.bash" {
+		t.Errorf("HookFile() = %q, want %q", got, "hook.bash")
+	}
+	envs := m.Shell.AllowedEnvs()
+	if len(envs) != 1 || envs[0] != "MY_VAR" {
+		t.Errorf("AllowedEnvs() = %v, want [MY_VAR]", envs)
+	}
+}
+
+func TestManifestShell_HookFile_None(t *testing.T) {
+	s := integrations.ManifestShell{}
+	if got := s.HookFile(); got != "" {
+		t.Errorf("HookFile() on empty shell = %q, want empty", got)
+	}
+}
+
 func TestManifestDetection_MatchesAny_NoRules(t *testing.T) {
 	d := integrations.ManifestDetection{}
 	// no rules = always matches (integration may have WASM detect logic)

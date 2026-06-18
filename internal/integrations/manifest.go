@@ -91,25 +91,37 @@ func (c ManifestCommands) AllowedCmds() []string {
 	return cmds
 }
 
-// ManifestShellExport declares one group of env vars the integration may write
-// to StateReport.Exports. Description is shown during Captain approval.
-// Sensitive marks vars that should be redacted in logs and UI.
+// ManifestShellExport declares one export in the [shell] section.
+// Exactly one of Hook or Envs must be set per entry.
+// Hook is the filename of a static hook script (relative to the integration directory).
+// Envs lists env var names the integration may write to StateReport.Exports.
+// Description is shown during Captain approval.
+// Sensitive marks env vars that should be redacted in logs and UI (ignored for hook entries).
 type ManifestShellExport struct {
+	Hook        string   `toml:"hook"`
 	Envs        []string `toml:"envs"`
 	Description string   `toml:"description"`
 	Sensitive   bool     `toml:"sensitive"`
 }
 
 // ManifestShell is the [shell] section.
-// Hook is the path to a static hook script file, relative to the integration directory.
-// Exports declares every env var group the integration may write to StateReport.Exports.
-// The host enforces the export allowlist after dispatch.
+// Exports is the auditable contract: each entry is either a hook script declaration
+// or a group of env vars the integration may write to StateReport.Exports.
 type ManifestShell struct {
-	Hook    string               `toml:"hook"`
 	Exports []ManifestShellExport `toml:"exports"`
 }
 
-// AllowedEnvs returns the flat list of env var names across all export declarations.
+// HookFile returns the filename of the hook script declared in exports, or "" if none.
+func (s ManifestShell) HookFile() string {
+	for _, e := range s.Exports {
+		if e.Hook != "" {
+			return e.Hook
+		}
+	}
+	return ""
+}
+
+// AllowedEnvs returns the flat list of env var names across all env export declarations.
 func (s ManifestShell) AllowedEnvs() []string {
 	var envs []string
 	for _, e := range s.Exports {
