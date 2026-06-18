@@ -1106,10 +1106,11 @@ func TestBundledIntegrations_FilesystemLocal(t *testing.T) {
 		if !report.Detected {
 			t.Error("expected detected=true for shell/local (always active)")
 		}
-		// NOTE: the local.wasm binary still emits "filesystem" until recompiled;
-		// once the WASM source is updated and rebuilt this should check for "shell".
 		if len(report.Resources) == 0 {
 			t.Error("expected at least one resource suggestion")
+		}
+		if report.Resources[0].Role != "shell" {
+			t.Errorf("expected role=shell, got %q", report.Resources[0].Role)
 		}
 	})
 

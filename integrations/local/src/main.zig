@@ -84,8 +84,8 @@ fn writeState(
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-// filesystem/local is always detected — it provides the working directory
-// for every project and overrides the native filesystem/orbiter.
+// shell/local is always detected — it provides the working directory
+// for every project and overrides the native shell/orbiter.
 export fn detect() void {
     var in_buf: [BUF_SIZE]u8 = undefined;
     _ = read_input(&in_buf, @intCast(in_buf.len));
@@ -95,7 +95,7 @@ export fn detect() void {
         .resources = [_]struct {
             role: []const u8,
             brand: []const u8,
-        }{.{ .role = "filesystem", .brand = "local" }},
+        }{.{ .role = "shell", .brand = "local" }},
     };
     var out_buf: [BUF_SIZE]u8 = undefined;
     const written = writeJSON(result, &out_buf);
