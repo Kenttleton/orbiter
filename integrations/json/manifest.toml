@@ -1,0 +1,13 @@
+[integration]
+brand = "json"
+name = "JSON Export"
+description = "Writes the resolved branch context to a JSON file (no secrets)"
+roles = ["export"]
+
+[detection]
+# Not auto-detected — attach explicitly to a planet.
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 16
+output_buffer_kb = 64

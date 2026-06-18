@@ -61,6 +61,22 @@ func TestLoadInstalled_EmptyDir(t *testing.T) {
 	}
 }
 
+func TestCatalog_ContainsJSON(t *testing.T) {
+	entries := integrations.CatalogEntries()
+	for _, e := range entries {
+		if e.Brand == "json" {
+			for _, role := range e.Roles {
+				if role == "export" {
+					return
+				}
+			}
+			t.Fatalf("json integration found but missing export role; roles: %v", e.Roles)
+			return
+		}
+	}
+	t.Fatal("json integration not found in catalog")
+}
+
 func TestLoadInstalled_AfterExtract(t *testing.T) {
 	dir := t.TempDir()
 	entries := integrations.CatalogEntries()
