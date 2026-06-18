@@ -127,6 +127,26 @@ func TestExecutor_Scan_Transponder(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDirective_String_DIR(t *testing.T) {
+	d := commands.Directive{Op: "DIR", Value: "/home/kent/work"}
+	assert.Equal(t, "DIR /home/kent/work", d.String())
+}
+
+func TestDirective_String_SET(t *testing.T) {
+	d := commands.Directive{Op: "SET", Key: "NODE_VERSION", Value: "20"}
+	assert.Equal(t, "SET NODE_VERSION=20", d.String())
+}
+
+func TestDirective_String_SET_WithSpaces(t *testing.T) {
+	d := commands.Directive{Op: "SET", Key: "GREETING", Value: "hello world"}
+	assert.Equal(t, "SET GREETING=hello world", d.String())
+}
+
+func TestDirective_String_UNSET(t *testing.T) {
+	d := commands.Directive{Op: "UNSET", Key: "NODE_VERSION"}
+	assert.Equal(t, "UNSET NODE_VERSION", d.String())
+}
+
 func TestExecutor_Jump_Confirmed(t *testing.T) {
 	exec := openTestExecutor(t)
 	ctx := context.Background()
@@ -143,6 +163,28 @@ func TestExecutor_Jump_Confirmed(t *testing.T) {
 	directives, err := exec.Jump(ctx, "payment-api", true)
 	require.NoError(t, err)
 	require.NotEmpty(t, directives)
-	assert.Equal(t, "cd", directives[0].Op)
+	assert.Equal(t, "DIR", directives[0].Op)
 	assert.Equal(t, path, directives[0].Value)
+	assert.Equal(t, "DIR "+path, directives[0].String())
+	assert.NotContains(t, directives[0].String(), "cd ")
+}
+
+func TestExecutor_Jump_EmitsNeutralDirectives(t *testing.T) {
+	exec := openTestExecutor(t)
+	ctx := context.Background()
+
+	g, _ := exec.SC().CreateGalaxy(ctx, "acme2")
+	_, _ = exec.SC().CreatePlanet(ctx, "payment-api2", g.ID, "")
+	path := t.TempDir()
+	_, _ = exec.SC().CreateResource(ctx, "root-res", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().Attach(ctx, "root-res", "payment-api2")
+
+	directives, err := exec.Jump(ctx, "payment-api2", true)
+	require.NoError(t, err)
+	require.NotEmpty(t, directives)
+
+	assert.Equal(t, "DIR", directives[0].Op)
+	assert.Equal(t, path, directives[0].Value)
+	assert.Equal(t, "DIR "+path, directives[0].String())
+	assert.NotContains(t, directives[0].String(), "cd ")
 }

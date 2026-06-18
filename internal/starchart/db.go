@@ -61,6 +61,14 @@ func (sc *StarChart) SetIntegrations(r *integrations.Registry) {
 	sc.integrations = r
 }
 
+// Integration returns the registered integration for role+brand, or (nil, false).
+func (sc *StarChart) Integration(role, brand string) (integrations.Integration, bool) {
+	if sc.integrations == nil {
+		return nil, false
+	}
+	return sc.integrations.Get(role, brand)
+}
+
 // SchemaVersion returns the highest applied migration version.
 // Returns 0 if no migrations have been applied.
 func (sc *StarChart) SchemaVersion() (int, error) {

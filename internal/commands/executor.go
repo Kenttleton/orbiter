@@ -13,18 +13,25 @@ import (
 	"github.com/Kenttleton/orbiter/internal/starchart"
 )
 
-// ShellDirective is a single directive for the shell function to eval after jump.
-type ShellDirective struct {
-	Op    string // "cd" or "export"
-	Key   string // env var name (export only)
-	Value string
+// Directive is a single neutral instruction for the shell wrapper to interpret.
+// Op is one of "DIR" (change directory), "SET" (export env var), "UNSET" (unset env var).
+// String() emits the line-protocol format: "OP KEY=VALUE" or "OP PATH".
+type Directive struct {
+	Op    string // "DIR", "SET", "UNSET"
+	Key   string // SET/UNSET: variable name
+	Value string // DIR: path, SET: variable value
 }
 
-func (d ShellDirective) String() string {
-	if d.Op == "cd" {
-		return fmt.Sprintf("cd %q", d.Value)
+func (d Directive) String() string {
+	switch d.Op {
+	case "DIR":
+		return "DIR " + d.Value
+	case "SET":
+		return "SET " + d.Key + "=" + d.Value
+	case "UNSET":
+		return "UNSET " + d.Key
 	}
-	return fmt.Sprintf("export %s=%q", d.Key, d.Value)
+	return ""
 }
 
 // Executor owns the shared pipeline for all six lifecycle commands.
@@ -296,10 +303,10 @@ func beaconToAction(status string) string {
 }
 
 // Jump executes a full transition to the target entity.
-// Returns shell directives for the shell function to eval.
-// Human-readable output is written to stderr; shell directives to stdout.
+// Returns neutral directives for the shell wrapper to interpret after jump.
+// Human-readable output is written to stderr; directives to stdout.
 // If confirmed is false, renders the plan and prompts interactively.
-func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]ShellDirective, error) {
+func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]Directive, error) {
 	alias, err := e.resolveTarget(ctx, target)
 	if err != nil {
 		return nil, err
@@ -351,22 +358,41 @@ func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]S
 		stderrRenderer.Table([]string{"resource", "action"}, execRows)
 	}
 
-	// Phase 4: build shell directives.
-	var directives []ShellDirective
+	// Phase 4: build neutral directives.
+	var directives []Directive
 
-	// cd directive: first filesystem resource with an InstallDir in After (calibrated)
-	// or Before (already healthy — scan report has the dir, After is zero).
 	for _, r := range calibResult.Resources {
 		if r.Resource.Role != integrations.ResourceRoleFilesystem {
 			continue
 		}
-		if r.After.InstallDir != "" {
-			directives = append(directives, ShellDirective{Op: "cd", Value: r.After.InstallDir})
+		dir := r.After.InstallDir
+		if dir == "" {
+			dir = r.Before.InstallDir
+		}
+		if dir != "" {
+			directives = append(directives, Directive{Op: "DIR", Value: dir})
 			break
 		}
-		if r.Before.InstallDir != "" {
-			directives = append(directives, ShellDirective{Op: "cd", Value: r.Before.InstallDir})
-			break
+	}
+
+	// Collect shell exports from all calibrated resources (filtered by manifest allowlist).
+	for _, r := range calibResult.Resources {
+		i, ok := e.sc.Integration(r.Resource.Role, r.Resource.Brand)
+		if !ok {
+			continue
+		}
+		allowed := make(map[string]bool, len(i.Meta().Shell.Exports))
+		for _, k := range i.Meta().Shell.Exports {
+			allowed[k] = true
+		}
+		after := r.After.Exports
+		if after == nil {
+			after = r.Before.Exports
+		}
+		for k, v := range after {
+			if allowed[k] {
+				directives = append(directives, Directive{Op: "SET", Key: k, Value: v})
+			}
 		}
 	}
 

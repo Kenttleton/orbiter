@@ -1,13 +1,22 @@
 # Orbiter shell integration — zsh
 # Source this in ~/.zshrc:
-#   eval "$(::ORBITER:: init)"
+#   eval "$(::ORBITER:: init shell)"
 function orbiter() {
-    local _orbiter_out
-    _orbiter_out="$(::ORBITER:: "$@")"
-    local _orbiter_exit=$?
-    if [ $_orbiter_exit -ne 0 ]; then
-        echo "$_orbiter_out" >&2
-        return $_orbiter_exit
+    local _out _exit
+    _out="$(::ORBITER:: "$@")"
+    _exit=$?
+    if [ $_exit -ne 0 ]; then
+        print "$_out" >&2
+        return $_exit
     fi
-    eval "$_orbiter_out"
+    while IFS= read -r _line; do
+        [[ -z "$_line" ]] && continue
+        local _op="${_line%% *}"
+        local _rest="${_line#* }"
+        case "$_op" in
+            DIR)   cd "$_rest" ;;
+            SET)   export "${_rest%%=*}=${_rest#*=}" ;;
+            UNSET) unset "$_rest" ;;
+        esac
+    done <<< "$_out"
 }
