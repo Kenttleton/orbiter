@@ -5,8 +5,12 @@ description = "Verifies SSH agent availability and loaded key count"
 roles = ["agent"]
 
 [commands]
-allowed = ["ssh-agent", "ssh-add", "which"]
 timeout_seconds = 15
+allowed = [
+  { cmd = "ssh-agent", description = "Manage the SSH authentication agent process" },
+  { cmd = "ssh-add",   description = "Add keys to and query the SSH agent" },
+  { cmd = "which",     description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 2

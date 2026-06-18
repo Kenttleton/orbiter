@@ -16,11 +16,18 @@ description = "Manage GitHub repos, PRs, and auth via the gh CLI"
 roles = ["tool", "keychain"]
 
 [commands]
-allowed = ["gh", "git", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "gh",    description = "GitHub CLI operations" },
+  { cmd = "git",   description = "VCS operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [shell]
-exports = ["GH_TOKEN", "GITHUB_TOKEN"]
+exports = [
+  { envs = ["GH_TOKEN"],      description = "GitHub API token for authenticated CLI operations", sensitive = true },
+  { envs = ["GITHUB_TOKEN"],  description = "Alternative GitHub token variable", sensitive = true },
+]
 
 [[config.fields]]
 key = "username"
@@ -49,13 +56,13 @@ output_buffer_kb = 8
 	if len(m.Integration.Roles) != 2 || m.Integration.Roles[0] != "tool" || m.Integration.Roles[1] != "keychain" {
 		t.Errorf("roles = %v", m.Integration.Roles)
 	}
-	if len(m.Commands.Allowed) != 3 || m.Commands.Allowed[0] != "gh" {
+	if len(m.Commands.Allowed) != 3 || m.Commands.Allowed[0].Cmd != "gh" {
 		t.Errorf("commands.allowed = %v", m.Commands.Allowed)
 	}
 	if m.Commands.TimeoutSeconds != 30 {
 		t.Errorf("timeout_seconds = %d", m.Commands.TimeoutSeconds)
 	}
-	if len(m.Shell.Exports) != 2 || m.Shell.Exports[0] != "GH_TOKEN" {
+	if len(m.Shell.Exports) != 2 || m.Shell.Exports[0].Envs[0] != "GH_TOKEN" || !m.Shell.Exports[0].Sensitive {
 		t.Errorf("shell.exports = %v", m.Shell.Exports)
 	}
 	if len(m.Config.Fields) != 1 || m.Config.Fields[0].Key != "username" {

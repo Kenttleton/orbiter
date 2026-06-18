@@ -8,8 +8,11 @@ roles = ["manager"]
 files = ["uv.lock"]
 
 [commands]
-allowed = ["uv", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "uv",    description = "Python package manager operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

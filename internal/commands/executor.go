@@ -384,8 +384,9 @@ func (e *Executor) Jump(ctx context.Context, target string, confirmed bool) ([]D
 		if !ok {
 			continue
 		}
-		allowed := make(map[string]bool, len(i.Meta().Shell.Exports))
-		for _, k := range i.Meta().Shell.Exports {
+		allowedEnvs := i.Meta().Shell.AllowedEnvs()
+		allowed := make(map[string]bool, len(allowedEnvs))
+		for _, k := range allowedEnvs {
 			allowed[k] = true
 		}
 		after := r.After.Exports

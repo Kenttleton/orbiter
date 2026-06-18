@@ -8,8 +8,11 @@ roles = ["runtime"]
 files = ["go.mod", "go.sum"]
 
 [commands]
-allowed = ["go", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "go",    description = "Go toolchain operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

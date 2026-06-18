@@ -8,8 +8,11 @@ roles = ["tool"]
 files = ["Makefile", "GNUmakefile"]
 
 [commands]
-allowed = ["make", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "make",  description = "Build tool operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

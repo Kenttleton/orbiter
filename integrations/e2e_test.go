@@ -34,7 +34,7 @@ func TestTinyGoPOC_gjsonSjson(t *testing.T) {
 	reg := core.NewRegistry(nil)
 	manifest := core.Manifest{
 		Integration: core.ManifestIntegration{Brand: "poc", Roles: []string{"tool"}},
-		Commands:    core.ManifestCommands{Allowed: []string{}},
+		Commands:    core.ManifestCommands{Allowed: []core.ManifestCommandEntry{}},
 	}
 	i, err := wasm.Load(context.Background(), manifest, wasmBytes, reg.Settings(), reg, autoApprove)
 	if err != nil {

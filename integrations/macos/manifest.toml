@@ -5,8 +5,11 @@ description = "Verifies macOS Keychain availability for credential access"
 roles = ["keychain"]
 
 [commands]
-allowed = ["security", "which"]
 timeout_seconds = 15
+allowed = [
+  { cmd = "security", description = "macOS Keychain credential access" },
+  { cmd = "which",    description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 2

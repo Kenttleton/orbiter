@@ -67,19 +67,55 @@ type ManifestDependencies struct {
 	Transponders map[string][]string `toml:"transponders"`
 }
 
+// ManifestCommandEntry declares one command the integration may invoke via run_command.
+// Description is shown to the Captain during the approval workflow.
+type ManifestCommandEntry struct {
+	Cmd         string `toml:"cmd"`
+	Description string `toml:"description"`
+}
+
 // ManifestCommands is the [commands] section.
 // Allowed lists every executable the integration may call via run_command.
-// The host enforces this allowlist at Stage 2 of runCommandFn (Phase 4 Task 6).
+// The host enforces this allowlist at Stage 3 of runCommandFn.
 type ManifestCommands struct {
-	Allowed        []string `toml:"allowed"`
-	TimeoutSeconds int      `toml:"timeout_seconds"`
+	Allowed        []ManifestCommandEntry `toml:"allowed"`
+	TimeoutSeconds int                    `toml:"timeout_seconds"`
+}
+
+// AllowedCmds returns the flat list of executable names from the allowlist.
+func (c ManifestCommands) AllowedCmds() []string {
+	cmds := make([]string, 0, len(c.Allowed))
+	for _, e := range c.Allowed {
+		cmds = append(cmds, e.Cmd)
+	}
+	return cmds
+}
+
+// ManifestShellExport declares one group of env vars the integration may write
+// to StateReport.Exports. Description is shown during Captain approval.
+// Sensitive marks vars that should be redacted in logs and UI.
+type ManifestShellExport struct {
+	Envs        []string `toml:"envs"`
+	Description string   `toml:"description"`
+	Sensitive   bool     `toml:"sensitive"`
 }
 
 // ManifestShell is the [shell] section.
-// Exports lists env var names the integration may write to StateReport.Exports.
-// The host enforces this allowlist after dispatch (Phase 4 Task 7).
+// Hook is the path to a static hook script file, relative to the integration directory.
+// Exports declares every env var group the integration may write to StateReport.Exports.
+// The host enforces the export allowlist after dispatch.
 type ManifestShell struct {
-	Exports []string `toml:"exports"`
+	Hook    string               `toml:"hook"`
+	Exports []ManifestShellExport `toml:"exports"`
+}
+
+// AllowedEnvs returns the flat list of env var names across all export declarations.
+func (s ManifestShell) AllowedEnvs() []string {
+	var envs []string
+	for _, e := range s.Exports {
+		envs = append(envs, e.Envs...)
+	}
+	return envs
 }
 
 // ManifestConfig describes configuration fields the integration accepts.

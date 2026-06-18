@@ -8,11 +8,17 @@ roles = ["tool", "remote", "agent"]
 files = [".git/config"]
 
 [commands]
-allowed = ["gh", "git", "which"]
 timeout_seconds = 60
+allowed = [
+  { cmd = "gh",    description = "GitHub CLI operations (PRs, issues, auth)" },
+  { cmd = "git",   description = "VCS operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [shell]
-exports = ["GH_TOKEN"]
+exports = [
+  { envs = ["GH_TOKEN"], description = "GitHub API token for authenticated CLI operations", sensitive = true },
+]
 
 [runtime]
 pool_size = 4

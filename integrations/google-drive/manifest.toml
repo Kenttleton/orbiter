@@ -9,8 +9,11 @@ roles = ["remote"]
   agent = ["google-auth"]
 
 [commands]
-allowed = ["stat", "pgrep"]
 timeout_seconds = 15
+allowed = [
+  { cmd = "stat",  description = "Check sync folder existence" },
+  { cmd = "pgrep", description = "Verify Google Drive app is running" },
+]
 
 [runtime]
 pool_size = 2

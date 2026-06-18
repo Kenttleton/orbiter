@@ -126,7 +126,7 @@ func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.St
 	if err := json.Unmarshal(out, &report); err != nil {
 		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
 	}
-	report = FilterExports(report, w.manifest.Shell.Exports)
+	report = FilterExports(report, w.manifest.Shell.AllowedEnvs())
 	return report
 }
 
@@ -140,7 +140,7 @@ func (w *WASMIntegration) Scan(ctx integrations.ResolvedContext) integrations.St
 	if err := json.Unmarshal(out, &report); err != nil {
 		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
 	}
-	report = FilterExports(report, w.manifest.Shell.Exports)
+	report = FilterExports(report, w.manifest.Shell.AllowedEnvs())
 	return report
 }
 
@@ -154,7 +154,7 @@ func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 	if err := json.Unmarshal(out, &report); err != nil {
 		return integrations.StateReport{Error: fmt.Sprintf("unmarshal response: %v", err)}
 	}
-	report = FilterExports(report, w.manifest.Shell.Exports)
+	report = FilterExports(report, w.manifest.Shell.AllowedEnvs())
 	return report
 }
 
@@ -181,7 +181,7 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 	cs := &callState{
 		input:       input,
 		brand:       w.manifest.Integration.Brand,
-		allowed:     w.manifest.Commands.Allowed,
+		allowed:     w.manifest.Commands.AllowedCmds(),
 		timeout:     w.manifest.Commands.TimeoutSeconds,
 		approve:     w.approve,
 		alwaysAllow: w.alwaysAllow,

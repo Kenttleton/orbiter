@@ -9,8 +9,11 @@ roles = ["manager"]
   runtime = ["rust"]
 
 [commands]
-allowed = ["rustup", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "rustup", description = "Rust toolchain manager operations" },
+  { cmd = "which",  description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

@@ -8,8 +8,13 @@ roles = ["runtime"]
 files = ["pyproject.toml", "requirements.txt", "setup.py"]
 
 [commands]
-allowed = ["python3", "which", "uv", "pyenv"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "python3", description = "Python interpreter version detection" },
+  { cmd = "which",   description = "Locate executables in PATH" },
+  { cmd = "uv",      description = "uv Python package manager (if present)" },
+  { cmd = "pyenv",   description = "pyenv Python version manager (if present)" },
+]
 
 [runtime]
 pool_size = 4

@@ -5,8 +5,11 @@ description = "Scans and verifies the Homebrew package manager"
 roles = ["manager"]
 
 [commands]
-allowed = ["brew", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "brew",  description = "Homebrew package manager operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

@@ -5,8 +5,11 @@ description = "Verifies 1Password CLI authentication state for vault access"
 roles = ["vault"]
 
 [commands]
-allowed = ["op", "which"]
 timeout_seconds = 15
+allowed = [
+  { cmd = "op",    description = "1Password CLI credential and vault operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 2

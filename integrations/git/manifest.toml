@@ -8,26 +8,23 @@ roles = ["tool", "file", "env", "agent", "keychain", "vault"]
 files = [".git/config"]
 
 [commands]
-allowed = [
-  "git",
-  "which",
-  "ssh-keygen",
-  "ssh-add",
-  "ssh-agent",
-  "stat",
-  "chmod",
-]
 timeout_seconds = 30
+allowed = [
+  { cmd = "git",        description = "VCS and remote operations" },
+  { cmd = "which",      description = "Locate executables in PATH" },
+  { cmd = "ssh-keygen", description = "Generate SSH key pairs for remote authentication" },
+  { cmd = "ssh-add",    description = "Add SSH keys to the authentication agent" },
+  { cmd = "ssh-agent",  description = "Manage the SSH authentication agent process" },
+  { cmd = "stat",       description = "Check credential file existence and permissions" },
+  { cmd = "chmod",      description = "Set credential file permissions" },
+]
 
 [shell]
 exports = [
-  "SSH_AUTH_SOCK",
-  "SSH_AGENT_PID",
-  "GIT_SSH_COMMAND",
-  "GIT_ASKPASS",
-  "GIT_CONFIG_COUNT",
-  "GIT_CONFIG_KEY_0",
-  "GIT_CONFIG_VALUE_0",
+  { envs = ["SSH_AUTH_SOCK", "SSH_AGENT_PID"], description = "SSH agent socket and process ID for key forwarding", sensitive = false },
+  { envs = ["GIT_SSH_COMMAND"],                description = "Override SSH command used by git for remote operations", sensitive = false },
+  { envs = ["GIT_ASKPASS"],                    description = "Credential helper executable path for git prompts", sensitive = false },
+  { envs = ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"], description = "Runtime git configuration injection", sensitive = false },
 ]
 
 [dependencies]

@@ -5,8 +5,13 @@ description = "Guides captains through Google authentication for Google Suite in
 roles = ["agent"]
 
 [commands]
-allowed = ["gcloud", "stat", "pgrep", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "gcloud", description = "Google Cloud SDK authentication operations" },
+  { cmd = "stat",   description = "Check credential file and socket existence" },
+  { cmd = "pgrep",  description = "Locate running Google auth processes" },
+  { cmd = "which",  description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 2

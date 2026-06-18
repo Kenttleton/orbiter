@@ -8,8 +8,10 @@ roles = ["file"]
 files = [".env"]
 
 [commands]
-allowed = ["which"]
 timeout_seconds = 10
+allowed = [
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 2

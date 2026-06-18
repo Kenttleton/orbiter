@@ -8,8 +8,11 @@ roles = ["tool"]
 files = [".vscode/settings.json", ".vscode/launch.json", ".vscode/extensions.json"]
 
 [commands]
-allowed = ["code", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "code",  description = "VS Code editor operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

@@ -8,8 +8,11 @@ roles = ["tool"]
 files = ["Justfile", "justfile"]
 
 [commands]
-allowed = ["just", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "just",  description = "Task runner operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

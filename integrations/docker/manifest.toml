@@ -8,8 +8,11 @@ roles = ["tool"]
 files = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
 
 [commands]
-allowed = ["docker", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "docker", description = "Container runtime operations" },
+  { cmd = "which",  description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

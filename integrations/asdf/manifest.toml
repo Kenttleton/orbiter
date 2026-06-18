@@ -8,8 +8,11 @@ roles = ["manager"]
 files = [".tool-versions"]
 
 [commands]
-allowed = ["asdf", "which"]
 timeout_seconds = 30
+allowed = [
+  { cmd = "asdf",  description = "Version manager operations" },
+  { cmd = "which", description = "Locate executables in PATH" },
+]
 
 [runtime]
 pool_size = 4

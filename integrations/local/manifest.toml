@@ -5,8 +5,12 @@ description = "Manages local directory state and working directory for the jump 
 roles = ["filesystem"]
 
 [commands]
-allowed = ["stat", "mkdir", "pwd"]
 timeout_seconds = 15
+allowed = [
+  { cmd = "stat",  description = "Check directory existence" },
+  { cmd = "mkdir", description = "Create project directory" },
+  { cmd = "pwd",   description = "Get current working directory" },
+]
 
 [runtime]
 pool_size = 2
