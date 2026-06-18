@@ -1,0 +1,14 @@
+[integration]
+brand = "google-auth"
+name = "Google Auth"
+description = "Guides captains through Google authentication for Google Suite integrations"
+roles = ["agent"]
+
+[commands]
+allowed = ["gcloud", "stat", "pgrep", "which"]
+timeout_seconds = 30
+
+[runtime]
+pool_size = 2
+input_buffer_kb = 8
+output_buffer_kb = 8
