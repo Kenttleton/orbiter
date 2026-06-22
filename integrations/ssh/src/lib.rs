@@ -7,6 +7,8 @@ use std::collections::HashMap;
 struct ResolvedContext {
     #[serde(default)]
     env: HashMap<String, String>,
+    #[serde(default)]
+    binaries: HashMap<String, String>,
 }
 
 #[derive(Serialize, Default)]
@@ -38,9 +40,10 @@ pub extern "C" fn initialize() {
     let input = host::read_input();
     let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
         env: HashMap::new(),
+        binaries: HashMap::new(),
     });
     let ssh_auth_sock = ctx.env.get("SSH_AUTH_SOCK").cloned().unwrap_or_default();
-    let agent_path = host::run_command("which", &["ssh-agent"]);
+    let agent_path = ctx.binaries.get("ssh-agent").cloned().unwrap_or_default();
     let present = !ssh_auth_sock.is_empty() || !agent_path.is_empty();
 
     if !present {

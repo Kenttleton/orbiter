@@ -13,31 +13,23 @@ pub fn git_version() -> String {
 pub fn run(ctx: &ResolvedContext, calibrate: bool) {
     let _ = calibrate;
 
-    // On Windows, capture the version output once and reuse it.
-    // On other platforms, run `which git` for the binary path.
-    let (binary_path, version_out) = if ctx.platform.os == "windows" {
-        // No `which` on Windows — confirm presence via git --version
-        let version_out = crate::host::run_command("git", &["--version"]);
-        if version_out.is_empty() {
-            write_state(&StateReport {
-                manager: "system".to_string(),
-                error: "git binary not found".to_string(),
-                ..Default::default()
-            });
-            return;
-        }
-        // On Windows we don't have a path; use empty string
-        (String::new(), version_out)
-    } else {
-        let path = crate::host::run_command("which", &["git"]);
-        let ver = crate::host::run_command("git", &["--version"]);
-        (path, ver)
-    };
+    // Try to get git binary path from context binaries map.
+    let binary_path = ctx.binaries.get("git").cloned().unwrap_or_default();
+    let version_out = crate::host::run_command("git", &["--version"]);
 
-    if binary_path.is_empty() && ctx.platform.os != "windows" {
+    if binary_path.is_empty() {
         write_state(&StateReport {
             manager: "system".to_string(),
-            error: "git binary not found in PATH".to_string(),
+            error: "git binary not found".to_string(),
+            ..Default::default()
+        });
+        return;
+    }
+
+    if version_out.is_empty() {
+        write_state(&StateReport {
+            manager: "system".to_string(),
+            error: "git --version failed".to_string(),
             ..Default::default()
         });
         return;

@@ -364,13 +364,14 @@ git commit -m "feat: add binaries declaration to manifest schema and all affecte
 
 ---
 
-### Task 3: Add Binaries to ResolvedContext and implement binary resolution in Orbiter host
+### Task 3: Add binary lookup to filesystem integration and wire into ResolvedContext
 
-Orbiter's Go host reads `manifest.Integration.Binaries`, calls FIND for each, and injects the resolved paths into `ResolvedContext.Binaries` before marshaling context for WASM invocation. WASM guests receive a JSON object where `binaries` is a `{"name": "/path/or/empty"}` map.
+Binary discovery belongs to the `filesystem` integration — it is always registered, sits first in the resolution order, and owns local path operations. Orbiter calls `integrations.FindBinary` (backed by `filesystemIntegration`) before invoking WASM handlers. The shell's `FIND` function (Task 1) is what the filesystem integration delegates to for PATH-aware lookup — the filesystem role calls FIND, not `resolver.go` directly.
 
 **Files:**
+- Modify: `internal/integrations/filesystem.go` — add `FindBinary(name, osName string) string` function
 - Modify: `internal/integrations/types.go` — add `Binaries map[string]string` to `ResolvedContext`
-- Create: `internal/wasm/resolver.go` — `ResolveBinaries(manifest, platform)` function
+- Create: `internal/wasm/resolver.go` — thin `ResolveBinaries` that calls `integrations.FindBinary`
 - Modify: `internal/wasm/loader.go` — call resolver before Init/Scan/Calibrate
 
 **Interfaces:**
@@ -385,129 +386,98 @@ Read `internal/integrations/types.go` to see the current `ResolvedContext` defin
 
 ```go
 type ResolvedContext struct {
-    Platform    Platform          `json:"platform"`
-    Self        models.Resource   `json:"self"`
-    Resources   []models.Resource `json:"resources"`
+    Platform     Platform          `json:"platform"`
+    Self         models.Resource   `json:"self"`
+    Resources    []models.Resource `json:"resources"`
     Transponders []models.Resource `json:"transponders"`
-    Responses   map[string]any    `json:"responses"`
-    Binaries    map[string]string `json:"binaries,omitempty"`
+    Responses    map[string]any    `json:"responses"`
+    Binaries     map[string]string `json:"binaries,omitempty"`
 }
 ```
 
-- [ ] **Step 3: Write tests for the resolver**
+- [ ] **Step 3: Write failing tests for FindBinary in filesystem**
 
-Create `internal/wasm/resolver_test.go`:
+Add to `internal/integrations/filesystem_test.go` (create if it doesn't exist):
 
 ```go
-package wasm
+package integrations
 
 import (
+    "runtime"
     "testing"
-    "github.com/orbiterops/orbiter/internal/integrations"
 )
 
-func TestResolveBinaries_EmptyList(t *testing.T) {
-    result := ResolveBinaries([]string{}, "darwin")
-    if result == nil {
-        t.Error("expected non-nil map for empty list")
+func TestFindBinary_KnownBinary(t *testing.T) {
+    // sh exists on all non-Windows platforms this test runs on
+    if runtime.GOOS == "windows" {
+        t.Skip("sh not available on windows")
     }
-    if len(result) != 0 {
-        t.Errorf("expected empty map, got %v", result)
-    }
-}
-
-func TestResolveBinaries_KnownBinary(t *testing.T) {
-    // sh exists on all platforms this test runs on
-    result := ResolveBinaries([]string{"sh"}, "linux")
-    path, ok := result["sh"]
-    if !ok {
-        t.Error("expected sh to be in result map")
-    }
+    path := FindBinary("sh", runtime.GOOS)
     if path == "" {
-        t.Error("expected non-empty path for sh on unix")
+        t.Error("expected non-empty path for sh")
     }
 }
 
-func TestResolveBinaries_UnknownBinary(t *testing.T) {
-    result := ResolveBinaries([]string{"__orbiter_nonexistent_binary__"}, "darwin")
-    path := result["__orbiter_nonexistent_binary__"]
+func TestFindBinary_UnknownBinary(t *testing.T) {
+    path := FindBinary("__orbiter_nonexistent_binary__", runtime.GOOS)
     if path != "" {
         t.Errorf("expected empty path for nonexistent binary, got %q", path)
     }
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they fail**
+- [ ] **Step 4: Run tests to confirm they fail**
 
 ```bash
-go test ./internal/wasm/... -v -run TestResolveBinaries
+go test ./internal/integrations/... -v -run TestFindBinary
 ```
 
-Expected: FAIL — `ResolveBinaries` not defined.
+Expected: FAIL — `FindBinary` not defined.
 
-- [ ] **Step 5: Create internal/wasm/resolver.go**
+- [ ] **Step 5: Add FindBinary to internal/integrations/filesystem.go**
+
+`FindBinary` is a package-level function backed by the filesystem integration. It delegates to the shell's `FIND` function (defined in hook scripts, Task 1) for PATH-aware resolution, falling back to POSIX `command -v` on Unix and `where.exe` on Windows if FIND is not yet available.
 
 ```go
-package wasm
-
 import (
     "os"
     "os/exec"
     "strings"
 )
 
-// ResolveBinaries calls the shell's FIND function for each declared binary name
-// and returns a map of name → absolute path (empty string if not found).
-// Orbiter runs in the user's shell profile context so FIND is available.
-func ResolveBinaries(names []string, osName string) map[string]string {
-    result := make(map[string]string)
-    for _, name := range names {
-        result[name] = findBinary(name, osName)
-    }
-    return result
-}
-
-func findBinary(name, osName string) string {
+// FindBinary resolves a binary name to its absolute path via the filesystem
+// integration's path lookup. It delegates to the shell's FIND function defined
+// in the Orbiter hook scripts, which is platform-aware (command -v on Unix,
+// Get-Command on PowerShell). Falls back to sh/where.exe if FIND is unavailable.
+func FindBinary(name, osName string) string {
     if osName == "windows" {
-        return findBinaryPowerShell(name)
+        return findBinaryWindows(name)
     }
     return findBinaryUnix(name)
 }
 
-// findBinaryUnix calls FIND via the user's active shell.
-// For bash, FIND is exported via export -f so a non-interactive invocation works.
-// For other shells, fall back to command -v directly.
 func findBinaryUnix(name string) string {
     shell := os.Getenv("SHELL")
 
-    // bash: FIND is export -f'd from the hook, available in child bash processes
-    if strings.HasSuffix(shell, "bash") {
-        out, err := exec.Command(shell, "-c", "FIND "+name).Output()
-        if err == nil {
-            if p := strings.TrimSpace(string(out)); p != "" {
-                return p
-            }
+    // bash: hook exports FIND via export -f, available in child processes without -i
+    if shell != "" && strings.HasSuffix(shell, "bash") {
+        if p := runShellFind(shell, "-c", "FIND "+name); p != "" {
+            return p
         }
     }
 
-    // zsh/fish: invoke interactive to source profile where FIND is defined
+    // zsh/fish: invoke via profile so FIND is loaded from hook
     if shell != "" {
-        var cmd *exec.Cmd
+        flag := "-i"
         if strings.HasSuffix(shell, "fish") {
-            cmd = exec.Command(shell, "-c", "FIND "+name)
-        } else {
-            cmd = exec.Command(shell, "-i", "-c", "FIND "+name)
+            flag = "-c"
         }
-        cmd.Stderr = nil
-        out, err := cmd.Output()
-        if err == nil {
-            if p := strings.TrimSpace(string(out)); p != "" {
-                return p
-            }
+        if p := runShellFind(shell, flag, "FIND "+name); p != "" {
+            return p
         }
     }
 
-    // Fallback: resolve via sh built-in command -v (POSIX, available everywhere)
+    // Fallback: POSIX command -v (no FIND dependency)
     out, err := exec.Command("sh", "-c", "command -v "+name).Output()
     if err != nil {
         return ""
@@ -515,44 +485,119 @@ func findBinaryUnix(name string) string {
     return strings.TrimSpace(string(out))
 }
 
-// findBinaryPowerShell calls FIND via pwsh. The user's PowerShell profile
-// defines FIND using Get-Command so this works after orbiter init shell.
-func findBinaryPowerShell(name string) string {
+func findBinaryWindows(name string) string {
+    // PowerShell profile defines FIND using Get-Command
     cmd := exec.Command("pwsh", "-NoLogo", "-NonInteractive", "-Command",
         ". $PROFILE; FIND "+name)
     cmd.Stderr = nil
+    if out, err := cmd.Output(); err == nil {
+        if p := strings.TrimSpace(string(out)); p != "" {
+            return p
+        }
+    }
+    // Fallback: where.exe
+    out, err := exec.Command("where.exe", name).Output()
+    if err != nil {
+        return ""
+    }
+    lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+    return strings.TrimSpace(lines[0])
+}
+
+func runShellFind(shell, flag, expr string) string {
+    cmd := exec.Command(shell, flag, expr)
+    cmd.Stderr = nil
     out, err := cmd.Output()
     if err != nil {
-        // Fallback: use where.exe on Windows
-        out2, err2 := exec.Command("where.exe", name).Output()
-        if err2 != nil {
-            return ""
-        }
-        lines := strings.Split(strings.TrimSpace(string(out2)), "\n")
-        return strings.TrimSpace(lines[0])
+        return ""
     }
     return strings.TrimSpace(string(out))
 }
 ```
 
-- [ ] **Step 6: Run resolver tests**
+- [ ] **Step 6: Run filesystem tests**
+
+```bash
+go test ./internal/integrations/... -v -run TestFindBinary
+```
+
+Expected: both pass.
+
+- [ ] **Step 7: Write tests for the WASM resolver**
+
+Create `internal/wasm/resolver_test.go`:
+
+```go
+package wasm
+
+import (
+    "runtime"
+    "testing"
+)
+
+func TestResolveBinaries_EmptyList(t *testing.T) {
+    result := ResolveBinaries([]string{}, runtime.GOOS)
+    if len(result) != 0 {
+        t.Errorf("expected empty map, got %v", result)
+    }
+}
+
+func TestResolveBinaries_KnownBinary(t *testing.T) {
+    if runtime.GOOS == "windows" {
+        t.Skip("sh not available on windows")
+    }
+    result := ResolveBinaries([]string{"sh"}, runtime.GOOS)
+    if result["sh"] == "" {
+        t.Error("expected non-empty path for sh")
+    }
+}
+
+func TestResolveBinaries_UnknownBinary(t *testing.T) {
+    result := ResolveBinaries([]string{"__orbiter_nonexistent_binary__"}, runtime.GOOS)
+    if result["__orbiter_nonexistent_binary__"] != "" {
+        t.Errorf("expected empty path for nonexistent binary")
+    }
+}
+```
+
+- [ ] **Step 8: Create internal/wasm/resolver.go**
+
+This is a thin delegation to the filesystem integration — no path logic lives here:
+
+```go
+package wasm
+
+import "github.com/orbiterops/orbiter/internal/integrations"
+
+// ResolveBinaries resolves each declared binary name to an absolute path
+// by delegating to the filesystem integration's FindBinary function.
+// Returns a map of name → path; missing binaries have empty-string values.
+func ResolveBinaries(names []string, osName string) map[string]string {
+    result := make(map[string]string)
+    for _, name := range names {
+        result[name] = integrations.FindBinary(name, osName)
+    }
+    return result
+}
+```
+
+- [ ] **Step 9: Run resolver tests**
 
 ```bash
 go test ./internal/wasm/... -v -run TestResolveBinaries
 ```
 
-Expected: all three pass.
+Expected: all pass.
 
-- [ ] **Step 7: Read loader.go**
+- [ ] **Step 10: Read loader.go**
 
 Read `internal/wasm/loader.go` to find the Init/Scan/Calibrate methods and where `ctx` is marshaled.
 
-- [ ] **Step 8: Update loader.go to populate Binaries before WASM invocation**
-
-In `loader.go`, add a helper that enriches the context, then call it in `Init`, `Scan`, and `Calibrate` before `json.Marshal(ctx)`:
+- [ ] **Step 11: Update loader.go to populate Binaries before WASM invocation**
 
 ```go
-// populateBinaries resolves manifest-declared binaries and injects them into ctx.
+// populateBinaries resolves manifest-declared binaries via the filesystem
+// integration and injects them into ctx before the WASM handler is invoked.
 func (w *WASMIntegration) populateBinaries(ctx integrations.ResolvedContext) integrations.ResolvedContext {
     if len(w.manifest.Integration.Binaries) == 0 {
         return ctx
@@ -562,30 +607,23 @@ func (w *WASMIntegration) populateBinaries(ctx integrations.ResolvedContext) int
 }
 ```
 
-Then in each of `Init`, `Scan`, `Calibrate`:
-```go
-func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.StateReport {
-    ctx = w.populateBinaries(ctx)   // ← add this line before marshal
-    input, _ := json.Marshal(ctx)
-    // ... rest unchanged
-}
-```
+Add `ctx = w.populateBinaries(ctx)` as the first line of `Init`, `Scan`, and `Calibrate` before `json.Marshal(ctx)`.
 
-Apply the same one-line addition to `Scan` and `Calibrate`.
-
-- [ ] **Step 9: Run Go tests**
+- [ ] **Step 12: Run Go tests**
 
 ```bash
 go test ./internal/... -v
 ```
 
-Expected: all pass — `Binaries` is `omitempty` so existing tests with no declared binaries are unaffected.
+Expected: all pass.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add internal/integrations/types.go internal/wasm/resolver.go internal/wasm/resolver_test.go internal/wasm/loader.go
-git commit -m "feat: resolve manifest-declared binaries via shell FIND and inject into ResolvedContext"
+git add internal/integrations/types.go internal/integrations/filesystem.go \
+    internal/integrations/filesystem_test.go \
+    internal/wasm/resolver.go internal/wasm/resolver_test.go internal/wasm/loader.go
+git commit -m "feat: filesystem integration owns binary lookup; resolver and loader wire it into ResolvedContext"
 ```
 
 ---

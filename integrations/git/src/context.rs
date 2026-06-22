@@ -24,6 +24,7 @@ pub struct ResolvedContext {
     pub has_agent_transponder: bool,    // true if Transponders["agent"] is non-empty
     pub has_keychain_transponder: bool, // true if Transponders["keychain"] is non-empty
     pub responses: HashMap<String, String>,
+    pub binaries: HashMap<String, String>,
 }
 
 // Parse a ResolvedContext from raw JSON bytes.
@@ -51,6 +52,7 @@ pub fn parse(input: &[u8]) -> Result<ResolvedContext, String> {
     let has_keychain_transponder = transponder_non_empty(s, "keychain");
 
     let responses = parse_responses(s);
+    let binaries = parse_binaries(s);
 
     Ok(ResolvedContext {
         platform,
@@ -59,6 +61,7 @@ pub fn parse(input: &[u8]) -> Result<ResolvedContext, String> {
         has_agent_transponder,
         has_keychain_transponder,
         responses,
+        binaries,
     })
 }
 
@@ -428,4 +431,52 @@ fn find_string_end(s: &str) -> usize {
             _ => {}
         }
     }
+}
+
+/// Parse binaries map from "binaries": {...} object.
+fn parse_binaries(s: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+
+    let binaries_needle = "\"binaries\"";
+    let bin_pos = match s.find(binaries_needle) {
+        Some(p) => p,
+        None => return map,
+    };
+    let after_bin = &s[bin_pos + binaries_needle.len()..];
+    let brace = match after_bin.find('{') {
+        Some(b) => b,
+        None => return map,
+    };
+    let inner = &after_bin[brace + 1..];
+    let close = match find_object_end(inner) {
+        Some(c) => c,
+        None => return map,
+    };
+
+    let binaries_body = &inner[..close];
+    let mut remaining = binaries_body;
+
+    while let Some(quote_pos) = remaining.find('"') {
+        let after_quote = &remaining[quote_pos + 1..];
+        if let Some(close_quote) = after_quote.find('"') {
+            let key = after_quote[..close_quote].to_string();
+            let after_key = &after_quote[close_quote + 1..];
+
+            if let Some(colon_pos) = after_key.find(':') {
+                let after_colon = &after_key[colon_pos + 1..];
+                if let Some(val_quote) = after_colon.find('"') {
+                    let val_str = &after_colon[val_quote + 1..];
+                    if let Some(close_val) = val_str.find('"') {
+                        let value = val_str[..close_val].to_string();
+                        map.insert(key, value);
+                        remaining = &val_str[close_val + 1..];
+                        continue;
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    map
 }

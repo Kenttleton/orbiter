@@ -12,6 +12,8 @@ struct Platform {
 struct DetectContext {
     #[serde(default)]
     platform: Platform,
+    #[serde(default)]
+    binaries: std::collections::HashMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -67,8 +69,12 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let security_path = host::run_command("which", &["security"]);
+    let input = host::read_input();
+    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
+        platform: Platform::default(),
+        binaries: std::collections::HashMap::new(),
+    });
+    let security_path = ctx.binaries.get("security").cloned().unwrap_or_default();
     if security_path.is_empty() {
         write_state(StateReport {
             present: false,

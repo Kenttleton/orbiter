@@ -123,12 +123,21 @@ export fn detect() void {
 
 export fn initialize() void {
     var in_buf: [BUF_SIZE]u8 = undefined;
-    _ = read_input(&in_buf, @intCast(in_buf.len));
+    const input_len = read_input(&in_buf, @intCast(in_buf.len));
+    const input = in_buf[0..input_len];
 
-    var spec1: [BUF_SIZE]u8 = undefined;
-    var out1: [BUF_SIZE]u8 = undefined;
-    const which_args = [_][]const u8{"asdf"};
-    const binary_path = runCmd("which", &which_args, &spec1, &out1);
+    // Try to extract binaries.asdf from context JSON
+    // For now, use a simpler approach: check if input contains "asdf" in binaries
+    var binary_path: []const u8 = "";
+    if (std.mem.indexOf(u8, input, "\"asdf\"") != null) {
+        // Try to extract the path value following "asdf":"
+        if (std.mem.indexOf(u8, input, "\"asdf\":\"")) |pos| {
+            const after_key = input[pos + 9..]; // skip "asdf":"
+            if (std.mem.indexOf(u8, after_key, "\"")) |end_pos| {
+                binary_path = after_key[0..end_pos];
+            }
+        }
+    }
 
     var out_buf: [BUF_SIZE]u8 = undefined;
     if (binary_path.len == 0) {

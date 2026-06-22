@@ -187,18 +187,52 @@ void detect(void) {
     );
 }
 
+/* Extract binary path from binaries.code in the JSON input */
+static size_t extract_binary_path(const uint8_t *input, uint32_t input_len,
+                                   uint8_t *out_buf) {
+    const char *needle = "\"code\":\"";
+    size_t needle_len = 8; // strlen("\"code\":\"")
+
+    for (uint32_t i = 0; i + needle_len < input_len; i++) {
+        int match = 1;
+        for (size_t j = 0; j < needle_len; j++) {
+            if (input[i + j] != (uint8_t)needle[j]) {
+                match = 0;
+                break;
+            }
+        }
+        if (match) {
+            /* Found "code":" — read until closing quote */
+            uint32_t pos = 0;
+            uint32_t src = i + needle_len;
+            while (src < input_len && pos < BUF_SIZE - 1) {
+                if (input[src] == '"') {
+                    out_buf[pos] = '\0';
+                    return pos;
+                }
+                if (input[src] == '\\' && src + 1 < input_len) {
+                    src++; /* skip escape char */
+                }
+                out_buf[pos++] = input[src];
+                src++;
+            }
+        }
+    }
+    return 0;
+}
+
 __attribute__((visibility("default")))
 void initialize(void) {
-    host_read_input(g_input, BUF_SIZE);
+    uint32_t input_len = host_read_input(g_input, BUF_SIZE);
 
-    uint32_t which_n = run_cmd("which", "code", g_cmd_out);
+    uint32_t which_n = extract_binary_path(g_input, input_len, g_cmd_out);
 
     if (which_n == 0) {
-        write_state(0, 0, 0, 0, 0, 0, "code binary not found in PATH");
+        write_state(0, 0, 0, 0, 0, 0, "code binary not found");
         return;
     }
 
-    /* Copy which output to g_tmp for binary_path (null-terminate) */
+    /* Copy output to g_tmp for binary_path (null-terminate) */
     for (uint32_t i = 0; i < which_n && i < BUF_SIZE - 1; i++) {
         g_tmp[i] = g_cmd_out[i];
     }

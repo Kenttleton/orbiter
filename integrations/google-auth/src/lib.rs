@@ -12,6 +12,8 @@ struct Platform {
 struct DetectContext {
     #[serde(default)]
     platform: Platform,
+    #[serde(default)]
+    binaries: std::collections::HashMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -45,7 +47,7 @@ fn write_state(report: StateReport) {
     host::write_output(&serde_json::to_vec(&report).unwrap_or_default());
 }
 
-fn drive_app_installed(os: &str) -> bool {
+fn drive_app_installed(os: &str, binaries: &std::collections::HashMap<String, String>) -> bool {
     match os {
         "darwin" => {
             let result = host::run_command("stat", &["/Applications/Google Drive.app"]);
@@ -53,7 +55,7 @@ fn drive_app_installed(os: &str) -> bool {
         }
         "linux" => {
             // Google Drive has no official Linux app; check for gcloud as a proxy
-            let gcloud = host::run_command("which", &["gcloud"]);
+            let gcloud = binaries.get("gcloud").cloned().unwrap_or_default();
             !gcloud.is_empty()
         }
         _ => false,
@@ -80,13 +82,11 @@ pub extern "C" fn detect() {
     let input = host::read_input();
     let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
         platform: Platform::default(),
+        binaries: std::collections::HashMap::new(),
     });
     let os = &ctx.platform.os;
-    let app_installed = drive_app_installed(os);
-    let gcloud_present = {
-        let p = host::run_command("which", &["gcloud"]);
-        !p.is_empty()
-    };
+    let app_installed = drive_app_installed(os, &ctx.binaries);
+    let gcloud_present = !ctx.binaries.get("gcloud").cloned().unwrap_or_default().is_empty();
     if !app_installed && !gcloud_present {
         host::write_output(b"{\"detected\":false}");
         return;
@@ -106,11 +106,12 @@ pub extern "C" fn initialize() {
     let input = host::read_input();
     let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
         platform: Platform::default(),
+        binaries: std::collections::HashMap::new(),
     });
     let os = &ctx.platform.os;
 
-    let app_installed = drive_app_installed(os);
-    let gcloud_path = host::run_command("which", &["gcloud"]);
+    let app_installed = drive_app_installed(os, &ctx.binaries);
+    let gcloud_path = ctx.binaries.get("gcloud").cloned().unwrap_or_default();
     let gcloud_present = !gcloud_path.is_empty();
 
     if !app_installed && !gcloud_present {
@@ -170,11 +171,12 @@ pub extern "C" fn calibrate() {
     let input = host::read_input();
     let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
         platform: Platform::default(),
+        binaries: std::collections::HashMap::new(),
     });
     let os = &ctx.platform.os;
 
-    let app_installed = drive_app_installed(os);
-    let gcloud_path = host::run_command("which", &["gcloud"]);
+    let app_installed = drive_app_installed(os, &ctx.binaries);
+    let gcloud_path = ctx.binaries.get("gcloud").cloned().unwrap_or_default();
     let gcloud_present = !gcloud_path.is_empty();
 
     if !app_installed && !gcloud_present {

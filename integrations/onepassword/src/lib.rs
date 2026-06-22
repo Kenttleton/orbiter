@@ -1,6 +1,13 @@
 mod host;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
 
 #[derive(Serialize, Default)]
 struct StateReport {
@@ -28,8 +35,9 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let op_path = host::run_command("which", &["op"]);
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let op_path = ctx.binaries.get("op").cloned().unwrap_or_default();
     if op_path.is_empty() {
         write_state(StateReport {
             present: false,
@@ -70,8 +78,9 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let _input = host::read_input();
-    let op_path = host::run_command("which", &["op"]);
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let op_path = ctx.binaries.get("op").cloned().unwrap_or_default();
     if op_path.is_empty() {
         write_state(StateReport {
             present: false,

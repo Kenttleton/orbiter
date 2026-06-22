@@ -9,6 +9,12 @@ struct DetectContext {
     files: HashMap<String, String>,
 }
 
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
+
 #[derive(Serialize)]
 struct SuggestedResource {
     role: String,
@@ -66,8 +72,9 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["docker"]);
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("docker").cloned().unwrap_or_default();
     if binary_path.is_empty() {
         write_state(StateReport {
             present: false,
