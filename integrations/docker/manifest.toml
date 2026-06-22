@@ -3,6 +3,7 @@ brand = "docker"
 name = "Docker"
 description = "Scans and verifies the Docker container runtime"
 roles = ["tool"]
+binaries = ["docker"]
 
 [detection]
 files = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]

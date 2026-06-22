@@ -3,6 +3,7 @@ brand = "git"
 name = "Git"
 description = "Verifies the git tool and authenticates git remote operations"
 roles = ["tool", "file", "env", "agent", "keychain", "vault"]
+binaries = ["git"]
 
 [detection]
 files = [".git/config"]

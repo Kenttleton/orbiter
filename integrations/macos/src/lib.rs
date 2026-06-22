@@ -8,8 +8,16 @@ struct Platform {
     os: String,
 }
 
+/// Context passed to detect() — no binaries field; binaries are not yet resolved.
 #[derive(Deserialize)]
 struct DetectContext {
+    #[serde(default)]
+    platform: Platform,
+}
+
+/// Context passed to initialize(), scan(), calibrate() — includes resolved binaries.
+#[derive(Deserialize)]
+struct ResolvedContext {
     #[serde(default)]
     platform: Platform,
     #[serde(default)]
@@ -70,7 +78,7 @@ pub extern "C" fn detect() {
 #[no_mangle]
 pub extern "C" fn initialize() {
     let input = host::read_input();
-    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
         platform: Platform::default(),
         binaries: std::collections::HashMap::new(),
     });

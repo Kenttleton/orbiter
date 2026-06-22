@@ -3,6 +3,7 @@ brand = "asdf"
 name = "asdf"
 description = "Scans and verifies the asdf version manager"
 roles = ["manager"]
+binaries = ["asdf"]
 
 [detection]
 files = [".tool-versions"]

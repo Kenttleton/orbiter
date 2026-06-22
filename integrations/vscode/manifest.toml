@@ -3,6 +3,7 @@ brand = "vscode"
 name = "Visual Studio Code"
 description = "Detects and verifies the Visual Studio Code editor"
 roles = ["tool"]
+binaries = ["code"]
 
 [detection]
 files = [".vscode/settings.json", ".vscode/launch.json", ".vscode/extensions.json"]

@@ -3,6 +3,7 @@ brand = "macos"
 name = "macOS Keychain"
 description = "Verifies macOS Keychain availability for credential access"
 roles = ["keychain"]
+binaries = ["security"]
 
 [commands]
 timeout_seconds = 15

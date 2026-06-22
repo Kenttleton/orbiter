@@ -8,8 +8,16 @@ struct Platform {
     os: String,
 }
 
+/// Context passed to detect() — no binaries field; binaries are not yet resolved.
 #[derive(Deserialize)]
 struct DetectContext {
+    #[serde(default)]
+    platform: Platform,
+}
+
+/// Context passed to initialize(), scan(), calibrate() — includes resolved binaries.
+#[derive(Deserialize)]
+struct ResolvedContext {
     #[serde(default)]
     platform: Platform,
     #[serde(default)]
@@ -82,11 +90,13 @@ pub extern "C" fn detect() {
     let input = host::read_input();
     let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
         platform: Platform::default(),
-        binaries: std::collections::HashMap::new(),
     });
     let os = &ctx.platform.os;
-    let app_installed = drive_app_installed(os, &ctx.binaries);
-    let gcloud_present = !ctx.binaries.get("gcloud").cloned().unwrap_or_default().is_empty();
+    // detect() runs before binaries are resolved; use run_command directly.
+    let empty_binaries = std::collections::HashMap::new();
+    let app_installed = drive_app_installed(os, &empty_binaries);
+    let gcloud_version = host::run_command("gcloud", &["--version"]);
+    let gcloud_present = !gcloud_version.is_empty();
     if !app_installed && !gcloud_present {
         host::write_output(b"{\"detected\":false}");
         return;
@@ -104,7 +114,7 @@ pub extern "C" fn detect() {
 #[no_mangle]
 pub extern "C" fn initialize() {
     let input = host::read_input();
-    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
         platform: Platform::default(),
         binaries: std::collections::HashMap::new(),
     });
@@ -169,7 +179,7 @@ pub extern "C" fn scan() {
 #[no_mangle]
 pub extern "C" fn calibrate() {
     let input = host::read_input();
-    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or(DetectContext {
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
         platform: Platform::default(),
         binaries: std::collections::HashMap::new(),
     });

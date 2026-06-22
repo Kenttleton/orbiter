@@ -3,6 +3,7 @@ brand = "google-auth"
 name = "Google Auth"
 description = "Guides captains through Google authentication for Google Suite integrations"
 roles = ["agent"]
+binaries = ["gcloud"]
 
 [commands]
 timeout_seconds = 30

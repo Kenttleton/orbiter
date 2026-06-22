@@ -457,22 +457,20 @@ fn parse_binaries(s: &str) -> HashMap<String, String> {
     let mut remaining = binaries_body;
 
     while let Some(quote_pos) = remaining.find('"') {
-        let after_quote = &remaining[quote_pos + 1..];
-        if let Some(close_quote) = after_quote.find('"') {
-            let key = after_quote[..close_quote].to_string();
-            let after_key = &after_quote[close_quote + 1..];
+        let key_rest = &remaining[quote_pos + 1..];
+        let key = read_json_string(key_rest);
+        let key_end = find_string_end(&remaining[quote_pos + 1..]);
+        let after_key = &remaining[quote_pos + 1 + key_end..];
 
-            if let Some(colon_pos) = after_key.find(':') {
-                let after_colon = &after_key[colon_pos + 1..];
-                if let Some(val_quote) = after_colon.find('"') {
-                    let val_str = &after_colon[val_quote + 1..];
-                    if let Some(close_val) = val_str.find('"') {
-                        let value = val_str[..close_val].to_string();
-                        map.insert(key, value);
-                        remaining = &val_str[close_val + 1..];
-                        continue;
-                    }
-                }
+        if let Some(colon_pos) = after_key.find(':') {
+            let after_colon = &after_key[colon_pos + 1..];
+            if let Some(val_quote) = after_colon.find('"') {
+                let val_rest = &after_colon[val_quote + 1..];
+                let value = read_json_string(val_rest);
+                let val_end = find_string_end(val_rest);
+                map.insert(key, value);
+                remaining = &val_rest[val_end..];
+                continue;
             }
         }
         break;

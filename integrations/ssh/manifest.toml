@@ -3,6 +3,7 @@ brand = "ssh"
 name = "SSH Agent"
 description = "Verifies SSH agent availability and loaded key count"
 roles = ["agent"]
+binaries = ["ssh-agent"]
 
 [commands]
 timeout_seconds = 15

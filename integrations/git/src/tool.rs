@@ -17,7 +17,7 @@ pub fn run(ctx: &ResolvedContext, calibrate: bool) {
     let binary_path = ctx.binaries.get("git").cloned().unwrap_or_default();
     let version_out = crate::host::run_command("git", &["--version"]);
 
-    if binary_path.is_empty() {
+    if binary_path.is_empty() && ctx.platform.os != "windows" {
         write_state(&StateReport {
             manager: "system".to_string(),
             error: "git binary not found".to_string(),

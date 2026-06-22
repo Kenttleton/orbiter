@@ -122,22 +122,31 @@ export fn detect() void {
 }
 
 export fn initialize() void {
+    var fba = std.heap.FixedBufferAllocator.init(&stack_mem);
+    const allocator = fba.allocator();
+
     var in_buf: [BUF_SIZE]u8 = undefined;
     const input_len = read_input(&in_buf, @intCast(in_buf.len));
     const input = in_buf[0..input_len];
 
-    // Try to extract binaries.asdf from context JSON
-    // For now, use a simpler approach: check if input contains "asdf" in binaries
-    var binary_path: []const u8 = "";
-    if (std.mem.indexOf(u8, input, "\"asdf\"") != null) {
-        // Try to extract the path value following "asdf":"
-        if (std.mem.indexOf(u8, input, "\"asdf\":\"")) |pos| {
-            const after_key = input[pos + 9..]; // skip "asdf":"
-            if (std.mem.indexOf(u8, after_key, "\"")) |end_pos| {
-                binary_path = after_key[0..end_pos];
+    // Parse binary path from the binaries map in the context JSON.
+    // Copy into a local buffer so the path outlives the parsed allocation.
+    var path_buf: [4096]u8 = undefined;
+    var path_len: usize = 0;
+    if (std.json.parseFromSlice(std.json.Value, allocator, input, .{}) catch null) |parsed| {
+        defer parsed.deinit();
+        if (parsed.value.object.get("binaries")) |bins| {
+            if (bins.object.get("asdf")) |asdf_val| {
+                if (asdf_val == .string) {
+                    const s = asdf_val.string;
+                    const copy_len = @min(s.len, path_buf.len);
+                    @memcpy(path_buf[0..copy_len], s[0..copy_len]);
+                    path_len = copy_len;
+                }
             }
         }
     }
+    const binary_path: []const u8 = path_buf[0..path_len];
 
     var out_buf: [BUF_SIZE]u8 = undefined;
     if (binary_path.len == 0) {

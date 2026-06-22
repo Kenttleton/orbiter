@@ -3,6 +3,7 @@ brand = "onepassword"
 name = "1Password"
 description = "Verifies 1Password CLI authentication state for vault access"
 roles = ["vault"]
+binaries = ["op"]
 
 [commands]
 timeout_seconds = 15
