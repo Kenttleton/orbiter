@@ -81,7 +81,7 @@ build-integration-local:
     cd integrations/local && zig build-exe src/main.zig -target wasm32-freestanding -O ReleaseSmall -fno-entry --export=detect --export=initialize --export=scan --export=calibrate -femit-bin=local.wasm
 
 build-integration-vscode:
-    cd integrations/vscode && ${WASI_SDK_PATH}/bin/clang --target=wasm32-unknown-unknown -O2 -nostdlib -Wl,--no-entry -Wl,--export=detect -Wl,--export=initialize -Wl,--export=scan -Wl,--export=calibrate -o vscode.wasm src/vscode.c
+    cd integrations/vscode && zig cc --target=wasm32-freestanding -O2 -nostdlib -Wl,--no-entry -Wl,--export=detect -Wl,--export=initialize -Wl,--export=scan -Wl,--export=calibrate -o vscode.wasm src/vscode.c
 
 build-integration-github:
     cd integrations/github && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/github.wasm .
