@@ -3,6 +3,7 @@ brand = "rust"
 name = "Rust"
 description = "Scans and verifies the Rust compiler and Cargo toolchain"
 roles = ["runtime"]
+binaries = ["rustc"]
 
 [detection]
 files = ["Cargo.toml"]

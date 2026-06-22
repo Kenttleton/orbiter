@@ -3,6 +3,7 @@ brand = "python"
 name = "Python"
 description = "Scans and verifies the Python 3 runtime"
 roles = ["runtime"]
+binaries = ["python3"]
 
 [detection]
 files = ["pyproject.toml", "requirements.txt", "setup.py"]

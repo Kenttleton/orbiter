@@ -3,6 +3,7 @@ brand = "github"
 name = "GitHub"
 description = "Manages the GitHub CLI (gh), remote repo access, and GitHub auth token"
 roles = ["tool", "remote", "agent"]
+binaries = ["gh"]
 
 [detection]
 files = [".git/config"]

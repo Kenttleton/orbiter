@@ -206,6 +206,29 @@ env = [
 	}
 }
 
+func TestManifest_Binaries(t *testing.T) {
+	raw := `
+[integration]
+brand = "brew"
+name = "Homebrew"
+description = "Package manager"
+roles = ["manager"]
+binaries = ["brew"]
+
+[commands]
+allowed = [
+    { cmd = "brew", description = "Run brew commands" },
+]
+`
+	var m integrations.Manifest
+	if _, err := toml.Decode(raw, &m); err != nil {
+		t.Fatalf("toml decode: %v", err)
+	}
+	if len(m.Integration.Binaries) != 1 || m.Integration.Binaries[0] != "brew" {
+		t.Errorf("expected binaries=[brew], got %v", m.Integration.Binaries)
+	}
+}
+
 func TestRoleType(t *testing.T) {
 	tests := []struct {
 		role string

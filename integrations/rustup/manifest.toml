@@ -3,6 +3,7 @@ brand = "rustup"
 name = "rustup"
 description = "Scans and verifies the Rust toolchain manager"
 roles = ["manager"]
+binaries = ["rustup"]
 
 [dependencies]
   [dependencies.resources]

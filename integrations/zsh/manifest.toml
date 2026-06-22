@@ -3,6 +3,7 @@ brand = "zsh"
 name = "Zsh Shell"
 description = "Integrates Orbiter with zsh via chpwd hook"
 roles = ["shell"]
+binaries = ["zsh"]
 
 [detection]
 [[detection.env]]

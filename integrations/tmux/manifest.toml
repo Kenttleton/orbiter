@@ -3,6 +3,7 @@ brand = "tmux"
 name = "tmux"
 description = "Propagates Orbiter context to the tmux session environment"
 roles = ["multiplexer"]
+binaries = ["tmux"]
 
 [detection]
 # Not auto-detected — attach explicitly to a planet.

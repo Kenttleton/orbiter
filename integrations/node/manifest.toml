@@ -3,6 +3,7 @@ brand = "node"
 name = "Node.js"
 description = "Scans and verifies the Node.js runtime"
 roles = ["runtime"]
+binaries = ["node"]
 
 [detection]
 files = ["package.json"]

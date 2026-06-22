@@ -21,6 +21,7 @@ type ManifestIntegration struct {
 	Name        string   `toml:"name"`
 	Description string   `toml:"description"`
 	Roles       []string `toml:"roles"`
+	Binaries    []string `toml:"binaries"`
 }
 
 // ManifestEnvRule is one env-var detection condition in the [detection] section.

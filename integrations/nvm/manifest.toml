@@ -3,6 +3,7 @@ brand = "nvm"
 name = "nvm"
 description = "Scans and verifies the Node Version Manager"
 roles = ["manager"]
+binaries = ["node"]
 
 [detection]
 files = [".nvmrc", ".node-version"]

@@ -3,6 +3,7 @@ brand = "fish"
 name = "Fish Shell"
 description = "Integrates Orbiter with fish via PWD variable hook"
 roles = ["shell"]
+binaries = ["fish"]
 
 [detection]
 [[detection.env]]

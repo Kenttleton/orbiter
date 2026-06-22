@@ -3,6 +3,7 @@ brand = "make"
 name = "Make"
 description = "Detects and verifies the make build tool"
 roles = ["tool"]
+binaries = ["make"]
 
 [detection]
 files = ["Makefile", "GNUmakefile"]

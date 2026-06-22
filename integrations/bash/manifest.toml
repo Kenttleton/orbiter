@@ -3,6 +3,7 @@ brand = "bash"
 name = "Bash Shell"
 description = "Integrates Orbiter with bash via PROMPT_COMMAND hook"
 roles = ["shell"]
+binaries = ["bash"]
 
 [detection]
 [[detection.env]]

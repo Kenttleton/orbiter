@@ -3,6 +3,7 @@ brand = "just"
 name = "just"
 description = "Detects and verifies the just command runner"
 roles = ["tool"]
+binaries = ["just"]
 
 [detection]
 files = ["Justfile", "justfile"]

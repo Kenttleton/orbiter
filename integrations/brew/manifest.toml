@@ -3,6 +3,7 @@ brand = "brew"
 name = "Homebrew"
 description = "Scans and verifies the Homebrew package manager"
 roles = ["manager"]
+binaries = ["brew"]
 
 [commands]
 timeout_seconds = 30

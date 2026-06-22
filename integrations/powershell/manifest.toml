@@ -3,6 +3,7 @@ brand = "powershell"
 name = "PowerShell"
 description = "Integrates Orbiter with pwsh (PowerShell 7+) via LocationChangedAction hook"
 roles = ["shell"]
+binaries = ["pwsh"]
 
 [detection]
 [[detection.env]]

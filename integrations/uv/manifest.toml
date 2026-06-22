@@ -3,6 +3,7 @@ brand = "uv"
 name = "uv"
 description = "Scans and verifies the uv Python package manager"
 roles = ["manager"]
+binaries = ["uv"]
 
 [detection]
 files = ["uv.lock"]
