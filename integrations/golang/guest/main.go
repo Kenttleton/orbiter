@@ -20,10 +20,17 @@ func main() {}
 
 func ptrOf(b []byte) uint32 { return uint32(uintptr(unsafe.Pointer(&b[0]))) }
 
+// inputBuf and cmdOut are package-level buffers so TinyGo's allocator never
+// reuses their backing arrays for other heap objects while they're in use.
+// This avoids a TinyGo wasm-unknown aliasing bug where the GC reclaims a
+// large local []byte and then reallocates it for the writeState output buffer,
+// causing overlap between the command output and the JSON being built.
+var inputBuf = make([]byte, 64*1024)
+var cmdOut = make([]byte, 64*1024)
+
 func readInput() []byte {
-	buf := make([]byte, 64*1024)
-	n := hostReadInput(ptrOf(buf), uint32(len(buf)))
-	return buf[:n]
+	n := hostReadInput(ptrOf(inputBuf), uint32(len(inputBuf)))
+	return inputBuf[:n]
 }
 
 func writeRaw(b []byte) {
@@ -41,9 +48,8 @@ func runCmd(cmd string, args ...string) string {
 		spec = append(spec, jsonBytes(a)...)
 	}
 	spec = append(spec, `]}`...)
-	out := make([]byte, 64*1024)
-	n := hostRunCommand(ptrOf(spec), uint32(len(spec)), ptrOf(out), uint32(len(out)))
-	return strings.TrimSpace(string(out[:n]))
+	n := hostRunCommand(ptrOf(spec), uint32(len(spec)), ptrOf(cmdOut), uint32(len(cmdOut)))
+	return strings.TrimSpace(string(cmdOut[:n]))
 }
 
 // jsonBytes returns a JSON-quoted string as []byte without reflection or Builder.
@@ -125,16 +131,45 @@ func detect() {
 	writeRaw(append(buf, `}]}`...))
 }
 
+// extractBinaryPath extracts ctx.binaries["name"] from raw ResolvedContext JSON.
+// The JSON shape is: {"binaries":{"go":"/usr/local/go/bin/go",...},...}
+// Uses simple string scanning since gjson is unavailable in wasm-unknown.
+func extractBinaryPath(input []byte, name string) string {
+	s := string(input)
+	key := `"binaries":{`
+	start := strings.Index(s, key)
+	if start < 0 {
+		return ""
+	}
+	sub := s[start+len(key):]
+	end := strings.Index(sub, "}")
+	if end >= 0 {
+		sub = sub[:end]
+	}
+	needle := `"` + name + `":"`
+	idx := strings.Index(sub, needle)
+	if idx < 0 {
+		return ""
+	}
+	rest := sub[idx+len(needle):]
+	close := strings.Index(rest, `"`)
+	if close < 0 {
+		return ""
+	}
+	return rest[:close]
+}
+
 //export initialize
 func initialize() {
-	readInput()
-	binaryPath := runCmd("which", "go")
-	if binaryPath == "" {
-		writeState(false, false, false, "", "system", "go binary not found in PATH", nil)
+	binaryPath := extractBinaryPath(readInput(), "go")
+	present := binaryPath != ""
+	if !present {
+		writeState(false, false, false, "", "system", "go binary not found", nil)
 		return
 	}
 	version := runCmd("go", "version")
-	writeState(true, true, true, binaryPath, "system", "", []string{version})
+	reachable := version != ""
+	writeState(true, reachable, reachable, binaryPath, "system", "", []string{version})
 }
 
 //export scan

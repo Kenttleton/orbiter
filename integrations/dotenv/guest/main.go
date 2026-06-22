@@ -16,14 +16,21 @@ func hostWriteOutput(ptr, length uint32)
 //go:wasmimport orbiter run_command
 func hostRunCommand(specPtr, specLen, outPtr, max uint32) uint32
 
-func main() {}
+// inputBuf is a package-level buffer so TinyGo's allocator never reuses its
+// backing array for other heap objects while it's in use.
+var inputBuf = make([]byte, 64*1024)
+
+func main() {
+	// Retain hostRunCommand in the symbol table to prevent TinyGo dead-code elimination
+	// of the wasm import. File-role integrations never invoke run_command at runtime.
+	_ = hostRunCommand
+}
 
 func ptrOf(b []byte) uint32 { return uint32(uintptr(unsafe.Pointer(&b[0]))) }
 
 func readInput() []byte {
-	buf := make([]byte, 64*1024)
-	n := hostReadInput(ptrOf(buf), uint32(len(buf)))
-	return buf[:n]
+	n := hostReadInput(ptrOf(inputBuf), uint32(len(inputBuf)))
+	return inputBuf[:n]
 }
 
 func writeRaw(b []byte) {
@@ -31,6 +38,7 @@ func writeRaw(b []byte) {
 }
 
 // runCmd builds a {"cmd":"...","args":[...]} spec with hand-rolled JSON.
+// (Never called at runtime for file-role integrations; kept to retain the wasm import.)
 func runCmd(cmd string, args ...string) string {
 	spec := append(append(append([]byte(nil), `{"cmd":`...), jsonBytes(cmd)...), `,"args":[`...)
 	for i, a := range args {
@@ -118,14 +126,9 @@ func detect() {
 	writeRaw([]byte(`{"detected":true,"resources":[{"role":"file","brand":"dotenv"}]}`))
 }
 
-// initialize and scan: report present=true.
-// Use runCmd to keep the code path structurally identical to other integrations
-// (prevents TinyGo dead-code elimination from altering memory layout).
-//
 //export initialize
 func initialize() {
 	readInput()
-	_ = runCmd("which", "ls") // keeps hostRunCommand live; result is discarded
 	writeState(true, true, false, "", "file", "", []string{"dotenv transponder active"})
 }
 
