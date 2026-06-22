@@ -61,3 +61,9 @@ function _OrbiterHook {
 }
 
 $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = { _OrbiterHook }
+
+function FIND {
+    param([string]$Name)
+    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($cmd) { $cmd.Source } else { "" }
+}

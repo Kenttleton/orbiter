@@ -52,5 +52,9 @@ function _orbiter_chpwd() {
     return $_prev
 }
 
+function FIND() {
+    command -v "$1" 2>/dev/null
+}
+
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _orbiter_chpwd

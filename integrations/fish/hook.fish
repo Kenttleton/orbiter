@@ -62,3 +62,7 @@ function _orbiter_hook --on-variable PWD
     end
     return $_prev
 end
+
+function FIND
+    command -v $argv[1] 2>/dev/null
+end

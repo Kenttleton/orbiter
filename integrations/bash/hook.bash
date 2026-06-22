@@ -22,6 +22,11 @@ function orbiter() {
     done <<< "$_out"
 }
 
+function FIND() {
+    command -v "$1" 2>/dev/null
+}
+export -f FIND
+
 function _orbiter_hook() {
     local _prev=$?
     [[ -n "$ORBITER_CWD" && ("$PWD" == "$ORBITER_CWD" || "$PWD" == "$ORBITER_CWD/"*) ]] && return $_prev
