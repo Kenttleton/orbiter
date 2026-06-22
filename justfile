@@ -99,16 +99,16 @@ build-integration-tmux:
     cd integrations/tmux && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/tmux.wasm .
 
 build-integration-bash:
-    cd integrations/bash && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+    cd integrations/bash && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/bash.wasm .
 
 build-integration-zsh:
-    cd integrations/zsh && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+    cd integrations/zsh && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/zsh.wasm .
 
 build-integration-fish:
-    cd integrations/fish && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+    cd integrations/fish && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/fish.wasm .
 
 build-integration-powershell:
-    cd integrations/powershell && npm install && ./node_modules/.bin/asc assembly/index.ts --target release
+    cd integrations/powershell && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/powershell.wasm .
 
 # Cross-compilation target for CI release builds.
 # Usage: just build-release orbiter linux amd64 v1.2.3

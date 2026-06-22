@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
-	_ "github.com/Kenttleton/orbiter/integrations/orbiter"
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
@@ -204,7 +203,7 @@ func TestExecutor_Jump_Confirmed(t *testing.T) {
 
 	path := t.TempDir()
 	config := `{"path":"` + path + `"}`
-	_, _ = exec.SC().CreateResource(ctx, "payment-api-path", "shell", "orbiter", "[]", config)
+	_, _ = exec.SC().CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", config)
 	_, _ = exec.SC().Attach(ctx, "payment-api-path", "payment-api")
 
 	// confirmed=true skips the interactive prompt
@@ -224,7 +223,7 @@ func TestExecutor_Jump_EmitsNeutralDirectives(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme2")
 	_, _ = exec.SC().CreatePlanet(ctx, "payment-api2", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "root-res", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "root-res", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "root-res", "payment-api2")
 
 	directives, err := exec.Jump(ctx, "payment-api2", true)
@@ -244,7 +243,7 @@ func TestExecutor_Hook_SamePlanet_NoOutput(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
 	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "root", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
 
 	alias, _ := exec.SC().Resolve(ctx, "payment-api")
@@ -260,7 +259,7 @@ func TestExecutor_Hook_NewPlanet_EmitsSet(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
 	p, _ := exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "root", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
 
 	directives, err := exec.Hook(ctx, path, "")
@@ -284,7 +283,7 @@ func TestExecutor_Hook_LeavingPlanet_EmitsDepart(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
 	p, _ := exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "root", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "root", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "root", "payment-api")
 
 	directives, err := exec.Hook(ctx, "/tmp", p.ID)
@@ -317,7 +316,7 @@ func TestExecutor_Hook_ExportAllowlist(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "allowlist-galaxy")
 	_, _ = exec.SC().CreatePlanet(ctx, "allowlist-planet", g.ID, "")
 	path := t.TempDir()
-	_, _ = exec.SC().CreateResource(ctx, "allowlist-shell", "shell", "orbiter", "[]", `{"path":"`+path+`"}`)
+	_, _ = exec.SC().CreateResource(ctx, "allowlist-shell", "filesystem", "orbiter", "[]", `{"path":"`+path+`"}`)
 	_, _ = exec.SC().Attach(ctx, "allowlist-shell", "allowlist-planet")
 	_, _ = exec.SC().CreateResource(ctx, "allowlist-env", "env", "stub-export", "[]", "{}")
 	_, _ = exec.SC().Attach(ctx, "allowlist-env", "allowlist-planet")

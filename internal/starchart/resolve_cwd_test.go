@@ -22,11 +22,11 @@ func TestResolveCWD_ExactMatch(t *testing.T) {
 	ctx := context.Background()
 
 	g, _ := sc.CreateGalaxy(ctx, "acme")
-	_, _ = sc.CreateResource(ctx, "acme-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
+	_, _ = sc.CreateResource(ctx, "acme-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
 	_, _ = sc.Attach(ctx, "acme-path", "acme")
 
 	p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
-	_, _ = sc.CreateResource(ctx, "payment-api-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
+	_, _ = sc.CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
 	_, _ = sc.Attach(ctx, "payment-api-path", "payment-api")
 
 	alias, err := sc.ResolveCWD(ctx, "/home/kent/acme")
@@ -40,11 +40,11 @@ func TestResolveCWD_LongestPrefix(t *testing.T) {
 	ctx := context.Background()
 
 	g, _ := sc.CreateGalaxy(ctx, "acme")
-	_, _ = sc.CreateResource(ctx, "acme-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
+	_, _ = sc.CreateResource(ctx, "acme-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
 	_, _ = sc.Attach(ctx, "acme-path", "acme")
 
 	p, _ := sc.CreatePlanet(ctx, "payment-api", g.ID, "")
-	_, _ = sc.CreateResource(ctx, "payment-api-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
+	_, _ = sc.CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
 	_, _ = sc.Attach(ctx, "payment-api-path", "payment-api")
 
 	alias, err := sc.ResolveCWD(ctx, "/home/kent/acme/payment-api/src/handlers")
@@ -65,11 +65,11 @@ func TestResolveCWD_ExactMatchBeatsLongerPrefix(t *testing.T) {
 	ctx := context.Background()
 
 	g, _ := sc.CreateGalaxy(ctx, "acme")
-	_, _ = sc.CreateResource(ctx, "acme-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
+	_, _ = sc.CreateResource(ctx, "acme-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme"))
 	_, _ = sc.Attach(ctx, "acme-path", "acme")
 
 	_, _ = sc.CreatePlanet(ctx, "payment-api", g.ID, "")
-	_, _ = sc.CreateResource(ctx, "payment-api-path", "shell", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
+	_, _ = sc.CreateResource(ctx, "payment-api-path", "filesystem", "orbiter", "[]", shellConfig(t, "/home/kent/acme/payment-api"))
 	_, _ = sc.Attach(ctx, "payment-api-path", "payment-api")
 
 	alias, err := sc.ResolveCWD(ctx, "/home/kent/acme")

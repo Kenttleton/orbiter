@@ -1,6 +1,7 @@
 package integrations
 
 const (
+	ResourceRoleFilesystem  = "filesystem"
 	ResourceRoleManager     = "manager"
 	ResourceRoleRuntime     = "runtime"
 	ResourceRoleTool        = "tool"
@@ -26,6 +27,7 @@ const (
 // RoleTypes maps every role to its type ("resource" or "transponder").
 // Orbiter owns this mapping statically — integrations never declare their type.
 var RoleTypes = map[string]string{
+	ResourceRoleFilesystem:  IntegrationTypeResource,
 	ResourceRoleManager:     IntegrationTypeResource,
 	ResourceRoleRuntime:     IntegrationTypeResource,
 	ResourceRoleTool:        IntegrationTypeResource,

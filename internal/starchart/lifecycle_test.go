@@ -128,21 +128,25 @@ func TestScanBranch_ResourceOrder(t *testing.T) {
 	_, _ = sc.Attach(ctx, "gh-remote", "payment-api")
 	_, _ = sc.CreateResource(ctx, "node-rt", "runtime", "node", "[]", "{}")
 	_, _ = sc.Attach(ctx, "node-rt", "payment-api")
-	_, _ = sc.CreateResource(ctx, "fs", "shell", "orbiter", "[]", `{"path":"/tmp"}`)
+	_, _ = sc.CreateResource(ctx, "bash-shell", "shell", "bash", "[]", "{}")
+	_, _ = sc.Attach(ctx, "bash-shell", "payment-api")
+	_, _ = sc.CreateResource(ctx, "fs", "filesystem", "orbiter", "[]", `{"path":"/tmp"}`)
 	_, _ = sc.Attach(ctx, "fs", "payment-api")
 
 	results, err := sc.ScanBranch(ctx, p.ID)
 	require.NoError(t, err)
 
-	// Verify all three resources were dispatched
-	require.Len(t, results.Resources, 3)
+	// Verify all four resources were dispatched
+	require.Len(t, results.Resources, 4)
 
-	// Verify shell came first in the ordered output
-	assert.Equal(t, "shell", results.Resources[0].Resource.Role,
+	// Verify role order: filesystem → shell → runtime → remote
+	assert.Equal(t, "filesystem", results.Resources[0].Resource.Role,
+		"filesystem must scan before shell")
+	assert.Equal(t, "shell", results.Resources[1].Resource.Role,
 		"shell must scan before runtime")
-	assert.Equal(t, "runtime", results.Resources[1].Resource.Role,
+	assert.Equal(t, "runtime", results.Resources[2].Resource.Role,
 		"runtime must scan before remote")
-	assert.Equal(t, "remote", results.Resources[2].Resource.Role)
+	assert.Equal(t, "remote", results.Resources[3].Resource.Role)
 }
 
 func TestScanBranch_TransponderPass(t *testing.T) {

@@ -18,7 +18,7 @@ func (sc *StarChart) ResolveCWD(ctx context.Context, cwd string) (models.Alias, 
         FROM resources r
         JOIN attachments att ON att.from_id = r.id
         JOIN aliases a ON a.entity = att.to_id
-        WHERE r.role = 'shell' AND r.brand = 'orbiter'
+        WHERE r.role = 'filesystem'
           AND r.config != '' AND r.config != '{}'
     `
 	rows, err := sc.db.QueryContext(ctx, q)
@@ -66,7 +66,7 @@ func (sc *StarChart) ResolveCWD(ctx context.Context, cwd string) (models.Alias, 
 	}
 
 	if bestLen == -1 {
-		return models.Alias{}, fmt.Errorf("%w: no shell resource path matches %q", ErrNotFound, cwd)
+		return models.Alias{}, fmt.Errorf("%w: no filesystem resource path matches %q", ErrNotFound, cwd)
 	}
 	return best.Alias, nil
 }
