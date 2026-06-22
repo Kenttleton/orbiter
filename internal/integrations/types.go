@@ -59,6 +59,7 @@ type ResolvedContext struct {
 	Resources    map[string][]ResolvedResource    `json:"resources"`
 	Transponders map[string][]ResolvedTransponder `json:"transponders"`
 	Responses    map[string]string                `json:"responses,omitempty"`
+	Binaries     map[string]string                `json:"binaries,omitempty"`
 }
 
 // ResolvedResource wraps a resource from the branch with its StateReport

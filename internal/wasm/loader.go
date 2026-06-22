@@ -116,7 +116,18 @@ func (w *WASMIntegration) Detect(ctx integrations.DetectContext) integrations.De
 	return report
 }
 
+// populateBinaries resolves manifest-declared binaries via the filesystem
+// integration and injects them into ctx before the WASM handler is invoked.
+func (w *WASMIntegration) populateBinaries(ctx integrations.ResolvedContext) integrations.ResolvedContext {
+	if len(w.manifest.Integration.Binaries) == 0 {
+		return ctx
+	}
+	ctx.Binaries = ResolveBinaries(w.manifest.Integration.Binaries, ctx.Platform.OS)
+	return ctx
+}
+
 func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.StateReport {
+	ctx = w.populateBinaries(ctx)
 	input, _ := json.Marshal(ctx)
 	out, err := w.invoke(context.Background(), "initialize", input)
 	if err != nil {
@@ -131,6 +142,7 @@ func (w *WASMIntegration) Init(ctx integrations.ResolvedContext) integrations.St
 }
 
 func (w *WASMIntegration) Scan(ctx integrations.ResolvedContext) integrations.StateReport {
+	ctx = w.populateBinaries(ctx)
 	input, _ := json.Marshal(ctx)
 	out, err := w.invoke(context.Background(), "scan", input)
 	if err != nil {
@@ -145,6 +157,7 @@ func (w *WASMIntegration) Scan(ctx integrations.ResolvedContext) integrations.St
 }
 
 func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
+	ctx = w.populateBinaries(ctx)
 	input, _ := json.Marshal(ctx)
 	out, err := w.invoke(context.Background(), "calibrate", input)
 	if err != nil {
