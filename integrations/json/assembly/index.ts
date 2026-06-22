@@ -39,7 +39,7 @@ export function initialize(): void {
 }
 
 export function scan(): void {
-  writeStr('{"present":true,"reachable":true,"manager":"json"}');
+  calibrate();
 }
 
 export function calibrate(): void {

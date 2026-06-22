@@ -61,6 +61,21 @@ function writeState(
   writeStr(obj.stringify());
 }
 
+function extractBinaryPath(input: string, name: string): string {
+  const start = input.indexOf('"binaries":{');
+  if (start < 0) return "";
+  const sub = input.slice(start + '"binaries":{'.length);
+  const end = sub.indexOf("}");
+  const block = end >= 0 ? sub.slice(0, end) : sub;
+  const needle = '"' + name + '":"';
+  const idx = block.indexOf(needle);
+  if (idx < 0) return "";
+  const rest = block.slice(idx + needle.length);
+  const close = rest.indexOf('"');
+  if (close < 0) return "";
+  return rest.slice(0, close);
+}
+
 export function detect(): void {
   const inputBytes = readInput();
   const inputStr = String.UTF8.decode(inputBytes.buffer);
@@ -92,14 +107,16 @@ export function detect(): void {
 }
 
 export function initialize(): void {
-  readInput();
-  const binaryPath = runCmd("which", ["just"]);
-  if (binaryPath.length == 0) {
-    writeState(false, false, false, "", "system", "just not found in PATH", []);
+  const input = String.UTF8.decode(readInput().buffer);
+  const binaryPath = extractBinaryPath(input, "just");
+  const present = binaryPath.length > 0;
+  if (!present) {
+    writeState(false, false, false, "", "system", "just not found", []);
     return;
   }
   const version = runCmd("just", ["--version"]);
-  writeState(true, true, true, binaryPath, "system", "", [version]);
+  const reachable = version.length > 0;
+  writeState(true, reachable, reachable, binaryPath, "system", "", [version]);
 }
 
 export function scan(): void {
@@ -107,11 +124,14 @@ export function scan(): void {
 }
 
 export function calibrate(): void {
-  readInput();
-  const version = runCmd("just", ["--version"]);
-  if (version.length == 0) {
+  const input = String.UTF8.decode(readInput().buffer);
+  const binaryPath = extractBinaryPath(input, "just");
+  const present = binaryPath.length > 0;
+  if (!present) {
     writeState(false, false, false, "", "system", "just not found", []);
     return;
   }
-  writeState(true, true, true, "", "system", "", ["calibrated: " + version]);
+  const version = runCmd("just", ["--version"]);
+  const reachable = version.length > 0;
+  writeState(true, reachable, reachable, binaryPath, "system", "", ["calibrated: " + version]);
 }

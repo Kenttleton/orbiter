@@ -61,6 +61,21 @@ function writeState(
   writeStr(obj.stringify());
 }
 
+function extractBinaryPath(input: string, name: string): string {
+  const start = input.indexOf('"binaries":{');
+  if (start < 0) return "";
+  const sub = input.slice(start + '"binaries":{'.length);
+  const end = sub.indexOf("}");
+  const block = end >= 0 ? sub.slice(0, end) : sub;
+  const needle = '"' + name + '":"';
+  const idx = block.indexOf(needle);
+  if (idx < 0) return "";
+  const rest = block.slice(idx + needle.length);
+  const close = rest.indexOf('"');
+  if (close < 0) return "";
+  return rest.slice(0, close);
+}
+
 export function detect(): void {
   const inputBytes = readInput();
   const inputStr = String.UTF8.decode(inputBytes.buffer);
@@ -94,17 +109,15 @@ export function detect(): void {
 }
 
 export function initialize(): void {
-  readInput();
-  // nvm is a shell function, not a binary — we cannot reliably resolve NVM_DIR
-  // from a WASM guest without calling `sh` (which is banned). Instead, report
-  // nvm as present when detected (context had .nvmrc/.node-version). Report the
-  // active node version as an observation if node is in PATH.
-  const nodeVersion = runCmd("node", ["--version"]);
+  const input = String.UTF8.decode(readInput().buffer);
+  const nodePath = extractBinaryPath(input, "node");
+  const present = nodePath.length > 0;
   const observations: string[] = ["manager: nvm"];
-  if (nodeVersion.length > 0) {
-    observations.push("active node: " + nodeVersion);
+  if (present) {
+    const version = runCmd("node", ["--version"]);
+    if (version.length > 0) observations.push("active node: " + version);
   }
-  writeState(true, true, false, "", "nvm", "", observations);
+  writeState(present, present, false, "", "nvm", "", observations);
 }
 
 export function scan(): void {
@@ -112,11 +125,13 @@ export function scan(): void {
 }
 
 export function calibrate(): void {
-  readInput();
-  const nodeVersion = runCmd("node", ["--version"]);
-  const observations: string[] = ["calibrated: nvm"];
-  if (nodeVersion.length > 0) {
-    observations.push("active node: " + nodeVersion);
+  const input = String.UTF8.decode(readInput().buffer);
+  const nodePath = extractBinaryPath(input, "node");
+  const present = nodePath.length > 0;
+  const observations: string[] = ["manager: nvm"];
+  if (present) {
+    const version = runCmd("node", ["--version"]);
+    if (version.length > 0) observations.push("active node: " + version);
   }
-  writeState(true, true, false, "", "nvm", "", observations);
+  writeState(present, present, false, "", "nvm", "", observations);
 }
