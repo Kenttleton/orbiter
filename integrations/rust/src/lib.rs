@@ -9,6 +9,12 @@ struct DetectContext {
     files: HashMap<String, String>,
 }
 
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
+
 #[derive(Serialize)]
 struct SuggestedResource {
     role: String,
@@ -76,9 +82,11 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["rustc"]);
-    if binary_path.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("rustc").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -97,13 +105,13 @@ pub extern "C" fn initialize() {
     } else {
         "system".to_string()
     };
-    let mut observations = vec![rustc_version, cargo_version];
+    let mut observations = vec![rustc_version.clone(), cargo_version];
     if !toolchain.is_empty() {
         observations.push(toolchain);
     }
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !rustc_version.is_empty(),
         binary_path: Some(binary_path),
         in_path: true,
         manager,
@@ -119,9 +127,11 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let _input = host::read_input();
-    let rustc_version = host::run_command("rustc", &["--version"]);
-    if rustc_version.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("rustc").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -132,10 +142,11 @@ pub extern "C" fn calibrate() {
         });
         return;
     }
+    let rustc_version = host::run_command("rustc", &["--version"]);
     let toolchain = host::run_command("rustup", &["show", "active-toolchain"]);
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !rustc_version.is_empty(),
         in_path: true,
         manager: if toolchain.is_empty() {
             "system".to_string()

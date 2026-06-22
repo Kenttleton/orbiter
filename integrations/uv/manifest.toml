@@ -12,7 +12,6 @@ files = ["uv.lock"]
 timeout_seconds = 30
 allowed = [
   { cmd = "uv",    description = "Python package manager operations" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [runtime]

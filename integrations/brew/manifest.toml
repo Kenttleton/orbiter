@@ -9,7 +9,6 @@ binaries = ["brew"]
 timeout_seconds = 30
 allowed = [
   { cmd = "brew",  description = "Homebrew package manager operations" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [runtime]

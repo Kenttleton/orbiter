@@ -13,7 +13,6 @@ timeout_seconds = 60
 allowed = [
   { cmd = "gh",    description = "GitHub CLI operations (PRs, issues, auth)" },
   { cmd = "git",   description = "VCS operations" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [shell]

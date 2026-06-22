@@ -21,6 +21,8 @@ struct SelfEntity {
 struct ResolvedContext {
     #[serde(rename = "self", default)]
     entity: SelfEntity,
+    #[serde(default)]
+    binaries: HashMap<String, String>,
 }
 
 #[derive(Serialize)]
@@ -88,7 +90,7 @@ pub extern "C" fn initialize() {
     match ctx.entity.role.as_str() {
         "remote" => scan_remote(),
         "agent"  => scan_agent(),
-        _        => scan_tool(),  // "tool" and default
+        _        => scan_tool(&ctx),  // "tool" and default
     }
 }
 
@@ -99,9 +101,10 @@ pub extern "C" fn scan() {
 
 // ── tool role ──────────────────────────────────────────────────────────────
 
-fn scan_tool() {
-    let binary_path = host::run_command("which", &["gh"]);
-    if binary_path.is_empty() {
+fn scan_tool(ctx: &ResolvedContext) {
+    let binary_path = ctx.binaries.get("gh").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -115,7 +118,7 @@ fn scan_tool() {
     let version = host::run_command("gh", &["--version"]);
     let auth_status = host::run_command("gh", &["auth", "status"]);
     let authenticated = !auth_status.contains("not logged in") && !auth_status.is_empty();
-    let mut observations = vec![version];
+    let mut observations = vec![version.clone()];
     if authenticated {
         observations.push("auth: logged in".to_string());
     } else {
@@ -123,7 +126,7 @@ fn scan_tool() {
     }
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !version.is_empty(),
         binary_path: Some(binary_path),
         in_path: true,
         manager: "system".to_string(),
@@ -205,13 +208,13 @@ pub extern "C" fn calibrate() {
     match ctx.entity.role.as_str() {
         "remote" => calibrate_remote(),
         "agent"  => calibrate_agent(),
-        _        => calibrate_tool(),
+        _        => calibrate_tool(&ctx),
     }
 }
 
-fn calibrate_tool() {
+fn calibrate_tool(ctx: &ResolvedContext) {
     // Tool calibrate: verify gh is present and auth is valid
-    scan_tool();
+    scan_tool(ctx);
 }
 
 fn calibrate_remote() {

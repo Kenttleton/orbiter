@@ -19,6 +19,8 @@ struct SelfResource {
 struct ResolvedContext {
     #[serde(rename = "self", default)]
     self_res: Option<SelfResource>,
+    #[serde(default)]
+    binaries: HashMap<String, String>,
 }
 
 #[derive(Serialize, Default)]
@@ -56,10 +58,16 @@ pub extern "C" fn initialize() {
 
 #[no_mangle]
 pub extern "C" fn scan() {
-    let tmux_path = host::run_command("which", &["tmux"]);
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
+        self_res: None,
+        binaries: HashMap::new(),
+    });
+    let binary_path = ctx.binaries.get("tmux").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
     write_state(StateReport {
-        present: !tmux_path.is_empty(),
-        reachable: !tmux_path.is_empty(),
+        present,
+        reachable: present,
         manager: "system".to_string(),
         ..Default::default()
     });
@@ -70,27 +78,29 @@ pub extern "C" fn calibrate() {
     let input = host::read_input();
     let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or(ResolvedContext {
         self_res: None,
+        binaries: HashMap::new(),
     });
     let cfg = parse_config(&ctx);
 
+    let binary_path = ctx.binaries.get("tmux").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+
     if cfg.vars.is_empty() {
         write_state(StateReport {
-            present: true,
-            reachable: true,
+            present,
+            reachable: present,
             manager: "system".to_string(),
             ..Default::default()
         });
         return;
     }
 
-    let tmux_path = host::run_command("which", &["tmux"]);
-    if tmux_path.is_empty() {
-        // tmux not installed or not in PATH — no-op, not an error.
+    if !present {
         write_state(StateReport {
-            present: true,
-            reachable: true,
+            present: false,
+            reachable: false,
             manager: "system".to_string(),
-            observations: vec!["tmux not in PATH — skipped".to_string()],
+            observations: vec!["tmux not found — skipped".to_string()],
             ..Default::default()
         });
         return;

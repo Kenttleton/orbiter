@@ -12,7 +12,6 @@ binaries = ["tmux"]
 timeout_seconds = 5
 allowed = [
   { cmd = "tmux",  description = "Terminal multiplexer session management" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [runtime]

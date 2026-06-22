@@ -1,6 +1,13 @@
 mod host;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
 
 #[derive(Serialize, Default)]
 struct StateReport {
@@ -29,9 +36,11 @@ pub extern "C" fn detect() {
 }
 
 fn check_pwsh() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["pwsh"]);
-    if binary_path.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("pwsh").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,

@@ -9,6 +9,12 @@ struct DetectContext {
     files: HashMap<String, String>,
 }
 
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
+
 #[derive(Serialize)]
 struct SuggestedResource {
     role: String,
@@ -76,9 +82,11 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["python3"]);
-    if binary_path.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("python3").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -93,7 +101,7 @@ pub extern "C" fn initialize() {
     let manager = detect_manager();
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !version.is_empty(),
         binary_path: Some(binary_path),
         in_path: true,
         manager,
@@ -109,9 +117,11 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let _input = host::read_input();
-    let version = host::run_command("python3", &["--version"]);
-    if version.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("python3").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -122,9 +132,10 @@ pub extern "C" fn calibrate() {
         });
         return;
     }
+    let version = host::run_command("python3", &["--version"]);
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !version.is_empty(),
         in_path: true,
         manager: detect_manager(),
         observations: vec![format!("calibrated: {}", version)],
@@ -134,11 +145,11 @@ pub extern "C" fn calibrate() {
 
 fn detect_manager() -> String {
     // Check for uv first (fastest), then pyenv, fall back to system
-    let uv = host::run_command("which", &["uv"]);
+    let uv = host::run_command("uv", &["--version"]);
     if !uv.is_empty() {
         return "uv".to_string();
     }
-    let pyenv = host::run_command("which", &["pyenv"]);
+    let pyenv = host::run_command("pyenv", &["--version"]);
     if !pyenv.is_empty() {
         return "pyenv".to_string();
     }

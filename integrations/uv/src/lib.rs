@@ -9,6 +9,12 @@ struct DetectContext {
     files: HashMap<String, String>,
 }
 
+#[derive(Deserialize, Default)]
+struct ResolvedContext {
+    #[serde(default)]
+    binaries: HashMap<String, String>,
+}
+
 #[derive(Serialize)]
 struct SuggestedResource {
     role: String,
@@ -64,9 +70,11 @@ pub extern "C" fn detect() {
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    let _input = host::read_input();
-    let binary_path = host::run_command("which", &["uv"]);
-    if binary_path.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("uv").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -80,7 +88,7 @@ pub extern "C" fn initialize() {
     let version = host::run_command("uv", &["--version"]);
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !version.is_empty(),
         binary_path: Some(binary_path),
         in_path: true,
         manager: "system".to_string(),
@@ -96,9 +104,11 @@ pub extern "C" fn scan() {
 
 #[no_mangle]
 pub extern "C" fn calibrate() {
-    let _input = host::read_input();
-    let version = host::run_command("uv", &["--version"]);
-    if version.is_empty() {
+    let input = host::read_input();
+    let ctx: ResolvedContext = serde_json::from_slice(&input).unwrap_or_default();
+    let binary_path = ctx.binaries.get("uv").cloned().unwrap_or_default();
+    let present = !binary_path.is_empty();
+    if !present {
         write_state(StateReport {
             present: false,
             reachable: false,
@@ -109,9 +119,10 @@ pub extern "C" fn calibrate() {
         });
         return;
     }
+    let version = host::run_command("uv", &["--version"]);
     write_state(StateReport {
         present: true,
-        reachable: true,
+        reachable: !version.is_empty(),
         in_path: true,
         manager: "system".to_string(),
         observations: vec![format!("calibrated: {}", version)],
