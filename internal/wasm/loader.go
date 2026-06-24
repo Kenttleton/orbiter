@@ -116,13 +116,12 @@ func (w *WASMIntegration) Detect(ctx integrations.DetectContext) integrations.De
 	return report
 }
 
-// populateBinaries resolves manifest-declared binaries via the filesystem
-// integration and injects them into ctx before the WASM handler is invoked.
+// populateBinaries is a temporary compilation stub. The real implementation
+// belongs in lifecycle.go — filesystem resolution (binaries, files, dirs, envs)
+// is a lifecycle concern resolved during branch crawls before WASM dispatch,
+// not a WASM integration concern. This stub will be deleted when the FIND spec
+// is implemented and lifecycle.go takes over context population.
 func (w *WASMIntegration) populateBinaries(ctx integrations.ResolvedContext) integrations.ResolvedContext {
-	if len(w.manifest.Integration.Binaries) == 0 {
-		return ctx
-	}
-	ctx.Binaries = ResolveBinaries(w.manifest.Integration.Binaries, ctx.Platform.OS)
 	return ctx
 }
 
