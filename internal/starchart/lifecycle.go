@@ -261,8 +261,9 @@ func (sc *StarChart) scanFilesystemResource(ctx context.Context, r models.Resour
 
 	report := integrations.StateReport{InstallDir: path.IntoNative()}
 	if path.IntoNative() != "" {
-		if _, err := os.Stat(path.IntoNative()); err == nil {
+		if info, err := os.Stat(path.IntoNative()); err == nil {
 			report.Present = true
+			report.Reachable = info.IsDir()
 		}
 	}
 
@@ -289,8 +290,9 @@ func (sc *StarChart) calibrateFilesystemResource(ctx context.Context, r models.R
 
 	before := integrations.StateReport{InstallDir: path.IntoNative()}
 	if path.IntoNative() != "" {
-		if _, err := os.Stat(path.IntoNative()); err == nil {
+		if info, err := os.Stat(path.IntoNative()); err == nil {
 			before.Present = true
+			before.Reachable = info.IsDir()
 		}
 	}
 
