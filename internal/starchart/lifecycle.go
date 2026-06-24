@@ -303,7 +303,7 @@ func (sc *StarChart) calibrateFilesystemResource(ctx context.Context, r models.R
 		return ResourceCalibrateResult{}, err
 	}
 	action := "healthy"
-	if !before.Present {
+	if status != models.BeaconStatusHealthy {
 		action = "drifted"
 	}
 	return ResourceCalibrateResult{
