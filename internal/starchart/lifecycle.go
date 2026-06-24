@@ -251,7 +251,72 @@ func roleIndex(role string) int {
 	return len(resourceRoleOrder)
 }
 
+// scanFilesystemResource handles resources with the filesystem role natively.
+// It normalizes the configured path and checks existence via os.Stat.
+// A missing path signals drift — the recorded location no longer exists.
+// Orbiter surfaces this via the beacon so the Captain can act.
+func (sc *StarChart) scanFilesystemResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceScanResult, error) {
+	resolved := BuildResolvedContext(r, lb, integrations.Manifest{})
+	path := integrations.PathFromConfig(resolved)
+
+	report := integrations.StateReport{InstallDir: path.IntoNative()}
+	if path.IntoNative() != "" {
+		if _, err := os.Stat(path.IntoNative()); err == nil {
+			report.Present = true
+		}
+	}
+
+	status := scanBeaconStatus(report)
+	if err := sc.setBeaconStatus(ctx, r.ID, status, report.Observations); err != nil {
+		return ResourceScanResult{}, err
+	}
+	return ResourceScanResult{
+		Resource:     r,
+		Report:       report,
+		BeaconStatus: status,
+	}, nil
+}
+
+// calibrateFilesystemResource handles calibration for filesystem-role resources natively.
+// Filesystem drift — a recorded path that no longer exists at its expected location —
+// is Orbiter's concern: the resource was registered at a specific location and that
+// location is now gone or moved. Orbiter detects this and surfaces it so the Captain
+// can update the path or reinstall. Orbiter cannot auto-correct a moved path; only the
+// Captain knows whether the directory moved, was deleted, or needs to be recreated.
+func (sc *StarChart) calibrateFilesystemResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceCalibrateResult, error) {
+	resolved := BuildResolvedContext(r, lb, integrations.Manifest{})
+	path := integrations.PathFromConfig(resolved)
+
+	before := integrations.StateReport{InstallDir: path.IntoNative()}
+	if path.IntoNative() != "" {
+		if _, err := os.Stat(path.IntoNative()); err == nil {
+			before.Present = true
+		}
+	}
+
+	// No corrective action is possible — report the current state as-is.
+	// A missing path means drift; action reflects this for the Captain.
+	status := scanBeaconStatus(before)
+	if err := sc.setBeaconStatus(ctx, r.ID, status, before.Observations); err != nil {
+		return ResourceCalibrateResult{}, err
+	}
+	action := "healthy"
+	if !before.Present {
+		action = "drifted"
+	}
+	return ResourceCalibrateResult{
+		Resource: r,
+		Before:   before,
+		After:    before,
+		Action:   action,
+	}, nil
+}
+
 func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceScanResult, error) {
+	// Filesystem resources are handled natively — no WASM integration dispatch.
+	if r.Role == integrations.ResourceRoleFilesystem {
+		return sc.scanFilesystemResource(ctx, r, lb)
+	}
 	integration, ok := sc.integrations.Get(r.Role, r.Brand)
 	if !ok {
 		status := models.BeaconStatusFailed
@@ -272,6 +337,10 @@ func (sc *StarChart) scanResource(ctx context.Context, r models.Resource, lb Lev
 }
 
 func (sc *StarChart) calibrateResource(ctx context.Context, r models.Resource, lb LeveledBranch) (ResourceCalibrateResult, error) {
+	// Filesystem resources are handled natively — no WASM integration dispatch.
+	if r.Role == integrations.ResourceRoleFilesystem {
+		return sc.calibrateFilesystemResource(ctx, r, lb)
+	}
 	scanResult, err := sc.scanResource(ctx, r, lb)
 	if err != nil {
 		return ResourceCalibrateResult{}, err
