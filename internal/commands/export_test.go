@@ -22,6 +22,7 @@ func NewRootCommandForTest(sc *starchart.StarChart) *cobra.Command {
 
 	root.AddCommand(
 		newRelayCmd(d),
+		newUplinkCmd(d),
 	)
 
 	return root

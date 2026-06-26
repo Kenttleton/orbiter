@@ -109,6 +109,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 		newStarChartCmd(&d),
 		newAttachCmd(&d),
 		newRelayCmd(&d),
+		newUplinkCmd(&d),
 		newCompletionsCmd(root),
 	)
 
