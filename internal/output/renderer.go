@@ -8,19 +8,22 @@ const (
 
 // PlanStep represents one step in a Chart or transition plan.
 type PlanStep struct {
-	Action      string // "add", "change", "remove"
-	EntityType  string
-	Name        string
-	Description string
+	Action      string `json:"action"`       // "add" | "change" | "remove"
+	EntityType  string `json:"entity_type"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // ProgressStep represents one task in a running operation's step list.
 type ProgressStep struct {
 	// ThematicLabel is the sci-fi themed label shown in default mode.
-	ThematicLabel string
+	ThematicLabel string `json:"thematic_label"`
 	// PlainLabel is the operational description always shown alongside the thematic label,
 	// and shown exclusively in verbose mode.
-	PlainLabel string
+	PlainLabel string `json:"plain_label"`
+	// Status is the current state of the step: "pending" | "running" | "done" | "failed".
+	// Empty string means the step has not started. Used by the JSON renderer.
+	Status string `json:"status,omitempty"`
 }
 
 // ProgressList tracks progress through a known set of steps.
