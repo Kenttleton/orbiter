@@ -23,6 +23,8 @@ const (
 	EntityTypeBeacon      = "bk"
 	EntityTypeNavHistory  = "nh"
 	EntityTypeAttachment  = "at"
+	EntityTypeTx          = "tx" // Transaction — one per Orbiter↔client interaction
+	EntityTypeSs          = "ss" // Session — one per Orbiter invocation
 )
 
 // OrbitID is the parsed form of a 16-character OrbitID string.

@@ -99,4 +99,29 @@ CREATE TABLE IF NOT EXISTS attachments (
     UNIQUE(from_id, to_id)
 );
 
+-- Sessions track active Orbiter invocations.
+-- Supports multiple concurrent sessions without relying on environment variables.
+-- ID embeds creation timestamp — no created_at column needed.
+CREATE TABLE IF NOT EXISTS sessions (
+    id     TEXT PRIMARY KEY,                -- models.NewID("ss") snowflake
+    status TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'complete' | 'failed'
+    meta   TEXT                             -- JSON: what the session is resolving e.g. {"op":"INIT","branch":"main"}
+);
+
+CREATE INDEX IF NOT EXISTS sessions_status_idx ON sessions (status);
+
+-- Transactions record every Orbiter↔client interaction within a session.
+-- ID embeds creation timestamp — no created_at column needed.
+CREATE TABLE IF NOT EXISTS transactions (
+    id         TEXT PRIMARY KEY,                    -- models.NewID("tx") snowflake
+    session_id TEXT NOT NULL,                       -- references sessions(id)
+    op         TEXT NOT NULL,                       -- FIND_BINARY | FIND_FILE | FIND_DIR | FIND_ENV | SELECT | CONFIRM | TEXT
+    args       TEXT NOT NULL,                       -- JSON: operation arguments
+    status     TEXT NOT NULL DEFAULT 'pending',     -- 'pending' | 'relayed' | 'processed'
+    payload    TEXT,                                -- JSON: the event data Orbiter sent (for audit/debug)
+    response   TEXT                                 -- JSON: the relay response from client (NULL until relayed)
+);
+
+CREATE INDEX IF NOT EXISTS transactions_session_status_idx ON transactions (session_id, status);
+
 INSERT INTO schema_version (version) VALUES (1);
