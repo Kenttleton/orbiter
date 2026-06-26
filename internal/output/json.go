@@ -2,7 +2,10 @@ package output
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+
+	"github.com/Kenttleton/orbiter/internal/models"
 )
 
 // JSONRenderer produces machine-readable JSON output.
@@ -23,7 +26,13 @@ func (r *JSONRenderer) Success(_ string) {}
 func (r *JSONRenderer) Warning(_ string) {}
 func (r *JSONRenderer) Error(_ string)   {}
 
-func (r *JSONRenderer) Plan(_ []PlanStep) {}
+func (jr *JSONRenderer) Plan(steps []PlanStep) {
+	data, err := json.Marshal(steps)
+	if err != nil {
+		return
+	}
+	jr.emitEvent("plan", models.NewID("tx"), data)
+}
 
 func (r *JSONRenderer) Table(_ []string, _ [][]string) {}
 
@@ -39,10 +48,25 @@ func (r *JSONRenderer) JSON(v any) error {
 
 func (r *JSONRenderer) IsVerbose() bool { return r.verbose }
 
-// Prompt implements Renderer. Emits a captain_prompt event; response arrives via orbiter relay.
-// Stub: full implementation in Task 4.
+// Prompt implements Renderer for JSON mode. Emits a captain_prompt event and returns ("", nil).
+// The caller must insert the transaction record before calling Prompt.
+// The Captain's response arrives asynchronously via orbiter relay.
 func (jr *JSONRenderer) Prompt(p CaptainPrompt) (string, error) {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	jr.emitEvent("captain_prompt", p.Txn, data)
 	return "", nil
+}
+
+func (jr *JSONRenderer) emitEvent(eventType, txn string, data json.RawMessage) {
+	e := Event{Type: eventType, Txn: txn, Data: data}
+	b, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	fmt.Fprintln(jr.w, string(b))
 }
 
 // noopProgressList is returned by JSONRenderer.Progress — no terminal output.

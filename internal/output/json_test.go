@@ -3,6 +3,7 @@ package output_test
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/output"
@@ -40,4 +41,66 @@ func TestJSONRendererIsVerbose(t *testing.T) {
 
 	r2 := output.NewJSONRenderer(&buf, false)
 	require.False(t, r2.IsVerbose())
+}
+
+func TestJSONRenderer_Plan_emitsEvent(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Plan([]output.PlanStep{
+		{Action: "add", EntityType: "resource", Name: "brew", Description: "package manager"},
+	})
+	line := strings.TrimSpace(buf.String())
+	var e output.Event
+	if err := json.Unmarshal([]byte(line), &e); err != nil {
+		t.Fatalf("unmarshal Event: %v — raw: %s", err, line)
+	}
+	if e.Type != "plan" {
+		t.Errorf("Type = %q, want plan", e.Type)
+	}
+	if len(e.Txn) != 16 {
+		t.Errorf("Txn = %q, expected 16-char snowflake", e.Txn)
+	}
+	var steps []output.PlanStep
+	if err := json.Unmarshal(e.Data, &steps); err != nil {
+		t.Fatalf("unmarshal Data: %v", err)
+	}
+	if len(steps) != 1 || steps[0].Name != "brew" {
+		t.Errorf("unexpected steps: %+v", steps)
+	}
+}
+
+func TestJSONRenderer_Prompt_emitsCaptainPromptEvent(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	resp, err := r.Prompt(output.CaptainPrompt{
+		Txn:     "b4g3l2c9tx0s3n5q",
+		Op:      "SELECT",
+		Variant: "single",
+		Message: "choose",
+		Options: []string{"/a", "/b"},
+	})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != "" {
+		t.Errorf("resp = %q, want empty (async — response via relay)", resp)
+	}
+	line := strings.TrimSpace(buf.String())
+	var e output.Event
+	if err := json.Unmarshal([]byte(line), &e); err != nil {
+		t.Fatalf("unmarshal Event: %v — raw: %s", err, line)
+	}
+	if e.Type != "captain_prompt" {
+		t.Errorf("Type = %q, want captain_prompt", e.Type)
+	}
+	if e.Txn != "b4g3l2c9tx0s3n5q" {
+		t.Errorf("Txn = %q, want b4g3l2c9tx0s3n5q", e.Txn)
+	}
+	var cp output.CaptainPrompt
+	if err := json.Unmarshal(e.Data, &cp); err != nil {
+		t.Fatalf("unmarshal CaptainPrompt: %v", err)
+	}
+	if cp.Op != "SELECT" {
+		t.Errorf("Op = %q, want SELECT", cp.Op)
+	}
 }
