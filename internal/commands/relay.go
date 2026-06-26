@@ -46,6 +46,7 @@ Accepts --response=<json> or reads JSON from stdin when --response is omitted.`,
 	}
 
 	cmd.Flags().StringVar(&txnID, "txn", "", "transaction ID to relay (required)")
+	_ = cmd.MarkFlagRequired("txn")
 	cmd.Flags().StringVar(&response, "response", "", "JSON response payload (reads stdin if omitted)")
 	return cmd
 }
