@@ -91,3 +91,63 @@ func TestStyledRendererVerboseShowsNoTheme(t *testing.T) {
 	require.Contains(t, out, "verbose message")
 	require.False(t, strings.Contains(out, "★"), "verbose mode should not show thematic decoration")
 }
+
+func TestStyledRenderer_Prompt_Confirm_yes(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRendererWith(&buf, strings.NewReader("y\n"), false)
+	resp, err := r.Prompt(output.CaptainPrompt{
+		Txn: "abc", Op: "CONFIRM", Message: "run git status?",
+	})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != `{"confirmed":true}` {
+		t.Errorf("resp = %q, want {\"confirmed\":true}", resp)
+	}
+}
+
+func TestStyledRenderer_Prompt_Confirm_no(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRendererWith(&buf, strings.NewReader("n\n"), false)
+	resp, err := r.Prompt(output.CaptainPrompt{
+		Txn: "abc", Op: "CONFIRM", Message: "run git status?",
+	})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != `{"confirmed":false}` {
+		t.Errorf("resp = %q, want {\"confirmed\":false}", resp)
+	}
+}
+
+func TestStyledRenderer_Prompt_Select_single(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRendererWith(&buf, strings.NewReader("2\n"), false)
+	resp, err := r.Prompt(output.CaptainPrompt{
+		Txn:     "abc",
+		Op:      "SELECT",
+		Variant: "single",
+		Message: "choose a binary",
+		Options: []string{"/opt/homebrew/bin/brew", "/usr/local/bin/brew"},
+	})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != `{"selected":"/usr/local/bin/brew"}` {
+		t.Errorf("resp = %q, want selected /usr/local/bin/brew", resp)
+	}
+}
+
+func TestStyledRenderer_Prompt_Text_short(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRendererWith(&buf, strings.NewReader("hello world\n"), false)
+	resp, err := r.Prompt(output.CaptainPrompt{
+		Txn: "abc", Op: "TEXT", Variant: "short", Message: "enter a name",
+	})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != `{"value":"hello world"}` {
+		t.Errorf("resp = %q, want value:hello world", resp)
+	}
+}

@@ -61,4 +61,13 @@ type Renderer interface {
 	JSON(v any) error
 	// IsVerbose reports whether verbose mode is enabled.
 	IsVerbose() bool
+	// Prompt presents a CaptainPrompt to the Captain and returns the response as a JSON string.
+	//
+	// Styled mode: blocks on stdin, collects input, serializes to JSON, returns response string.
+	//   Response shapes: SELECT single {"selected":"..."}, SELECT multi {"selected":["..."]},
+	//   CONFIRM {"confirmed":true|false}, TEXT {"value":"..."}.
+	// JSON mode: emits Event{Type:"captain_prompt"} to stdout, returns ("", nil).
+	//   The caller is responsible for inserting the transaction record before calling Prompt.
+	//   Response arrives asynchronously via orbiter relay.
+	Prompt(p CaptainPrompt) (response string, err error)
 }

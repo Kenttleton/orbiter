@@ -39,6 +39,12 @@ func (r *JSONRenderer) JSON(v any) error {
 
 func (r *JSONRenderer) IsVerbose() bool { return r.verbose }
 
+// Prompt implements Renderer. Emits a captain_prompt event; response arrives via orbiter relay.
+// Stub: full implementation in Task 4.
+func (jr *JSONRenderer) Prompt(p CaptainPrompt) (string, error) {
+	return "", nil
+}
+
 // noopProgressList is returned by JSONRenderer.Progress — no terminal output.
 type noopProgressList struct{}
 

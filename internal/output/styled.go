@@ -1,9 +1,11 @@
 package output
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -26,11 +28,18 @@ var (
 type StyledRenderer struct {
 	w       io.Writer
 	verbose bool
+	stdin   io.Reader
 }
 
 // NewStyledRenderer returns a StyledRenderer that writes to w.
 func NewStyledRenderer(w io.Writer, verbose bool) *StyledRenderer {
-	return &StyledRenderer{w: w, verbose: verbose}
+	return &StyledRenderer{w: w, verbose: verbose, stdin: os.Stdin}
+}
+
+// NewStyledRendererWith creates a StyledRenderer with an explicit stdin reader.
+// Use in tests to inject a strings.NewReader; production callers use NewStyledRenderer.
+func NewStyledRendererWith(w io.Writer, r io.Reader, verbose bool) *StyledRenderer {
+	return &StyledRenderer{w: w, verbose: verbose, stdin: r}
 }
 
 func (r *StyledRenderer) Info(msg string) {
@@ -138,3 +147,63 @@ func (r *StyledRenderer) JSON(v any) error {
 }
 
 func (r *StyledRenderer) IsVerbose() bool { return r.verbose }
+
+// Prompt implements Renderer. Renders the prompt to the terminal and reads the
+// Captain's response from stdin. Returns the response serialized as a JSON string.
+func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
+	switch p.Op {
+	case "CONFIRM":
+		fmt.Fprintf(sr.w, "\n  %s\n  Allow? [y/N] ", p.Message)
+		var ans string
+		fmt.Fscan(sr.stdin, &ans)
+		confirmed := strings.ToLower(strings.TrimSpace(ans)) == "y"
+		b, _ := json.Marshal(map[string]bool{"confirmed": confirmed})
+		return string(b), nil
+
+	case "SELECT":
+		fmt.Fprintf(sr.w, "\n  %s\n", p.Message)
+		for i, opt := range p.Options {
+			fmt.Fprintf(sr.w, "    %d. %s\n", i+1, opt)
+		}
+		if p.Variant == "multi" {
+			fmt.Fprint(sr.w, "  Enter numbers separated by spaces: ")
+			var line string
+			fmt.Fscan(sr.stdin, &line)
+			parts := strings.Fields(line)
+			var selected []string
+			for _, part := range parts {
+				idx := 0
+				fmt.Sscan(part, &idx)
+				if idx >= 1 && idx <= len(p.Options) {
+					selected = append(selected, p.Options[idx-1])
+				}
+			}
+			b, _ := json.Marshal(map[string][]string{"selected": selected})
+			return string(b), nil
+		}
+		// single
+		fmt.Fprint(sr.w, "  Enter number: ")
+		var idx int
+		fmt.Fscan(sr.stdin, &idx)
+		if idx < 1 || idx > len(p.Options) {
+			return "", fmt.Errorf("selection %d out of range [1,%d]", idx, len(p.Options))
+		}
+		b, _ := json.Marshal(map[string]string{"selected": p.Options[idx-1]})
+		return string(b), nil
+
+	case "TEXT":
+		if p.Variant == "obscured" {
+			fmt.Fprintf(sr.w, "\n  %s (input hidden): ", p.Message)
+		} else {
+			fmt.Fprintf(sr.w, "\n  %s: ", p.Message)
+		}
+		scanner := bufio.NewScanner(sr.stdin)
+		scanner.Scan()
+		value := scanner.Text()
+		b, _ := json.Marshal(map[string]string{"value": value})
+		return string(b), nil
+
+	default:
+		return "", fmt.Errorf("unknown prompt op: %q", p.Op)
+	}
+}
