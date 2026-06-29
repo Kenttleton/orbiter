@@ -69,7 +69,7 @@ FIND_* op processing is deferred to the FIND spec implementation.`,
 }
 
 // processTransaction handles one relayed transaction based on its op type.
-func processTransaction(ctx context.Context, tx starchart.Transaction, cmd *cobra.Command, renderer output.Renderer) error {
+func processTransaction(_ context.Context, tx starchart.Transaction, cmd *cobra.Command, renderer output.Renderer) error {
 	switch tx.Op {
 	case "FIND_BINARY", "FIND_FILE", "FIND_DIR", "FIND_ENV":
 		// FIND op processing is implemented by the FIND spec plan.
