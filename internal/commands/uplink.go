@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -85,11 +86,19 @@ func processTransaction(ctx context.Context, tx starchart.Transaction, cmd *cobr
 		return err
 
 	case "SELECT":
+		var args struct {
+			Matches []string `json:"matches"`
+		}
+		_ = json.Unmarshal([]byte(tx.Args), &args)
+		msg := tx.Payload
+		if msg == "" {
+			msg = "Multiple matches found"
+		}
 		_, err := renderer.Prompt(output.CaptainPrompt{
 			Txn:     tx.ID,
 			Op:      "SELECT",
-			Message: "Multiple matches found",
-			Options: []string{},
+			Message: msg,
+			Options: args.Matches,
 			Variant: "single",
 		})
 		return err
