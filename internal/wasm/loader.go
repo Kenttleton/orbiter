@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/models"
+	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -29,6 +31,30 @@ func StdinApproveFunc(brand, fullCmd string) bool {
 // AlwaysAllowFunc is called after Captain approval to ask whether this exact
 // command should always be allowed. Returns true to persist the trust entry.
 type AlwaysAllowFunc func(brand, fullCmd string) bool
+
+// RendererApproveFunc returns an ApproveFunc that uses the renderer's Prompt method
+// for the Captain approval interaction. Styled mode blocks on stdin synchronously.
+// JSON mode emits a captain_prompt event and returns false (deny) until the exec model
+// refactor implements async resume via orbiter relay/uplink.
+func RendererApproveFunc(r output.Renderer) ApproveFunc {
+	return func(brand, fullCmd string) bool {
+		resp, err := r.Prompt(output.CaptainPrompt{
+			Txn:     models.NewID("tx"),
+			Op:      "CONFIRM",
+			Message: fmt.Sprintf("%s wants to run: %s", brand, fullCmd),
+		})
+		if err != nil || resp == "" {
+			return false
+		}
+		var result struct {
+			Confirmed bool `json:"confirmed"`
+		}
+		if err := json.Unmarshal([]byte(resp), &result); err != nil {
+			return false
+		}
+		return result.Confirmed
+	}
+}
 
 // StdinAlwaysAllowFunc is the default AlwaysAllowFunc.
 func StdinAlwaysAllowFunc(brand, fullCmd string) bool {

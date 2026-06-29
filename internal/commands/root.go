@@ -75,7 +75,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 			if err := bundle.LoadInstalled(
 				bundle.DefaultIntegrationsDir(),
 				integrations.Default,
-				wasm.StdinApproveFunc,
+				wasm.RendererApproveFunc(d.renderer),
 			); err != nil {
 				fmt.Fprintf(os.Stderr, "orbiter: load integrations: %v\n", err)
 			}
