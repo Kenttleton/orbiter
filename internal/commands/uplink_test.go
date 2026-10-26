@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -210,4 +211,27 @@ func TestUplinkFind_RelayToUnknownTxnChangesNothing(t *testing.T) {
 	// The real transaction is untouched and still processes normally.
 	require.NoError(t, f.uplink(t))
 	assert.Equal(t, "/x/brew", f.recorded(t))
+}
+
+// Merged-/usr Linux lists /bin and /usr/bin on PATH where /bin is a symlink: the
+// same binary reached two ways is one candidate, not an ambiguity for the Captain.
+func TestUplinkFind_SameFileThroughSymlinkIsNotAmbiguous(t *testing.T) {
+	root := t.TempDir()
+	realDir := filepath.Join(root, "usr", "bin")
+	require.NoError(t, os.MkdirAll(realDir, 0o755))
+	real := filepath.Join(realDir, "brew")
+	require.NoError(t, os.WriteFile(real, []byte("#!/bin/sh\n"), 0o755))
+	link := filepath.Join(root, "bin")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	resp, _ := json.Marshal(map[string]any{"status": "ok", "matches": []string{
+		real, filepath.Join(link, "brew"), realDir + "//brew",
+	}})
+	f := setupFind(t, "FIND_BINARY", `{}`, "", string(resp))
+	require.NoError(t, f.uplink(t))
+
+	assert.Equal(t, filepath.ToSlash(real), f.recorded(t), "recorded without asking")
+	n, err := f.sc.CountPendingTransactions(context.Background(), f.sess)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "no SELECT for one file reached several ways")
 }

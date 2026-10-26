@@ -44,12 +44,13 @@ func (u *uplinker) findBinary(ctx context.Context, tx starchart.Transaction) err
 	if err != nil {
 		return err
 	}
-	if len(res.Matches) == 0 {
+	matches := starchart.DedupeMatches(res.Matches)
+	if len(matches) == 0 {
 		return fmt.Errorf("%s not found by the shell", a.Key)
 	}
-	if len(res.Matches) > 1 {
-		options := make([]string, 0, len(res.Matches))
-		for _, m := range res.Matches {
+	if len(matches) > 1 {
+		options := make([]string, 0, len(matches))
+		for _, m := range matches {
 			options = append(options, m.IntoNative())
 		}
 		return u.ask(ctx, output.CaptainPrompt{
@@ -60,7 +61,7 @@ func (u *uplinker) findBinary(ctx context.Context, tx starchart.Transaction) err
 		}, map[string]any{"resource_id": a.ResourceID, "key": a.Key, "matches": options})
 	}
 
-	found := res.Matches[0]
+	found := matches[0]
 	old, err := u.d.sc.RecordedBinary(ctx, a.ResourceID, a.Key)
 	if err != nil {
 		return err

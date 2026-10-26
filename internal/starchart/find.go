@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -88,6 +89,35 @@ func ParseFindResponse(op, raw string) (FindResult, error) {
 		res.Matches = append(res.Matches, p)
 	}
 	return res, nil
+}
+
+// DedupeMatches drops candidates that are the same file as an earlier one, keeping
+// the first in order. A binary reached through two PATH entries (a symlinked /bin
+// next to /usr/bin, a trailing slash) is one candidate, not an ambiguity. This is
+// an identity check, not a judgement about the path: candidates that cannot be
+// stat'd are kept.
+func DedupeMatches(matches []integrations.Path) []integrations.Path {
+	var out []integrations.Path
+	var infos []os.FileInfo
+	for _, m := range matches {
+		info, err := os.Stat(m.IntoNative())
+		dup := false
+		for i, prev := range out {
+			if prev.Unix == m.Unix || (err == nil && infos[i] != nil && os.SameFile(infos[i], info)) {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		out = append(out, m)
+		if err != nil {
+			info = nil
+		}
+		infos = append(infos, info)
+	}
+	return out
 }
 
 // ApplyFindResults injects one result into rc. A FIND_BINARY with more than one
