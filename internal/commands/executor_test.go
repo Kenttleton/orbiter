@@ -335,3 +335,20 @@ func TestExecutor_Hook_ExportAllowlist(t *testing.T) {
 	assert.Equal(t, "abc", setKeys["MY_TOKEN"], "declared export MY_TOKEN must be emitted")
 	assert.NotContains(t, setKeys, "SECRET", "undeclared export SECRET must be suppressed")
 }
+
+func TestDirective_String_Find(t *testing.T) {
+	cases := []struct {
+		d    commands.Directive
+		want string
+	}{
+		{commands.Directive{Op: "SESSION", Key: "a1ss"}, "SESSION a1ss"},
+		{commands.Directive{Op: "FIND_BINARY", Txn: "t1tx", Key: "brew"}, "FIND_BINARY t1tx brew"},
+		{commands.Directive{Op: "FIND_ENV", Txn: "t2tx", Key: "JAVA_HOME"}, "FIND_ENV t2tx JAVA_HOME"},
+		{commands.Directive{Op: "FIND_DIR", Txn: "t3tx", Key: "/opt/homebrew"}, "FIND_DIR t3tx /opt/homebrew"},
+		{commands.Directive{Op: "FIND_FILE", Txn: "t4tx", Key: "*.json"}, "FIND_FILE t4tx *.json"},
+		{commands.Directive{Op: "FIND_FILE", Txn: "t4tx", Key: "*.json", Value: "/my proj"}, "FIND_FILE t4tx *.json /my proj"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, c.d.String(), "%+v", c.d)
+	}
+}

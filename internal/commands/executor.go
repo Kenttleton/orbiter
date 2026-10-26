@@ -16,12 +16,15 @@ import (
 )
 
 // Directive is a single neutral instruction for the shell wrapper to interpret.
-// Op is one of "DIR" (change directory), "SET" (export env var), "UNSET" (unset env var).
-// String() emits the line-protocol format: "OP KEY=VALUE" or "OP PATH".
+// Op is one of "DIR" (change directory), "SET" (export env var), "UNSET" (unset env var),
+// "DEPART", "SESSION" (session ID in Key), or "FIND_BINARY|FIND_FILE|FIND_DIR|FIND_ENV"
+// (a discovery request tagged with Txn).
+// String() emits the line-protocol format: "OP KEY=VALUE", "OP PATH", or "OP TXN KEY [VALUE]".
 type Directive struct {
-	Op    string // "DIR", "SET", "UNSET"
-	Key   string // SET/UNSET: variable name
-	Value string // DIR: path, SET: variable value
+	Op    string // "DIR", "SET", "UNSET", "SESSION", "FIND_*"
+	Txn   string // FIND_*: transaction ID
+	Key   string // SET/UNSET: variable name; SESSION: session ID; FIND_*: name, pattern or path
+	Value string // DIR: path, SET: variable value, FIND_FILE: optional location
 }
 
 func (d Directive) String() string {
@@ -36,6 +39,15 @@ func (d Directive) String() string {
 		return "UNSET " + d.Key
 	case "DEPART":
 		return "DEPART"
+	case "SESSION":
+		return "SESSION " + d.Key
+	case "FIND_BINARY", "FIND_ENV", "FIND_DIR":
+		return d.Op + " " + d.Txn + " " + d.Key
+	case "FIND_FILE":
+		if d.Value != "" {
+			return "FIND_FILE " + d.Txn + " " + d.Key + " " + d.Value
+		}
+		return "FIND_FILE " + d.Txn + " " + d.Key
 	}
 	return ""
 }
