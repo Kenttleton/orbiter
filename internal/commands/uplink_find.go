@@ -19,7 +19,6 @@ type uplinker struct {
 	d         *deps
 	sessionID string
 	errw      io.Writer
-	recorded  int // binaries recorded this run; progress gate for resuming the flow
 }
 
 // findArgs is the JSON stored in a FIND-originated transaction's args.
@@ -107,11 +106,7 @@ func (u *uplinker) confirmed(ctx context.Context, tx starchart.Transaction) erro
 }
 
 func (u *uplinker) record(ctx context.Context, resourceID, name, path string) error {
-	if err := u.d.sc.RecordBinary(ctx, resourceID, name, path); err != nil {
-		return err
-	}
-	u.recorded++
-	return nil
+	return u.d.sc.RecordBinary(ctx, resourceID, name, path)
 }
 
 // ask opens a new transaction in this session and prompts the Captain. A styled

@@ -140,3 +140,59 @@ func TestFindRecoveryLoop_StalePathToConfirmedNewPath(t *testing.T) {
 	assert.Equal(t, models.BeaconStatusHealthy, scan.Resources[0].BeaconStatus)
 	assert.Empty(t, sc.NeededFinds(scan))
 }
+
+// countingBrew behaves like brewOnDisk and counts Calibrate calls.
+type countingBrew struct {
+	brewOnDisk
+	calibrates *int
+}
+
+func (c countingBrew) Calibrate(ctx integrations.ResolvedContext) integrations.StateReport {
+	*c.calibrates++
+	return c.brewOnDisk.Calibrate(ctx)
+}
+
+// A FIND that ends without recording anything (zero matches, a declined CONFIRM,
+// the same path again) must not leave the branch un-calibrated or loop.
+func TestFindRecoveryLoop_UnresolvedFindStillCalibratesAndDoesNotLoop(t *testing.T) {
+	ctx := context.Background()
+	calls := 0
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "brew", countingBrew{calibrates: &calls})
+	sc, err := starchart.OpenWithRegistry(filepath.Join(t.TempDir(), "test.db"), reg)
+	require.NoError(t, err)
+	t.Cleanup(func() { sc.Close() })
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	_, err = sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "brew", "tool", "brew", "[]", `{"binaries":{"brew":"/no/such/brew"}}`)
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "brew", "api")
+	require.NoError(t, err)
+
+	out := &bytes.Buffer{}
+	renderer := output.NewRendererTo(output.FormatJSON, false, out)
+	dirs, err := commands.NewExecutor(sc, renderer).Calibrate(ctx, "api")
+	require.NoError(t, err)
+	require.Len(t, dirs, 2)
+	assert.Equal(t, 0, calls, "calibration waits for discovery")
+
+	run := func(args ...string) {
+		t.Helper()
+		root := commands.NewRootCommandForTestWithRenderer(sc, renderer)
+		root.SetOut(out)
+		root.SetErr(out)
+		root.SetArgs(args)
+		require.NoError(t, root.Execute())
+	}
+	run("relay", "--txn="+dirs[1].Txn, `--response={"status":"ok","matches":[]}`)
+	out.Reset()
+	run("uplink", "--session="+dirs[0].Key)
+
+	assert.Equal(t, 1, calls, "the flow continues and calibrates even though nothing was found")
+	for _, line := range strings.Split(out.String(), "\n") {
+		assert.False(t, strings.HasPrefix(line, "FIND_BINARY ") || strings.HasPrefix(line, "SESSION "),
+			"the resumed calibrate must not start another FIND round, got %q", line)
+	}
+}

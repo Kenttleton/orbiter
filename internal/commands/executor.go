@@ -510,6 +510,17 @@ func (e *Executor) Retro(ctx context.Context, target string, confirmed bool) err
 
 // Calibrate reconciles drift for the target entity.
 func (e *Executor) Calibrate(ctx context.Context, target string) ([]Directive, error) {
+	return e.calibrate(ctx, target, false)
+}
+
+// CalibrateAfterFind is Calibrate for a flow that has already been through a FIND
+// round: discovery is not started again, so a binary the Captain could not or
+// would not resolve cannot block calibration or loop through endless sessions.
+func (e *Executor) CalibrateAfterFind(ctx context.Context, target string) ([]Directive, error) {
+	return e.calibrate(ctx, target, true)
+}
+
+func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool) ([]Directive, error) {
 	alias, err := e.resolveTarget(ctx, target)
 	if err != nil {
 		return nil, err
@@ -552,12 +563,14 @@ func (e *Executor) Calibrate(ctx context.Context, target string) ([]Directive, e
 		// Discovery first: a binary with no recorded path, or one its integration
 		// reports not-present, is resolved through a FIND round trip before any
 		// calibration runs. uplink continues the flow once the Captain has decided.
-		scan, err := e.sc.ScanBranch(ctx, alias.ID)
-		if err != nil {
-			return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
-		}
-		if needed := e.sc.NeededFinds(scan); len(needed) > 0 {
-			return e.requestFinds(ctx, "calibrate", alias.Name, needed)
+		if !skipFinds {
+			scan, err := e.sc.ScanBranch(ctx, alias.ID)
+			if err != nil {
+				return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
+			}
+			if needed := e.sc.NeededFinds(scan); len(needed) > 0 {
+				return e.requestFinds(ctx, "calibrate", alias.Name, needed)
+			}
 		}
 		result, err := e.sc.CalibrateBranch(ctx, alias.ID)
 		if err != nil {

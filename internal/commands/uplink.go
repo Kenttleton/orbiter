@@ -72,12 +72,9 @@ operation the session was opened for.`,
 			if err := d.sc.UpdateSessionStatus(ctx, sessionID, "complete"); err != nil {
 				return fmt.Errorf("update session: %w", err)
 			}
-			// Continue the interrupted flow only if this run made progress, so an
-			// unresolved binary cannot loop through endless FIND sessions.
-			if u.recorded > 0 {
-				return u.resume(ctx, cmd, sess.Meta)
-			}
-			return nil
+			// Always continue the interrupted flow. The resumed run does not start
+			// another FIND round, so an unresolved binary cannot block it or loop.
+			return u.resume(ctx, cmd, sess.Meta)
 		},
 	}
 
@@ -96,7 +93,7 @@ func (u *uplinker) resume(ctx context.Context, cmd *cobra.Command, meta string) 
 	if json.Unmarshal([]byte(meta), &m) != nil || m.Op != "calibrate" {
 		return nil
 	}
-	directives, err := NewExecutor(u.d.sc, u.d.renderer).Calibrate(ctx, m.Target)
+	directives, err := NewExecutor(u.d.sc, u.d.renderer).CalibrateAfterFind(ctx, m.Target)
 	if err != nil {
 		return err
 	}
