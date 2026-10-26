@@ -143,3 +143,18 @@ func TestJSONRenderer_Error_emitsErrorEvent(t *testing.T) {
 		t.Errorf("data = %s (err %v)", e.Data, err)
 	}
 }
+
+// An empty plan is still a plan: a nil slice must encode as [] so clients can
+// rely on chart's terminal event being a plan with a list.
+func TestJSONRenderer_Plan_emptyIsAnEmptyList(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Plan(nil)
+	var e output.Event
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &e); err != nil {
+		t.Fatalf("unmarshal: %v — raw %s", err, buf.String())
+	}
+	if e.Type != "plan" || string(e.Data) != "[]" {
+		t.Errorf("Type = %q Data = %s, want plan with []", e.Type, e.Data)
+	}
+}

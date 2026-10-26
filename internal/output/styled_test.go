@@ -198,3 +198,12 @@ func TestStyledRenderer_Result_writesNothing(t *testing.T) {
 	r.Result(output.Result{Success: true, Message: "surveyed"})
 	require.Empty(t, buf.String())
 }
+
+// Chart always hands its steps to Plan, even when there are none; styled mode
+// prints its own "nothing to chart" message instead of an empty plan summary.
+func TestStyledRenderer_Plan_emptyWritesNothing(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRenderer(&buf, false)
+	r.Plan(nil)
+	require.Empty(t, buf.String())
+}

@@ -256,6 +256,12 @@ func (e *Executor) scanCallsignEntity(ctx context.Context, alias models.Alias) e
 	if err != nil {
 		return fmt.Errorf("scan callsign %s: %w", alias.Name, err)
 	}
+	items := []ScanItem{}
+	for _, tr := range result.Transponders {
+		items = append(items, transponderScanItem(tr))
+	}
+	defer e.renderer.Result(output.Result{Success: true, Message: "scan " + alias.Name,
+		Data: ScanResult{Target: alias.Name, TargetID: alias.ID, Items: items}})
 	if len(result.Transponders) == 0 {
 		e.renderer.Info(fmt.Sprintf("%s: no transponders attached", alias.Name))
 		return nil
@@ -274,11 +280,18 @@ func (e *Executor) scanCallsignEntity(ctx context.Context, alias models.Alias) e
 	return nil
 }
 
+func transponderScanItem(tr integrations.TransponderScanResult) ScanItem {
+	return ScanItem{Kind: "transponder", ID: tr.Transponder.ID, Role: tr.Transponder.Role,
+		Brand: tr.Transponder.Brand, Status: tr.BeaconStatus, Report: tr.Report}
+}
+
 func (e *Executor) scanTransponderEntity(ctx context.Context, alias models.Alias) error {
 	tr, err := e.sc.ScanTransponder(ctx, alias.ID)
 	if err != nil {
 		return fmt.Errorf("scan transponder %s: %w", alias.Name, err)
 	}
+	defer e.renderer.Result(output.Result{Success: true, Message: "scan " + alias.Name,
+		Data: ScanResult{Target: alias.Name, TargetID: alias.ID, Items: []ScanItem{transponderScanItem(tr)}}})
 	obs := ""
 	if tr.Report.Error != "" {
 		obs = tr.Report.Error
@@ -296,6 +309,16 @@ func (e *Executor) scanBranchEntity(ctx context.Context, alias models.Alias) err
 	if err != nil {
 		return fmt.Errorf("scan %s: %w", alias.Name, err)
 	}
+	items := []ScanItem{}
+	for _, r := range result.Resources {
+		items = append(items, ScanItem{Kind: "resource", ID: r.Resource.ID, Role: r.Resource.Role,
+			Brand: r.Resource.Brand, Status: r.BeaconStatus, Report: r.Report})
+	}
+	for _, tr := range result.Transponders {
+		items = append(items, transponderScanItem(tr))
+	}
+	defer e.renderer.Result(output.Result{Success: true, Message: "scan " + alias.Name,
+		Data: ScanResult{Target: alias.Name, TargetID: alias.ID, Items: items}})
 	var resourceRows [][]string
 	for _, r := range result.Resources {
 		obs := ""
@@ -342,8 +365,11 @@ func (e *Executor) Chart(ctx context.Context, target string) error {
 		return fmt.Errorf("chart %s: %w", alias.Name, err)
 	}
 
+	// chart always ends in a plan, even an empty one (styled mode prints only the
+	// message below for an empty plan).
 	if len(result.Resources) == 0 {
 		e.renderer.Info(fmt.Sprintf("%s: no resources to chart", alias.Name))
+		e.renderer.Plan(nil)
 		return nil
 	}
 
@@ -490,6 +516,16 @@ func (e *Executor) Retro(ctx context.Context, target string, confirmed bool) err
 		return fmt.Errorf("plan retro for %s: %w", alias.Name, err)
 	}
 
+	nodes := make([]RetroNode, 0, len(plan.Nodes))
+	for _, n := range plan.Nodes {
+		nodes = append(nodes, RetroNode{Name: n.Name, Action: n.Action})
+	}
+	retired := false
+	defer func() {
+		e.renderer.Result(output.Result{Success: true, Message: "retro " + alias.Name,
+			Data: RetroResult{Target: alias.Name, Retired: retired, Nodes: nodes}})
+	}()
+
 	if len(plan.Nodes) == 0 {
 		e.renderer.Success(fmt.Sprintf("%s has no entities to retire", alias.Name))
 		return nil
@@ -516,6 +552,7 @@ func (e *Executor) Retro(ctx context.Context, target string, confirmed bool) err
 		return fmt.Errorf("execute retro for %s: %w", alias.Name, err)
 	}
 
+	retired = true
 	e.renderer.Success(fmt.Sprintf("%s retired", alias.Name))
 	return nil
 }
@@ -544,6 +581,12 @@ func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool)
 		if err != nil {
 			return nil, fmt.Errorf("calibrate callsign %s: %w", alias.Name, err)
 		}
+		items := []CalibrateItem{}
+		for _, tr := range result.Transponders {
+			items = append(items, transponderCalibrateItem(tr))
+		}
+		defer e.renderer.Result(output.Result{Success: true, Message: "calibrate " + alias.Name,
+			Data: CalibrateResult{Target: alias.Name, TargetID: alias.ID, Items: items}})
 		if len(result.Transponders) == 0 {
 			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
 			return nil, nil
@@ -563,6 +606,8 @@ func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool)
 		if err != nil {
 			return nil, fmt.Errorf("calibrate transponder %s: %w", alias.Name, err)
 		}
+		defer e.renderer.Result(output.Result{Success: true, Message: "calibrate " + alias.Name,
+			Data: CalibrateResult{Target: alias.Name, TargetID: alias.ID, Items: []CalibrateItem{transponderCalibrateItem(tr)}}})
 		obs := ""
 		if tr.Report.Error != "" {
 			obs = tr.Report.Error
@@ -588,6 +633,14 @@ func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool)
 		if err != nil {
 			return nil, fmt.Errorf("calibrate %s: %w", alias.Name, err)
 		}
+		items := []CalibrateItem{}
+		for _, r := range result.Resources {
+			before := r.Before
+			items = append(items, CalibrateItem{Kind: "resource", ID: r.Resource.ID, Role: r.Resource.Role,
+				Brand: r.Resource.Brand, Action: r.Action, Before: &before, After: r.After})
+		}
+		defer e.renderer.Result(output.Result{Success: true, Message: "calibrate " + alias.Name,
+			Data: CalibrateResult{Target: alias.Name, TargetID: alias.ID, Items: items}})
 		if len(result.Resources) == 0 {
 			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
 			return nil, nil
@@ -642,4 +695,9 @@ func (e *Executor) requestFinds(ctx context.Context, op, target string, needed [
 	}
 	e.renderer.Info(fmt.Sprintf("%s: locating %d binary path(s) before calibrating", target, len(needed)))
 	return directives, nil
+}
+
+func transponderCalibrateItem(tr integrations.TransponderCalibrateResult) CalibrateItem {
+	return CalibrateItem{Kind: "transponder", ID: tr.Transponder.ID, Role: tr.Transponder.Role,
+		Brand: tr.Transponder.Brand, Action: tr.Action, After: tr.Report}
 }

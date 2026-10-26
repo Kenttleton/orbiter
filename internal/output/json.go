@@ -36,6 +36,9 @@ func (jr *JSONRenderer) Error(msg string) {
 }
 
 func (jr *JSONRenderer) Plan(steps []PlanStep) {
+	if steps == nil {
+		steps = []PlanStep{}
+	}
 	data, err := json.Marshal(steps)
 	if err != nil {
 		return

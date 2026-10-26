@@ -59,6 +59,9 @@ func (r *StyledRenderer) Error(msg string) {
 }
 
 func (r *StyledRenderer) Plan(steps []PlanStep) {
+	if len(steps) == 0 {
+		return
+	}
 	adds := 0
 	changes := 0
 	removes := 0

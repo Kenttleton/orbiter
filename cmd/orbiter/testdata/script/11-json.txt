@@ -50,3 +50,30 @@ stdout '"type":"resource".*"name":"node".*"status":"[a-z]+"'
 
 exec orbiter --output json transponder init gh2 --role env --brand github --location GH_TOKEN
 stdout '"type":"transponder".*"name":"gh2".*"status":"[a-z]+"'
+
+# --- lifecycle commands ---
+exec orbiter --output json scan api
+stdout '^\{"type":"result",.*"target":"api".*"items":\[.*"kind":"resource".*"role":"runtime","brand":"go","status":"failed","report":\{'
+! stdout '^[^{]'
+
+exec orbiter --output json scan work
+stdout '"target":"work".*"items":\['
+
+exec orbiter --output json scan web
+stdout '"target":"web".*"items":\[\]'
+
+exec orbiter --output json calibrate api
+stdout '^\{"type":"result",.*"target":"api".*"items":\[.*"kind":"resource".*"role":"runtime","brand":"go","action":"failed","before":\{.*"after":\{'
+! stdout '^[^{]'
+
+# chart always ends in a plan event, even when there is nothing to chart
+exec orbiter --output json chart api
+stdout '^\{"type":"plan","txn":"[0-9a-z]{16}","data":\[\{"action"'
+exec orbiter --output json chart web
+stdout '^\{"type":"plan","txn":"[0-9a-z]{16}","data":\[\]\}$'
+
+# retro (-y: JSON clients cannot answer the terminal prompt)
+exec orbiter --output json retro web -y
+stdout '^\{"type":"result",.*"target":"web","retired":true,"nodes":\[\{"name":"web","action":"[a-z]+"\}'
+exec orbiter --output json retro ops -y
+stdout '"target":"ops","retired":true'
