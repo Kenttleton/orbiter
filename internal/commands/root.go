@@ -22,10 +22,34 @@ type deps struct {
 	// verbose is the root -v flag: data volume. Read commands show more detail.
 	// Process transparency is --trace, owned by the renderer (Renderer.IsTrace).
 	verbose bool
+	// jsonMode is set once the output format is resolved (PersistentPreRunE).
+	jsonMode bool
 }
 
 // NewRootCommand builds and returns the orbiter root Cobra command with DI wiring.
 func NewRootCommand() *cobra.Command {
+	root, _ := newRoot()
+	return root
+}
+
+// Execute runs the orbiter CLI and returns the process exit code. A failing command
+// is reported in the active output format: an "error" event on stdout in JSON mode
+// (stderr stays empty), plain text on stderr otherwise. Exit code is 1 on any error.
+func Execute() int {
+	root, d := newRoot()
+	err := root.Execute()
+	if err == nil {
+		return 0
+	}
+	if d.renderer != nil && d.jsonMode {
+		d.renderer.Error(err.Error())
+	} else {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	return 1
+}
+
+func newRoot() (*cobra.Command, *deps) {
 	var outputFormat string
 	var trace bool
 
@@ -74,6 +98,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 				trace = os.Getenv("ORBITER_TRACE") == "1"
 			}
 
+			d.jsonMode = format == output.FormatJSON
 			d.renderer = output.NewRenderer(format, trace)
 			d.resolver = resolver.New(sc)
 
@@ -121,5 +146,5 @@ and environment orchestration platform for freelance and contract engineers.`,
 		newCompletionsCmd(root),
 	)
 
-	return root
+	return root, &d
 }

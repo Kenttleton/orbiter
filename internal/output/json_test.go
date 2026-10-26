@@ -125,3 +125,21 @@ func TestJSONRenderer_Result_emitsResultEvent(t *testing.T) {
 		t.Errorf("Result = %+v", got)
 	}
 }
+
+func TestJSONRenderer_Error_emitsErrorEvent(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Error("record not found")
+
+	var e output.Event
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &e); err != nil {
+		t.Fatalf("unmarshal Event: %v — raw: %s", err, buf.String())
+	}
+	if e.Type != "error" || len(e.Txn) != 16 {
+		t.Errorf("Type = %q Txn = %q", e.Type, e.Txn)
+	}
+	var data struct{ Message string }
+	if err := json.Unmarshal(e.Data, &data); err != nil || data.Message != "record not found" {
+		t.Errorf("data = %s (err %v)", e.Data, err)
+	}
+}

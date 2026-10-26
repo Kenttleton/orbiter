@@ -1,0 +1,9 @@
+# JSON mode contract: every command ends in exactly one terminal event
+# (result, plan, or error) and never prints free-form text on stdout.
+
+exec orbiter galaxy add test-corp
+
+# --- errors are events on stdout; exit is non-zero; stderr stays empty ---
+! exec orbiter --output json survey nonexistent
+stdout '^\{"type":"error","txn":"[0-9a-z]{16}","data":\{"message":"[^"]*not found'
+! stderr .
