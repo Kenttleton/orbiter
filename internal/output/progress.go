@@ -18,7 +18,7 @@ var (
 type styledProgressList struct {
 	w       io.Writer
 	steps   []ProgressStep
-	trace bool
+	trace   bool
 	current int
 	title   string
 }

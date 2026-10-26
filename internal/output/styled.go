@@ -26,9 +26,9 @@ var (
 // StyledRenderer produces human-readable, Terraform-inspired terminal output
 // using Lipgloss for colors and styling.
 type StyledRenderer struct {
-	w       io.Writer
+	w     io.Writer
 	trace bool
-	stdin   io.Reader
+	stdin io.Reader
 }
 
 // NewStyledRenderer returns a StyledRenderer that writes to w.
@@ -135,7 +135,7 @@ func (r *StyledRenderer) Progress(steps []ProgressStep) ProgressList {
 	return &styledProgressList{
 		w:       r.w,
 		steps:   steps,
-		trace: r.trace,
+		trace:   r.trace,
 		current: 0,
 	}
 }
@@ -145,6 +145,9 @@ func (r *StyledRenderer) JSON(v any) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
+
+// Result implements Renderer. Styled mode has already rendered its own output.
+func (r *StyledRenderer) Result(_ Result) {}
 
 func (r *StyledRenderer) IsTrace() bool { return r.trace }
 

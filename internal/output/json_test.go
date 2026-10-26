@@ -104,3 +104,24 @@ func TestJSONRenderer_Prompt_emitsCaptainPromptEvent(t *testing.T) {
 		t.Errorf("Op = %q, want SELECT", cp.Op)
 	}
 }
+
+func TestJSONRenderer_Result_emitsResultEvent(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Result(output.Result{Success: true, Message: "surveyed", Data: map[string]string{"k": "v"}})
+
+	var e output.Event
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &e); err != nil {
+		t.Fatalf("unmarshal Event: %v — raw: %s", err, buf.String())
+	}
+	if e.Type != "result" || len(e.Txn) != 16 {
+		t.Errorf("Type = %q Txn = %q, want result and a 16-char txn", e.Type, e.Txn)
+	}
+	var got output.Result
+	if err := json.Unmarshal(e.Data, &got); err != nil {
+		t.Fatalf("unmarshal Result: %v", err)
+	}
+	if !got.Success || got.Message != "surveyed" {
+		t.Errorf("Result = %+v", got)
+	}
+}

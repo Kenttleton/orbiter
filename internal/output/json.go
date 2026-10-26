@@ -12,7 +12,7 @@ import (
 // Human-facing methods (Info, Success, Warning, Error, Plan, Table, Progress)
 // are intentional no-ops — JSON mode is for wrappers, not humans.
 type JSONRenderer struct {
-	w       io.Writer
+	w     io.Writer
 	trace bool
 }
 
@@ -32,6 +32,15 @@ func (jr *JSONRenderer) Plan(steps []PlanStep) {
 		return
 	}
 	jr.emitEvent("plan", models.NewID("tx"), data)
+}
+
+// Result implements Renderer for JSON mode: one "result" event carrying the outcome.
+func (jr *JSONRenderer) Result(res Result) {
+	data, err := json.Marshal(res)
+	if err != nil {
+		return
+	}
+	jr.emitEvent("result", models.NewID("tx"), data)
 }
 
 func (r *JSONRenderer) Table(_ []string, _ [][]string) {}

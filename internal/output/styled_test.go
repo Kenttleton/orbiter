@@ -190,3 +190,11 @@ func TestStyledRenderer_Prompt_goesToStderrWhenWritingToStdout(t *testing.T) {
 		t.Errorf("stdout = %q, must not carry the prompt", stdout)
 	}
 }
+
+// Result is for machine clients; styled mode renders its own tables.
+func TestStyledRenderer_Result_writesNothing(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewStyledRenderer(&buf, false)
+	r.Result(output.Result{Success: true, Message: "surveyed"})
+	require.Empty(t, buf.String())
+}

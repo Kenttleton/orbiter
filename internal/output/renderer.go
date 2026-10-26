@@ -59,6 +59,10 @@ type Renderer interface {
 	// JSON encodes v as JSON and writes it to stdout.
 	// Used for machine-readable output (TUI, 3rd party wrappers).
 	JSON(v any) error
+	// Result reports the structured outcome of a command to machine clients.
+	// JSON mode emits a "result" event; styled mode writes nothing (the command
+	// has already rendered its own tables).
+	Result(r Result)
 	// IsTrace reports whether trace mode (--trace) is enabled: plain operational
 	// labels and the underlying tools' raw output. This is process transparency,
 	// not data volume; volume is the command's own -v flag.
