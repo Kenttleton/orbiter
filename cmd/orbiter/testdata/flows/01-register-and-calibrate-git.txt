@@ -1,0 +1,43 @@
+# Flow 1: a freelancer registers a project that uses git and has Orbiter find it.
+#
+# Real bundled integrations (installed by vessel init), the real git, and a PATH holding
+# exactly one git. A client answers Orbiter's prompts, as a GUI would.
+
+step set up the vessel: install the bundled integrations
+exec orbiter --output json vessel init -y
+stdout '"installed":[1-9][0-9]*'
+
+step register the universe: a galaxy, a planet in it, and a git resource attached to the planet
+exec orbiter --output json galaxy add acme
+exec orbiter --output json planet add api --galaxy acme
+exec orbiter --output json resource add git --role tool --brand git
+exec orbiter --output json attach git api
+
+step survey the planet: everything is registered and nothing is verified yet
+exec orbiter survey api -v
+stdout 'tool/git'
+stdout 'unverified'
+
+step calibrate: the real git integration asks the Captain before it runs git
+# The client approves "git wants to run: git --version" (a txn-tagged prompt), and then
+# orbiter asks a second question that is NOT a txn-tagged prompt: "Always allow this exact
+# command?" reads os.Stdin directly, so an attached client never sees it and the run stalls.
+# Roadmap, Phase 2: "Remaining prompts go through the transaction flow".
+finding calibrate stalls after an approved prompt: the always-allow question reads stdin directly (roadmap Phase 2)
+finding the approval names the bare command (git --version), not a resolved binary path: it is asked before FIND has run (roadmap Phase 3)
+skip 'blocked by roadmap Phase 2: remove this line and the findings above when always-allow goes through the transaction flow'
+
+# ---- intended steps from here (not run until the blocker above is fixed) ----
+#
+# step calibrate again with the client answering: the run asks for discovery
+#   client -- calibrate api
+#   stdout '"status":"needs_discovery"'
+#   capture SESSION '"session":"([0-9a-z]+)"'
+#   capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+# step the client plays the shell and answers FIND_BINARY with the git on the flow's PATH
+#   (the answer is {"status":"ok","matches":["$WORK/bin/git"]}), then continues the run
+#   exec orbiter --output json relay --txn=$TXN --response=...
+#   client -- uplink --session=$SESSION
+# step the recorded path is visible and the resource verifies healthy
+#   exec orbiter --output json survey api -v   -> config has binaries.git = $WORK/bin/git
+#   client -- scan api                          -> status healthy

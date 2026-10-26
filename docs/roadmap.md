@@ -34,8 +34,15 @@ Items inside a phase are in dependency order; "needs:" names a prerequisite.
 
 ## Phase 1: Prove the core works end to end
 
-- [ ] **End-to-end harness with a real WASM integration.** Today the testscripts use unregistered resources, the Go tests use fakes, and `integrations/e2e_test.go` calls handlers directly with hand-built contexts. Nothing shows scan, FIND, record and calibrate working together. Build a testscript (or equivalent) that installs a bundled integration (`vessel init -y`) and runs it through `survey`, `scan`, FIND and `calibrate`.
-  - [ ] Include the WASM approval path with a real integration calling `run_command` (the approval function is only tested directly today).
+Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. See `docs/testing.md`.
+
+- [x] **Flow harness.** Isolated per flow (own `HOME`, own `PATH` holding exactly the tools it provides), numbered steps, findings recorded without failing, a client that answers prompts like a GUI would, and an end-of-run report.
+- [ ] **Flow 1: register a project and calibrate git.** Steps 1 to 3 pass with the real git integration (`vessel init`, register, survey). Step 4 (calibrate) is blocked by the Phase 2 prompts item: the real integration's approval is answered, then "Always allow this exact command?" reads stdin directly and the run stalls. The intended remaining steps are written in the flow, unrun. Findings so far:
+  - [ ] the always-allow question bypasses the transaction flow (Phase 2)
+  - [ ] the approval names the bare command (`git --version`) instead of a resolved binary path, because the first scan runs before FIND (Phase 3)
+- [ ] **More flows**, each an ordered, real use case: discovery with several matches (SELECT, answered with `-select`), a manager-governed install, a transponder credential reaching the shell, retro, the async `relay` path with a background run, and the approval denied.
+- [ ] **Convert the older CLI scripts** in `cmd/orbiter/testdata/script/` (they use unregistered resources) into flows with real registered resources.
+- [ ] **WASM approval path with a real integration** is exercised by flow 1 once unblocked (the approval function is otherwise only tested directly).
 
 ## Phase 2: Credentials work
 
@@ -50,6 +57,7 @@ Items inside a phase are in dependency order; "needs:" names a prerequisite.
 ## Phase 3: Binary trust
 
 - [ ] **Design the expected path.** The manifest declares only binary names today. Decide how a manifest states the expected location for a local install and how a manager supplies its override (see Design notes).
+- [ ] **FIND before the first scan.** A resource with no recorded binary is scanned first, so the integration asks the Captain to approve running a bare command name (`git --version`), which executes whatever is first on `PATH`. Decide the binary before anything runs, so approvals name the resolved path. Found by flow 1.
 - [ ] **Expected vs actual.** Compare the expected location (local install) or the manager's override against the path FIND found, and ask the Captain to rectify a mismatch. *needs: the design item.*
 - [ ] **Honor `sensitive`.** `shell.exports[].sensitive` (the github manifest sets it) is read by nothing; redact those values wherever exports are logged or shown.
 
