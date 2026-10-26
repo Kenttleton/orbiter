@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
@@ -32,18 +34,69 @@ func StdinApproveFunc(brand, fullCmd string) bool {
 // command should always be allowed. Returns true to persist the trust entry.
 type AlwaysAllowFunc func(brand, fullCmd string) bool
 
-// RendererApproveFunc returns an ApproveFunc that uses the renderer's Prompt method
-// for the Captain approval interaction. Styled mode blocks on stdin synchronously.
-// JSON mode emits a captain_prompt event and returns false (deny) until the exec model
-// refactor implements async resume via orbiter relay/uplink.
-func RendererApproveFunc(r output.Renderer) ApproveFunc {
+// PromptStore persists a prompt as a transaction so the Captain's answer can arrive
+// from another process (orbiter relay). *starchart.StarChart implements it.
+type PromptStore interface {
+	// OpenSession starts a session and returns its ID.
+	OpenSession(ctx context.Context, meta string) (string, error)
+	// RecordPrompt saves a pending transaction for a prompt (payload is the prompt JSON).
+	RecordPrompt(ctx context.Context, sessionID, txn, op, payload string) error
+	// PromptResponse returns the relayed response once the transaction has one.
+	PromptResponse(ctx context.Context, txn string) (response string, answered bool, err error)
+	// CloseTransaction marks the transaction processed.
+	CloseTransaction(ctx context.Context, txn string) error
+}
+
+// ApprovalTimeout bounds how long an unanswered asynchronous approval holds an
+// integration call open before it is denied. ORBITER_APPROVAL_TIMEOUT overrides it.
+var ApprovalTimeout = 5 * time.Minute
+
+// ApprovalPollInterval is how often a waiting approval checks for a relayed answer.
+var ApprovalPollInterval = 200 * time.Millisecond
+
+// RendererApproveFunc returns an ApproveFunc that asks the Captain through the
+// renderer. A prompt is a transaction: it is recorded, shown (the captain_prompt
+// event carries its txn), and answered one of two ways, both available to clients:
+//
+//   - Sync: the renderer returns the answer itself (styled mode reading the terminal,
+//     or JSON mode attached with -i reading a line from stdin).
+//   - Async: the renderer returns no answer (JSON mode without -i). The call stays
+//     open while the client answers with `orbiter relay --txn=<txn>` from any process;
+//     the answer is read back from the store. No answer within ApprovalTimeout denies.
+//
+// A nil store means the answer cannot be awaited, so an unanswered prompt denies.
+func RendererApproveFunc(r output.Renderer, store PromptStore) ApproveFunc {
+	var (
+		once    sync.Once
+		session string
+		openErr error
+	)
 	return func(brand, fullCmd string) bool {
-		resp, err := r.Prompt(output.CaptainPrompt{
+		ctx := context.Background()
+		prompt := output.CaptainPrompt{
 			Txn:     models.NewID("tx"),
 			Op:      "CONFIRM",
 			Message: fmt.Sprintf("%s wants to run: %s", brand, fullCmd),
-		})
-		if err != nil || resp == "" {
+		}
+		recorded := false
+		if store != nil {
+			once.Do(func() { session, openErr = store.OpenSession(ctx, `{"op":"approval"}`) })
+			if openErr == nil {
+				payload, _ := json.Marshal(prompt)
+				recorded = store.RecordPrompt(ctx, session, prompt.Txn, prompt.Op, string(payload)) == nil
+			}
+		}
+		resp, err := r.Prompt(prompt)
+		if err != nil {
+			return false
+		}
+		if resp == "" && recorded {
+			resp = awaitRelayedResponse(ctx, store, prompt.Txn)
+		}
+		if recorded {
+			_ = store.CloseTransaction(ctx, prompt.Txn)
+		}
+		if resp == "" {
 			return false
 		}
 		var result struct {
@@ -54,6 +107,19 @@ func RendererApproveFunc(r output.Renderer) ApproveFunc {
 		}
 		return result.Confirmed
 	}
+}
+
+// awaitRelayedResponse polls the store until the transaction has a response or
+// ApprovalTimeout passes. It returns "" on timeout.
+func awaitRelayedResponse(ctx context.Context, store PromptStore, txn string) string {
+	deadline := time.Now().Add(ApprovalTimeout)
+	for time.Now().Before(deadline) {
+		if resp, ok, err := store.PromptResponse(ctx, txn); err == nil && ok {
+			return resp
+		}
+		time.Sleep(ApprovalPollInterval)
+	}
+	return ""
 }
 
 // StdinAlwaysAllowFunc is the default AlwaysAllowFunc.

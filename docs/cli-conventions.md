@@ -22,12 +22,11 @@ Each global flag answers one question. Never overload one flag to answer two.
 | ---- | --- | ---- | ------- |
 | `-v`, `--verbose` | `ORBITER_VERBOSE=1` | **Data volume** | Show more detail. Read commands add the bulky fields a table would otherwise hide (config, observations, timestamps). The meaning is contextual per command; a command's help says what `-v` adds. |
 | `-t`, `--trace` | `ORBITER_TRACE=1` | **Process transparency** | Show how the work is done: plain operational labels instead of themed ones, and the underlying tools' raw output (git, nvm, uv, ...) streamed inline. Only meaningful for commands that run tools. For CI and debugging stalled steps. |
+| `-i`, `--interactive` | `ORBITER_INTERACTIVE=1` | **Input path** | The client is attached: prompts are answered on stdin instead of out of band. Only changes JSON mode (see "Answering a prompt"); styled mode always reads the terminal. |
 | `--output styled\|json` | `ORBITER_OUTPUT` | **Format** | Styled terminal output (default) or machine-readable JSON. |
 
-**Reserved: `-i`, `--interactive`.** The third transparency axis: pass the Captain's
-input through to the underlying tools (their own prompts). It is not registered yet
-because no command needs it. Add it, with this table row, when one does. Do not use
-`-i` or `-t` for anything else.
+Process transparency (`-t`) is about output; `-i` is its input counterpart. Do not use `-i`,
+`-t` or `-v` for anything else.
 
 `-y`, `--yes` skips confirmation prompts on commands that have them.
 
@@ -95,16 +94,38 @@ Types live in `internal/commands/results.go` and `internal/commands/survey.go`.
 config, observations, verified_at`, the entities attached directly (`resources`,
 `transponders`, `callsigns`) and `children` (one level deep, or the whole subtree with `-a`).
 
+### Answering a prompt: sync or async
+
+Anything that needs the Captain (an approval, a choice, a confirmation, or a discovery
+request) is a **transaction**: it is recorded with a `txn`, announced in a
+`captain_prompt` event that carries the `txn`, and answered with a response. Clients pick
+how they answer; both are supported for every prompt.
+
+- **Sync, attached (`-i`).** The client spawned the process and keeps its stdin open. It
+  reads the `captain_prompt` event from stdout and writes one line to stdin:
+  `{"txn":"<txn>","response":<json>}`. The command continues in the same run. Lines for
+  another txn are ignored; closing stdin denies the prompt.
+- **Async (default).** The client answers from any process with
+  `orbiter relay --txn=<txn> --response=<json>`. For a prompt raised between steps
+  (FIND, SELECT, CONFIRM), the command exits and the client then runs
+  `orbiter uplink --session=<session>` to continue. For an approval raised while an
+  integration is running, the process holds the call open and picks the relayed answer
+  up from the StarChart; no answer within the timeout (5 minutes, or
+  `ORBITER_APPROVAL_TIMEOUT`, for example `90s`) denies.
+
+`response` has the same shape either way: `{"confirmed":true|false}` for CONFIRM,
+`{"selected":"<option>"}` for SELECT, `{"value":"<text>"}` for TEXT.
+
 ### Discovery for clients that are not a shell
 
 When `calibrate` (or the `uplink` that continues it) cannot proceed until something is
 found, it ends with a `result` whose data is a `PendingDiscovery`:
 `{status: "needs_discovery", session, requests: [{txn, op, key, value?}]}`. The client
 answers each request itself (`op` is `FIND_BINARY`, `FIND_FILE`, `FIND_DIR` or `FIND_ENV`;
-the reply schema is the FIND spec's section 2) with
-`orbiter relay --txn=<txn> --response=<json>`, then runs `orbiter uplink --session=<session>`.
-A shell wrapper does the same through the `FIND_*` functions in its hook. A prompt the
-Captain must answer arrives as a `captain_prompt` event and is answered the same way.
+the reply schema is the FIND spec's section 2) with `orbiter relay`, then runs
+`orbiter uplink --session=<session>`. A shell wrapper does the same through the `FIND_*`
+functions in its hook. With `-i`, a follow-up prompt (for example a choice between
+several matches) is answered on stdin in the same run.
 
 ### Exempt commands
 

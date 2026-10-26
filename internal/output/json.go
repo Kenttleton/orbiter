@@ -1,9 +1,11 @@
 package output
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/Kenttleton/orbiter/internal/models"
 )
@@ -14,7 +16,17 @@ import (
 type JSONRenderer struct {
 	w     io.Writer
 	trace bool
+	// in is set by Attach (-i): the client's stdin, from which prompt answers are read.
+	in *bufio.Reader
 }
+
+// Attach makes prompts synchronous: after emitting a captain_prompt event, Prompt
+// reads the answer from in as one JSON line, {"txn":"<id>","response":<json>}, where
+// response has the same shape orbiter relay accepts. Lines for another txn or that
+// are not valid JSON are skipped. A closed stdin makes Prompt fail.
+// Without Attach, Prompt is asynchronous: it returns "" and the answer arrives
+// through orbiter relay.
+func (jr *JSONRenderer) Attach(in io.Reader) { jr.in = bufio.NewReader(in) }
 
 // NewJSONRenderer returns a JSONRenderer that writes to w.
 func NewJSONRenderer(w io.Writer, trace bool) *JSONRenderer {
@@ -69,16 +81,34 @@ func (r *JSONRenderer) JSON(v any) error {
 
 func (r *JSONRenderer) IsTrace() bool { return r.trace }
 
-// Prompt implements Renderer for JSON mode. Emits a captain_prompt event and returns ("", nil).
-// The caller must insert the transaction record before calling Prompt.
-// The Captain's response arrives asynchronously via orbiter relay.
+// Prompt implements Renderer for JSON mode. Emits a captain_prompt event.
+// Unattached (the default) it returns ("", nil) and the Captain's response arrives
+// asynchronously via orbiter relay. Attached (-i) it reads the response from stdin
+// and returns it. The caller must insert the transaction record before calling Prompt.
 func (jr *JSONRenderer) Prompt(p CaptainPrompt) (string, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return "", err
 	}
 	jr.emitEvent("captain_prompt", p.Txn, data)
-	return "", nil
+	if jr.in == nil {
+		return "", nil
+	}
+	for {
+		line, err := jr.in.ReadString('\n')
+		if line = strings.TrimSpace(line); line != "" {
+			var answer struct {
+				Txn      string          `json:"txn"`
+				Response json.RawMessage `json:"response"`
+			}
+			if json.Unmarshal([]byte(line), &answer) == nil && answer.Txn == p.Txn && len(answer.Response) > 0 {
+				return string(answer.Response), nil
+			}
+		}
+		if err != nil {
+			return "", fmt.Errorf("prompt %s: stdin closed before an answer arrived: %w", p.Txn, err)
+		}
+	}
 }
 
 func (jr *JSONRenderer) emitEvent(eventType, txn string, data json.RawMessage) {

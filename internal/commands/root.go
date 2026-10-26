@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -27,6 +28,9 @@ type deps struct {
 
 	outputFormat string // root --output flag
 	trace        bool   // root --trace flag
+	// interactive is the root -i flag: the client is attached, so prompts are
+	// answered on stdin (JSON mode) instead of out of band through orbiter relay.
+	interactive bool
 }
 
 // setupOutput resolves the output format and flags (flag, then environment, then
@@ -46,8 +50,21 @@ func (d *deps) setupOutput() {
 	if !d.trace {
 		d.trace = os.Getenv("ORBITER_TRACE") == "1"
 	}
+	if !d.interactive {
+		d.interactive = os.Getenv("ORBITER_INTERACTIVE") == "1"
+	}
 	d.jsonMode = format == output.FormatJSON
 	d.renderer = output.NewRenderer(format, d.trace)
+	// Styled mode always reads answers from the terminal. JSON mode is async (answers
+	// arrive through orbiter relay) unless -i attaches the client's stdin.
+	if jr, ok := d.renderer.(*output.JSONRenderer); ok && d.interactive {
+		jr.Attach(os.Stdin)
+	}
+	if v := os.Getenv("ORBITER_APPROVAL_TIMEOUT"); v != "" {
+		if timeout, err := time.ParseDuration(v); err == nil && timeout > 0 {
+			wasm.ApprovalTimeout = timeout
+		}
+	}
 }
 
 // NewRootCommand builds and returns the orbiter root Cobra command with DI wiring.
@@ -112,7 +129,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 			if err := bundle.LoadInstalled(
 				bundle.DefaultIntegrationsDir(),
 				integrations.Default,
-				wasm.RendererApproveFunc(d.renderer),
+				wasm.RendererApproveFunc(d.renderer, d.sc),
 			); err != nil {
 				fmt.Fprintf(os.Stderr, "orbiter: load integrations: %v\n", err)
 			}
@@ -122,6 +139,7 @@ and environment orchestration platform for freelance and contract engineers.`,
 
 	root.PersistentFlags().StringVar(&d.outputFormat, "output", "", "output format: styled (default) or json")
 	root.PersistentFlags().BoolVarP(&d.verbose, "verbose", "v", false, "show more detail (data volume); ORBITER_VERBOSE=1")
+	root.PersistentFlags().BoolVarP(&d.interactive, "interactive", "i", false, "attached client: answer prompts on stdin instead of through orbiter relay (JSON mode); ORBITER_INTERACTIVE=1")
 	root.PersistentFlags().BoolVarP(&d.trace, "trace", "t", false, "show the underlying process: plain labels and raw tool output; ORBITER_TRACE=1")
 
 	// Register all subcommands.

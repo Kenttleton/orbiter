@@ -8,6 +8,8 @@ import (
 
 	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/starchart"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func openTestDB(t *testing.T) *starchart.StarChart {
@@ -194,4 +196,31 @@ func TestNewID_SsCode(t *testing.T) {
 	if parsed.EntityType != "ss" {
 		t.Errorf("EntityType = %q, want ss", parsed.EntityType)
 	}
+}
+
+// The prompt-store methods the WASM approval flow uses: record a pending prompt,
+// see no answer until orbiter relay stores one, then read it back and close it.
+func TestPromptStore_RoundTrip(t *testing.T) {
+	ctx := context.Background()
+	sc := testDB(t)
+
+	session, err := sc.OpenSession(ctx, `{"op":"approval"}`)
+	require.NoError(t, err)
+	require.NoError(t, sc.RecordPrompt(ctx, session, "t1txnxxxxxxxxxxx", "CONFIRM", `{"message":"run it?"}`))
+
+	_, answered, err := sc.PromptResponse(ctx, "t1txnxxxxxxxxxxx")
+	require.NoError(t, err)
+	assert.False(t, answered, "pending until relayed")
+
+	require.NoError(t, sc.RelayTransaction(ctx, "t1txnxxxxxxxxxxx", `{"confirmed":true}`))
+	resp, answered, err := sc.PromptResponse(ctx, "t1txnxxxxxxxxxxx")
+	require.NoError(t, err)
+	assert.True(t, answered)
+	assert.Equal(t, `{"confirmed":true}`, resp)
+
+	require.NoError(t, sc.CloseTransaction(ctx, "t1txnxxxxxxxxxxx"))
+	tx, err := sc.GetTransaction(ctx, "t1txnxxxxxxxxxxx")
+	require.NoError(t, err)
+	assert.Equal(t, starchart.TransactionStatusProcessed, tx.Status)
+	assert.Equal(t, session, tx.SessionID)
 }

@@ -91,6 +91,38 @@ func (sc *StarChart) RelayTransaction(ctx context.Context, txnID, response strin
 	return nil
 }
 
+// OpenSession starts a session and returns its ID.
+func (sc *StarChart) OpenSession(ctx context.Context, meta string) (string, error) {
+	id := models.NewID("ss")
+	return id, sc.InsertSession(ctx, id, meta)
+}
+
+// RecordPrompt saves a pending transaction for a prompt so the answer can arrive
+// from another process through orbiter relay. payload is the prompt JSON.
+func (sc *StarChart) RecordPrompt(ctx context.Context, sessionID, txn, op, payload string) error {
+	return sc.InsertTransaction(ctx, Transaction{
+		ID: txn, SessionID: sessionID, Op: op, Args: "{}",
+		Status: TransactionStatusPending, Payload: payload,
+	})
+}
+
+// PromptResponse returns the response relayed for txn, and whether one has arrived.
+func (sc *StarChart) PromptResponse(ctx context.Context, txn string) (string, bool, error) {
+	t, err := sc.GetTransaction(ctx, txn)
+	if err != nil {
+		return "", false, err
+	}
+	if t.Response == "" {
+		return "", false, nil
+	}
+	return t.Response, true, nil
+}
+
+// CloseTransaction marks a transaction processed.
+func (sc *StarChart) CloseTransaction(ctx context.Context, txn string) error {
+	return sc.MarkTransactionProcessed(ctx, txn)
+}
+
 // GetTransaction returns one transaction by ID (sql.ErrNoRows when absent).
 func (sc *StarChart) GetTransaction(ctx context.Context, id string) (Transaction, error) {
 	var t Transaction

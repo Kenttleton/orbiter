@@ -158,3 +158,41 @@ func TestJSONRenderer_Plan_emptyIsAnEmptyList(t *testing.T) {
 		t.Errorf("Type = %q Data = %s, want plan with []", e.Type, e.Data)
 	}
 }
+
+// -i attaches the client's stdin: the answer comes back as one JSON line carrying
+// the txn it answers, with the same response shape orbiter relay accepts.
+func TestJSONRenderer_Prompt_attachedReadsTheAnswerFromStdin(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Attach(strings.NewReader(
+		`{"txn":"someothertxn0000","response":{"confirmed":false}}` + "\n" +
+			`{"txn":"b4g3l2c9tx0s3n5q","response":{"confirmed":true}}` + "\n"))
+
+	resp, err := r.Prompt(output.CaptainPrompt{Txn: "b4g3l2c9tx0s3n5q", Op: "CONFIRM", Message: "run it?"})
+	if err != nil {
+		t.Fatalf("Prompt: %v", err)
+	}
+	if resp != `{"confirmed":true}` {
+		t.Errorf("resp = %q, want the response for the matching txn", resp)
+	}
+	if !strings.Contains(buf.String(), `"captain_prompt"`) {
+		t.Errorf("the prompt event must still be emitted: %q", buf.String())
+	}
+}
+
+func TestJSONRenderer_Prompt_attachedClosedStdinIsAnError(t *testing.T) {
+	r := output.NewJSONRenderer(&bytes.Buffer{}, false)
+	r.Attach(strings.NewReader(""))
+	if _, err := r.Prompt(output.CaptainPrompt{Txn: "b4g3l2c9tx0s3n5q", Op: "CONFIRM"}); err == nil {
+		t.Error("a client that closed stdin cannot answer: Prompt must fail, not wait forever")
+	}
+}
+
+func TestJSONRenderer_Prompt_attachedIgnoresMalformedLines(t *testing.T) {
+	r := output.NewJSONRenderer(&bytes.Buffer{}, false)
+	r.Attach(strings.NewReader("not json\n" + `{"txn":"t1","response":{"value":"x"}}` + "\n"))
+	resp, err := r.Prompt(output.CaptainPrompt{Txn: "t1", Op: "TEXT"})
+	if err != nil || resp != `{"value":"x"}` {
+		t.Errorf("resp = %q err = %v", resp, err)
+	}
+}

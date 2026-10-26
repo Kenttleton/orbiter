@@ -1,9 +1,11 @@
 package commands_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -234,4 +236,34 @@ func TestUplinkFind_SameFileThroughSymlinkIsNotAmbiguous(t *testing.T) {
 	n, err := f.sc.CountPendingTransactions(context.Background(), f.sess)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n, "no SELECT for one file reached several ways")
+}
+
+// Sync (-i): with the client's stdin attached, a prompt raised during uplink is
+// answered on the same stream and processed in the same run, no relay needed.
+func TestUplinkFind_AttachedClientAnswersSelectInline(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":["/a/brew","/b/brew"]}`)
+
+	stdinR, stdinW := io.Pipe()
+	stdoutR, stdoutW := io.Pipe()
+	r := output.NewJSONRenderer(stdoutW, false)
+	r.Attach(stdinR)
+
+	go func() { // the client: read the SELECT prompt, choose the second option
+		line, _ := bufio.NewReader(stdoutR).ReadString('\n')
+		var e output.Event
+		_ = json.Unmarshal([]byte(line), &e)
+		io.WriteString(stdinW, `{"txn":"`+e.Txn+`","response":{"selected":"/b/brew"}}`+"\n")
+	}()
+
+	root := commands.NewRootCommandForTestWithRenderer(f.sc, r)
+	root.SetErr(f.stderr)
+	root.SetArgs([]string{"uplink", "--session=" + f.sess})
+	require.NoError(t, root.Execute())
+
+	assert.Equal(t, "/b/brew", f.recorded(t))
+	n, err := f.sc.CountPendingTransactions(context.Background(), f.sess)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+	sess, _ := f.sc.GetSession(context.Background(), f.sess)
+	assert.Equal(t, "complete", sess.Status)
 }
