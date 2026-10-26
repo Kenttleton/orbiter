@@ -12,6 +12,28 @@ test:
 test-verbose:
     go test -v ./...
 
+# Unit tests only (mocked): everything except the end-to-end flows.
+unit:
+    go test ./internal/... ./integrations/...
+
+# ── End-to-end flows (not mocked; see docs/testing.md) ─────────────────────────
+
+# Run every flow with full output: each command, its stdout, the prompts answered, the report.
+flows:
+    go test ./cmd/orbiter -run TestFlows -v -count=1
+
+# Run every flow and show only the story: steps, prompts, findings, skips, and the report.
+flows-brief:
+    #!/usr/bin/env bash
+    set -o pipefail
+    go test ./cmd/orbiter -run TestFlows -v -count=1 2>&1 \
+      | grep -E 'STEP [0-9]+:|  prompt |FINDING:|> skip |FAIL:|== flow report ==|: [0-9]+ steps,|finding: |^(--- |    --- )|^(ok|FAIL)\b' \
+      | sed -E 's/^ +//'
+
+# Run one flow with full output, e.g. `just flow 01-register-and-calibrate-git`
+flow name:
+    go test ./cmd/orbiter -run 'TestFlows/{{name}}' -v -count=1
+
 lint:
     golangci-lint run
 

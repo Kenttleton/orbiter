@@ -13,11 +13,13 @@ resources; they are being converted into flows (see the roadmap).
 ## Running flows
 
 ```bash
-go test ./cmd/orbiter -run TestFlows -v
+just flows-brief                      # the story: steps, prompts, findings, report
+just flows                            # full output: every command and its stdout
+just flow 01-register-and-calibrate-git   # one flow, full output
+just unit                             # unit tests only (mocked)
 ```
 
-`-v` prints every step, every prompt the client answered, and a report at the end. Without
-`-v` you only see a flow's output when it fails.
+Without `-v` (which the recipes pass) a flow only prints when it fails.
 
 ## Isolation, setup and teardown
 
