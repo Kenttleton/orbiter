@@ -21,6 +21,7 @@ Last updated: 2026-10-26.
 ## 1. Harden (before the GUI)
 
 - [ ] **StateReport config contract.** Plan: `2026-06-18-statereport-config-contract.md`. Drops the named fields (`BinaryPath`, `InstallDir`, `InPath`, `Manager`, `Exports`) from `StateReport` and moves them into `Config`. The plan predates FIND: it lists 20 integrations plus the deleted `local`, and misses 8 added since (bash, zsh, fish, powershell, google-auth, google-drive, tmux, json), so 28 integrations exist today. Refresh before executing.
+- [ ] **Expected vs actual binary path.** Compare the manifest's expected location (local install) or the manager's override against the path FIND found, and ask the Captain to rectify a mismatch (see Design notes). Not built.
 - [ ] **Transponder-only integrations never get binaries.** keychain (macos), vault (1password) and agent (ssh-agent) read `ctx.binaries`, but `NeededFinds` only looks at resources. Needs a short design: where a transponder records its binary path.
 - [ ] **Prompts that bypass the transaction flow.** These read `os.Stdin` directly, so `-i` and `relay` do not cover them:
   - [ ] `jump` confirmation (`executor.go`, `Jump`)
@@ -39,6 +40,25 @@ Last updated: 2026-10-26.
   - [ ] fish and PowerShell hooks (never run: neither shell is installed on the dev machine)
   - [ ] Windows and Git Bash (planned once the GUI exists)
   - [ ] WASM approval end to end, with a real integration calling `run_command` (the approval function is tested directly)
+
+## Wiring audit (2026-10-26)
+
+Features and tests that exist but are not plumbed into Orbiter's mechanics. Found with `deadcode` (functions unreachable from `main`), a read of the manifest and schema against production code, and a read of the specs against the registered commands.
+
+- [ ] **Transponder exports never reach the shell.** `Hook` and `Jump` read only `Resources`; the exports a transponder's report carries (the git auth roles: file, env, agent, keychain, vault) are dropped, so the credentials those integrations resolve are never set. `Chart` and the jump plan ignore transponders too.
+- [ ] **Credential prompting is not implemented.** `StateReport.NeedsInput` and `ResolvedContext.Responses` exist, and the comment says the host collects answers and calls the integration again, but no production code reads either. This is what a `TEXT` (obscured) prompt through the transaction flow is for.
+- [ ] **`defaults` and `navigation_history` are specified but unbuilt.** The constitution lists both and the CRUD spec defines `vessel defaults add`; Go models and ID codes exist, but the schema has no tables and nothing writes them. `vessel defaults` is not a registered command.
+- [ ] **Manifest fields that nothing reads.**
+  - `shell.exports[].sensitive` (the github manifest sets it). Nothing redacts on it; JSON results now redact every export value regardless.
+  - The `[config]` field schema (`ManifestConfigField.Required` and `Fields`): config passed to `resource add --config` is not validated against it.
+  - `runtime.input_buffer_kb` and `runtime.output_buffer_kb` (buffer hints are ignored).
+- [ ] **Code reachable only from tests.** Decide for each: wire it, delete it, or keep it as a test helper.
+  - `PlanFinds` and `ApplyFindResults` (FIND work: `NeededFinds` took over, and the unsafe-name validation now lives in both)
+  - `InstallSelected`, `RenderCatalogChecklist`, `WriteInspectReport`, `RoleType`, `IsID`
+  - `Path.IntoUnix`, `Path.IntoWindows`, `Path.IntoShell` (specified, only `IntoNative` is used)
+  - Test helpers, fine as they are: `Executor.SC`, `NewRootCommand`, `NewStyledRendererWith`
+- [ ] **No end-to-end test runs a real WASM integration through the lifecycle.** The testscripts use unregistered resources, the Go tests use fakes, and `integrations/e2e_test.go` calls handlers directly with hand-built contexts. Nothing proves scan, FIND, record and calibrate work together with a real integration.
+- [x] JSON `scan` and `calibrate` results leaked export values (tokens). They now name exports and redact the values.
 
 ## 2. JSON contract follow-ups
 
@@ -62,7 +82,9 @@ Direction, not yet specified: Wails shell, Vue/Quasar UI, Pixi.js for the 2D orb
 ## Design notes
 
 - **Filesystem is Orbiter's.** It is native Go on every OS, not an integration, and cannot be replaced.
-- **Native installs are standalone.** A tool installed without a manager (Node from the website) is its own block, not a child of a manager. The tool's integration holds the native information; managers (nvm, brew) supply contextual overrides to install locations. There is no `native` manager integration to build.
+- **Local is the default.** A resource that is not a child of a manager is local (a standalone install, such as Node from the website). Its integration's manifest holds the information for that case; managers (nvm, brew) hold references for install locations and supply contextual overrides. There is no `native` manager integration to build.
+- **Two kinds of binary path.** In a manifest, `binary_path` is the expected (theoretical) location for a local install; only a manager can supersede it. The path FIND returns is the actual one. Orbiter reconciles the two for security and pushes the Captain toward rectifying a mismatch. This reconciliation is not built yet (see the Harden section).
+- **`in_path` is informational.** It tells a user whether the command can be run by name instead of by passing the binary path each time. It does not decide Reachable.
 
 ## Conventions to keep
 
