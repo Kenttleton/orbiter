@@ -62,18 +62,28 @@ func newCalibrateCmd(d *deps) *cobra.Command {
 }
 
 func newSurveyCmd(d *deps) *cobra.Command {
-	return &cobra.Command{
+	var all bool
+	cmd := &cobra.Command{
 		Use:   "survey [target]",
 		Short: "Inspect metadata — \"What is this thing?\"",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Inspect the desired state of an entity and what is beneath it.
+
+By default: the target's summary and its direct children. Use -a to descend
+through every descendant (orbiter survey vessel -a lists the whole universe) and
+-v for the bulky detail (config, observations, timestamps). --output json always
+carries full detail; -a applies to it too.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := ""
 			if len(args) > 0 {
 				target = args[0]
 			}
-			return NewExecutor(d.sc, d.renderer).Survey(cmd.Context(), target)
+			return NewExecutor(d.sc, d.renderer).Survey(cmd.Context(), target,
+				SurveyOptions{All: all, Verbose: d.verbose})
 		},
 	}
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "include every descendant of the target")
+	return cmd
 }
 
 func newRetroCmd(d *deps) *cobra.Command {

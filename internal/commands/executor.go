@@ -144,7 +144,7 @@ func isCatalogBrand(target string) bool {
 
 // Survey renders the desired state and last beacon for the target entity.
 // If target is a known integration brand, it shows integration state instead.
-func (e *Executor) Survey(ctx context.Context, target string) error {
+func (e *Executor) Survey(ctx context.Context, target string, opts SurveyOptions) error {
 	if target != "" && isCatalogBrand(target) {
 		info := IntegrationInspectInfo(target, integrations.DefaultSettings, integrations.Default)
 		WriteInspectReport(os.Stdout, info)
@@ -155,7 +155,15 @@ func (e *Executor) Survey(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
+	if err := e.surveySummary(ctx, alias); err != nil {
+		return err
+	}
+	return e.finishSurvey(ctx, alias.ID, alias.Name, opts)
+}
 
+// surveySummary prints the target's own summary tables (effective state, including
+// what is inherited through the hierarchy).
+func (e *Executor) surveySummary(ctx context.Context, alias models.Alias) error {
 	parsed, _ := models.ParseID(alias.ID)
 	switch parsed.EntityType {
 	case models.EntityTypeCallsign:

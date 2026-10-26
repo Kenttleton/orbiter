@@ -70,7 +70,7 @@ func openTestExecutor(t *testing.T) *commands.Executor {
 
 func TestExecutor_Survey_NoTarget(t *testing.T) {
 	exec := openTestExecutor(t)
-	err := exec.Survey(context.Background(), "")
+	err := exec.Survey(context.Background(), "", commands.SurveyOptions{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no target found")
 }
@@ -81,7 +81,7 @@ func TestExecutor_Survey_WithTarget(t *testing.T) {
 	_, err := exec.SC().CreateGalaxy(ctx, "acme")
 	require.NoError(t, err)
 
-	err = exec.Survey(ctx, "acme")
+	err = exec.Survey(ctx, "acme", commands.SurveyOptions{})
 	require.NoError(t, err)
 }
 
@@ -155,7 +155,7 @@ func TestExecutor_Survey_Callsign(t *testing.T) {
 	_, err := exec.SC().CreateCallsign(ctx, "my-keys")
 	require.NoError(t, err)
 
-	err = exec.Survey(ctx, "my-keys")
+	err = exec.Survey(ctx, "my-keys", commands.SurveyOptions{})
 	require.NoError(t, err)
 }
 
