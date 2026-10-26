@@ -1,11 +1,13 @@
 package starchart
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/models"
 )
 
 // FindRequest is one discovery question Orbiter asks the shell.
@@ -172,4 +174,51 @@ func (sc *StarChart) NeededFinds(scan BranchScanResult) []ResourceFind {
 		}
 	}
 	return out
+}
+
+// RecordedBinary returns the path recorded for name in the resource's config
+// ("" when none is recorded).
+func (sc *StarChart) RecordedBinary(ctx context.Context, resourceID, name string) (string, error) {
+	var r models.Resource
+	if err := sc.Get(ctx, "resources", resourceID, &r); err != nil {
+		return "", err
+	}
+	var cfg struct {
+		Binaries map[string]string `json:"binaries"`
+	}
+	if r.Config == "" || json.Unmarshal([]byte(r.Config), &cfg) != nil {
+		return "", nil
+	}
+	return cfg.Binaries[name], nil
+}
+
+// RecordBinary merges {"binaries":{name:path}} into the resource's config JSON,
+// preserving every other key. The path is stored in forward-slash form so the
+// StarChart stays portable; it is re-parsed for the current host on every read.
+func (sc *StarChart) RecordBinary(ctx context.Context, resourceID, name, path string) error {
+	var r models.Resource
+	if err := sc.Get(ctx, "resources", resourceID, &r); err != nil {
+		return err
+	}
+	cfg := map[string]any{}
+	if r.Config != "" {
+		if err := json.Unmarshal([]byte(r.Config), &cfg); err != nil {
+			return fmt.Errorf("resource config is not a JSON object: %w", err)
+		}
+	}
+	p, err := integrations.ParsePath(path)
+	if err != nil {
+		return err
+	}
+	bins, _ := cfg["binaries"].(map[string]any)
+	if bins == nil {
+		bins = map[string]any{}
+	}
+	bins[name] = p.Unix
+	cfg["binaries"] = bins
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return sc.Update(ctx, "resources", resourceID, map[string]any{"config": string(b)})
 }

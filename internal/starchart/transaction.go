@@ -127,6 +127,16 @@ func (sc *StarChart) GetRelayedTransactions(ctx context.Context, sessionID strin
 	return out, rows.Err()
 }
 
+// CountPendingTransactions returns how many transactions in the session are still
+// waiting for a response.
+func (sc *StarChart) CountPendingTransactions(ctx context.Context, sessionID string) (int, error) {
+	var n int
+	err := sc.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM transactions WHERE session_id=? AND status='pending'`, sessionID,
+	).Scan(&n)
+	return n, err
+}
+
 // MarkTransactionProcessed advances a transaction's status to 'processed'.
 func (sc *StarChart) MarkTransactionProcessed(ctx context.Context, txnID string) error {
 	_, err := sc.db.ExecContext(ctx,

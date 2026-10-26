@@ -1,6 +1,7 @@
 package commands_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"path/filepath"
@@ -8,7 +9,10 @@ import (
 
 	"github.com/Kenttleton/orbiter/internal/commands"
 	"github.com/Kenttleton/orbiter/internal/models"
+	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUplinkCmd_processesConfirm(t *testing.T) {
@@ -53,16 +57,6 @@ func TestUplinkCmd_processesText(t *testing.T) {
 	}
 }
 
-func TestUplinkCmd_FIND_stub(t *testing.T) {
-	// FIND ops should not error — they are stubbed for now.
-	sc, sessID, _ := setupUplinkDB(t, "FIND_BINARY", `{"status":"ok","matches":["/usr/bin/brew"]}`)
-	root := commands.NewRootCommandForTest(sc)
-	root.SetArgs([]string{"uplink", "--session=" + sessID})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("FIND_BINARY stub should not error: %v", err)
-	}
-}
-
 func TestUplinkCmd_missingSession(t *testing.T) {
 	sc, err := starchart.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -94,4 +88,126 @@ func setupUplinkDB(t *testing.T, op, relayResponse string) (*starchart.StarChart
 	})
 	sc.RelayTransaction(ctx, txnID, relayResponse)
 	return sc, sessID, txnID
+}
+
+// findFixture is a session holding one relayed transaction whose args name a resource.
+type findFixture struct {
+	sc     *starchart.StarChart
+	sess   string
+	txn    string
+	resID  string
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+func setupFind(t *testing.T, op, config, args, response string) *findFixture {
+	t.Helper()
+	sc, err := starchart.Open(filepath.Join(t.TempDir(), "test.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { sc.Close() })
+	ctx := context.Background()
+	res, err := sc.CreateResource(ctx, "brew", "tool", "brew", "[]", config)
+	require.NoError(t, err)
+	sess := models.NewID("ss")
+	require.NoError(t, sc.InsertSession(ctx, sess, `{"op":"TEST"}`))
+	txn := models.NewID("tx")
+	full := args
+	if full == "" {
+		full = `{"resource_id":"` + res.ID + `","key":"brew","value":""}`
+	} else {
+		full = `{"resource_id":"` + res.ID + `",` + args[1:]
+	}
+	require.NoError(t, sc.InsertTransaction(ctx, starchart.Transaction{
+		ID: txn, SessionID: sess, Op: op, Args: full, Status: starchart.TransactionStatusPending,
+	}))
+	require.NoError(t, sc.RelayTransaction(ctx, txn, response))
+	return &findFixture{sc: sc, sess: sess, txn: txn, resID: res.ID, stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+}
+
+// uplink runs `orbiter uplink` with a JSON renderer, so prompts stay pending.
+func (f *findFixture) uplink(t *testing.T) error {
+	t.Helper()
+	root := commands.NewRootCommandForTestWithRenderer(f.sc, output.NewRendererTo(output.FormatJSON, false, f.stdout))
+	root.SetOut(f.stdout)
+	root.SetErr(f.stderr)
+	root.SetArgs([]string{"uplink", "--session=" + f.sess})
+	return root.Execute()
+}
+
+func (f *findFixture) recorded(t *testing.T) string {
+	t.Helper()
+	p, err := f.sc.RecordedBinary(context.Background(), f.resID, "brew")
+	require.NoError(t, err)
+	return p
+}
+
+func TestUplinkFind_SingleMatchRecordsBinary(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":["/opt/homebrew/bin/brew"]}`)
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/opt/homebrew/bin/brew", f.recorded(t))
+	sess, _ := f.sc.GetSession(context.Background(), f.sess)
+	assert.Equal(t, "complete", sess.Status)
+}
+
+func TestUplinkFind_ZeroMatchesLeavesConfigAlone(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":[]}`)
+	require.NoError(t, f.uplink(t))
+	assert.Empty(t, f.recorded(t))
+	assert.Contains(t, f.stderr.String(), "not found")
+}
+
+func TestUplinkFind_TwoMatchesRaisesSelectAndStaysActive(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":["/opt/homebrew/bin/brew","/usr/local/bin/brew"]}`)
+	require.NoError(t, f.uplink(t))
+	assert.Empty(t, f.recorded(t), "ambiguous result must not be recorded")
+	sess, _ := f.sc.GetSession(context.Background(), f.sess)
+	assert.Equal(t, "active", sess.Status)
+	n, err := f.sc.CountPendingTransactions(context.Background(), f.sess)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "a new SELECT transaction is pending")
+	assert.Contains(t, f.stdout.String(), `"captain_prompt"`)
+}
+
+func TestUplinkFind_InvalidJSONChangesNothing(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{"keep":"me"}`, "", `not json at all`)
+	require.NoError(t, f.uplink(t))
+	assert.Empty(t, f.recorded(t))
+}
+
+func TestUplinkFind_DifferentRecordedPathRequiresConfirm(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{"binaries":{"brew":"/old/brew"}}`, "", `{"status":"ok","matches":["/opt/homebrew/bin/brew"]}`)
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/old/brew", f.recorded(t), "no auto-update on recovery")
+	n, _ := f.sc.CountPendingTransactions(context.Background(), f.sess)
+	assert.Equal(t, 1, n, "a CONFIRM transaction is pending")
+}
+
+func TestUplinkFind_ConfirmApprovedRecordsNewPath(t *testing.T) {
+	f := setupFind(t, "CONFIRM", `{"binaries":{"brew":"/old/brew"}}`,
+		`{"key":"brew","new":"/opt/homebrew/bin/brew","old":"/old/brew"}`, `{"confirmed":true}`)
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/opt/homebrew/bin/brew", f.recorded(t))
+}
+
+func TestUplinkFind_ConfirmDeclinedKeepsOldPath(t *testing.T) {
+	f := setupFind(t, "CONFIRM", `{"binaries":{"brew":"/old/brew"}}`,
+		`{"key":"brew","new":"/opt/homebrew/bin/brew","old":"/old/brew"}`, `{"confirmed":false}`)
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/old/brew", f.recorded(t))
+}
+
+func TestUplinkFind_SelectRecordsChosenPath(t *testing.T) {
+	f := setupFind(t, "SELECT", `{}`, `{"key":"brew","matches":["/a/brew","/b/brew"]}`, `{"selected":"/b/brew"}`)
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/b/brew", f.recorded(t))
+}
+
+func TestUplinkFind_RelayToUnknownTxnChangesNothing(t *testing.T) {
+	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":["/x/brew"]}`)
+	root := commands.NewRootCommandForTest(f.sc)
+	root.SetArgs([]string{"relay", "--txn=doesnotexisttx000", "--response", `{"status":"ok","matches":[]}`})
+	require.NoError(t, root.Execute())
+	// The real transaction is untouched and still processes normally.
+	require.NoError(t, f.uplink(t))
+	assert.Equal(t, "/x/brew", f.recorded(t))
 }
