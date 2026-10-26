@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -13,7 +14,13 @@ import (
 // Windows absolute (drive letter), Unix absolute (forward-slash), or native OS path.
 // Also expands ~ and resolves relative paths to absolute.
 // Returns a zero Path and nil error for empty input — empty signals "not found".
+// On a Windows host it also accepts Git Bash (/c/Users/x) and Cygwin
+// (/cygdrive/c/Users/x) drive paths.
 func ParsePath(raw string) (Path, error) {
+	return parsePathFor(runtime.GOOS, raw)
+}
+
+func parsePathFor(goos, raw string) (Path, error) {
 	if raw == "" {
 		return Path{}, nil
 	}
@@ -34,6 +41,12 @@ func ParsePath(raw string) (Path, error) {
 		} else {
 			raw = home + raw[1:]
 		}
+	}
+
+	// Git Bash / Cygwin report drive paths as /c/... — meaningful only on a
+	// Windows host, where it must become C:/... before the drive-letter check.
+	if goos == "windows" {
+		raw = msysToDrive(raw)
 	}
 
 	// Windows absolute path: drive letter + colon (e.g. C:\ or C:/).
@@ -60,6 +73,26 @@ func ParsePath(raw string) (Path, error) {
 		Unix:    unix,
 		Windows: strings.ReplaceAll(unix, "/", `\`),
 	}, nil
+}
+
+// msysToDrive rewrites /c/Users/x and /cygdrive/c/Users/x to C:/Users/x.
+// Anything that is not a single-letter drive prefix is returned unchanged.
+func msysToDrive(raw string) string {
+	rest := strings.TrimPrefix(raw, "/cygdrive")
+	if len(rest) < 2 || rest[0] != '/' {
+		return raw
+	}
+	c := rest[1]
+	if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+		return raw
+	}
+	tail := rest[2:]
+	if tail == "" {
+		tail = "/"
+	} else if tail[0] != '/' {
+		return raw // "/code/x" is a directory name, not a drive letter
+	}
+	return strings.ToUpper(string(c)) + ":" + tail
 }
 
 // PathFromConfig reads the "path" key from a resource's config JSON and

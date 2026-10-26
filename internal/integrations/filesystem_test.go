@@ -167,3 +167,44 @@ func TestPathFromConfig_EmptyConfig(t *testing.T) {
 		t.Errorf("expected empty Path for nil Self, got %+v", got)
 	}
 }
+
+func TestParsePath_GitBashOnWindowsHost(t *testing.T) {
+	cases := []struct{ in, wantUnix, wantWin string }{
+		{"/c/Users/me/bin/git.exe", "C:/Users/me/bin/git.exe", `C:\Users\me\bin\git.exe`},
+		{"/d/tools", "D:/tools", `D:\tools`},
+		{"/cygdrive/c/Users/me", "C:/Users/me", `C:\Users\me`},
+		{"/c", "C:/", `C:\`},
+		{`"/c/Program Files/Git/bin/git.exe"`, "C:/Program Files/Git/bin/git.exe", `C:\Program Files\Git\bin\git.exe`},
+		// PowerShell-style input must keep working unchanged.
+		{"C:/Users/me/git.exe", "C:/Users/me/git.exe", `C:\Users\me\git.exe`},
+	}
+	for _, c := range cases {
+		got, err := parsePathFor("windows", c.in)
+		if err != nil {
+			t.Fatalf("%q: %v", c.in, err)
+		}
+		if got.Unix != c.wantUnix || got.Windows != c.wantWin {
+			t.Errorf("%q: got {%q %q}, want {%q %q}", c.in, got.Unix, got.Windows, c.wantUnix, c.wantWin)
+		}
+	}
+}
+
+func TestParsePath_GitBashFormLeftAloneOnUnixHosts(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		got, err := parsePathFor(goos, "/c/Users/me")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Unix != "/c/Users/me" {
+			t.Errorf("%s: got %q, want the path untouched", goos, got.Unix)
+		}
+	}
+}
+
+func TestMsysToDrive_NonDriveInputUnchanged(t *testing.T) {
+	for _, in := range []string{"/usr/bin/git", "/code/x", "/cygdrive", "/cygdrivefoo/x", "C:/x", "relative/p", ""} {
+		if got := msysToDrive(in); got != in {
+			t.Errorf("msysToDrive(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
