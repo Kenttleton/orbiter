@@ -54,15 +54,64 @@ Hierarchy children: vessel to galaxies; galaxy to systems and the planets direct
 system to planets; planets have none. Attached resources, transponders and callsigns are
 listed for each entity.
 
-## JSON output
+## JSON output (`--output json`)
 
-- Every command that supports `--output json` emits **event lines** (one JSON object per
-  line: `type`, `txn`, `data`), never free-form text on stdout.
-- A read command emits one `result` event whose `data` is `{success, message, data}`.
-  `survey`'s `data` is a `SurveyNode` tree (`internal/commands/survey.go`).
-- JSON **always carries full detail**, so `-v` does not change it. Scope flags (`-a`) do,
-  because a client has to be able to ask for the whole subtree.
-- `-t` and `-v` never add free-form text to JSON stdout.
+JSON mode is the contract for every client: the TUI, the desktop app, and third parties.
+stdout carries **event lines only** (one JSON object per line: `type`, `txn`, `data`),
+never free-form text. A command ends in exactly one terminal event:
+
+| Terminal event | When |
+| -------------- | ---- |
+| `result` | The command finished. `data` is `{success, message, data}`; the inner `data` is the command's own shape (table below). |
+| `plan` | `chart` (always, an empty list when there is nothing to chart). |
+| `error` | The command failed. `data` is `{message}`. The process exits 1 and stderr stays empty. |
+| `captain_prompt` | A command needs the Captain's answer (async): relay the response, then run `uplink`. |
+
+Detail flags: JSON **always carries full detail**, so `-v` does not change it. Scope flags
+(`-a`) do, because a client has to be able to ask for the whole subtree. `-t` never adds
+free-form text to JSON stdout.
+
+### Result shapes
+
+Types live in `internal/commands/results.go` and `internal/commands/survey.go`.
+
+| Command | Result `data` |
+| ------- | ------------- |
+| `galaxy/system/planet/callsign/transponder/resource add` | `EntityResult`: `type, id, name`, plus `galaxy`, `system`, `role`, `brand` where they apply |
+| `... init` | `EntityResult` with `status` (beacon); `planet init --discover` adds `discovered: [{role, brand, outcome, error?}]` |
+| `attach` | `AttachResult`: `id, from, to` |
+| `survey` | `SurveyNode` tree (see below) |
+| `scan` | `ScanResult`: `target, target_id, items: [{kind, id, role, brand, status, report}]` where `report` is the integration's full `StateReport` |
+| `calibrate` | `CalibrateResult`: `target, target_id, items: [{kind, id, role, brand, action, before?, after}]` |
+| `chart` | `plan` event: `[{action, entity_type, name, description}]` |
+| `retro` | `RetroResult`: `target, retired, nodes: [{name, action}]`. Pass `-y`: a JSON client cannot answer the terminal prompt |
+| `quarantine`, `unquarantine`, `vessel unquarantine` | `QuarantineResult`: `brand, quarantined, changed` |
+| `vessel inspect`, `survey <brand>` | `InspectResult`: `brand, status (quarantined\|active\|not_installed), quarantined, reason?, since?` |
+| `vessel init -y` | `VesselInitResult`: `installed, removed` |
+
+### Survey
+
+`survey`'s `data` is a `SurveyNode` tree: `type, id, name, status, role, brand, manages,
+config, observations, verified_at`, the entities attached directly (`resources`,
+`transponders`, `callsigns`) and `children` (one level deep, or the whole subtree with `-a`).
+
+### Discovery for clients that are not a shell
+
+When `calibrate` (or the `uplink` that continues it) cannot proceed until something is
+found, it ends with a `result` whose data is a `PendingDiscovery`:
+`{status: "needs_discovery", session, requests: [{txn, op, key, value?}]}`. The client
+answers each request itself (`op` is `FIND_BINARY`, `FIND_FILE`, `FIND_DIR` or `FIND_ENV`;
+the reply schema is the FIND spec's section 2) with
+`orbiter relay --txn=<txn> --response=<json>`, then runs `orbiter uplink --session=<session>`.
+A shell wrapper does the same through the `FIND_*` functions in its hook. A prompt the
+Captain must answer arrives as a `captain_prompt` event and is answered the same way.
+
+### Exempt commands
+
+These emit scripts or the shell line protocol by design, and the shell executes the output:
+`completions`, `shell init`, `hook`, `jump`. `init` (the terminal checklist) needs a
+terminal; use `vessel init -y`. `relay` prints nothing: success is exit 0. `uplink` emits
+the events above. `starchart` is the TUI entry point.
 
 ## Adding to this document
 
