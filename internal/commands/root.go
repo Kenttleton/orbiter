@@ -22,8 +22,32 @@ type deps struct {
 	// verbose is the root -v flag: data volume. Read commands show more detail.
 	// Process transparency is --trace, owned by the renderer (Renderer.IsTrace).
 	verbose bool
-	// jsonMode is set once the output format is resolved (PersistentPreRunE).
+	// jsonMode is set once the output format is resolved (setupOutput).
 	jsonMode bool
+
+	outputFormat string // root --output flag
+	trace        bool   // root --trace flag
+}
+
+// setupOutput resolves the output format and flags (flag, then environment, then
+// default) and builds the renderer. Every command runs it, including the ones that
+// skip the star chart, so every command can speak JSON.
+func (d *deps) setupOutput() {
+	format := d.outputFormat
+	if format == "" {
+		format = os.Getenv("ORBITER_OUTPUT")
+	}
+	if format == "" {
+		format = output.FormatStyled
+	}
+	if !d.verbose {
+		d.verbose = os.Getenv("ORBITER_VERBOSE") == "1"
+	}
+	if !d.trace {
+		d.trace = os.Getenv("ORBITER_TRACE") == "1"
+	}
+	d.jsonMode = format == output.FormatJSON
+	d.renderer = output.NewRenderer(format, d.trace)
 }
 
 // NewRootCommand builds and returns the orbiter root Cobra command with DI wiring.
@@ -50,9 +74,6 @@ func Execute() int {
 }
 
 func newRoot() (*cobra.Command, *deps) {
-	var outputFormat string
-	var trace bool
-
 	var d deps
 
 	root := &cobra.Command{
@@ -63,6 +84,10 @@ and environment orchestration platform for freelance and contract engineers.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Output first, so even a failure to open the star chart is reported in
+			// the requested format.
+			d.setupOutput()
+
 			// Resolve Star Chart path.
 			chartPath := os.Getenv("ORBITER_STARCHART")
 			if chartPath == "" {
@@ -80,26 +105,6 @@ and environment orchestration platform for freelance and contract engineers.`,
 			}
 			d.sc = sc
 
-			// Resolve output format: flag > env > default.
-			format := outputFormat
-			if format == "" {
-				format = os.Getenv("ORBITER_OUTPUT")
-			}
-			if format == "" {
-				format = output.FormatStyled
-			}
-
-			// Resolve verbose (data volume): flag > env.
-			if !d.verbose {
-				d.verbose = os.Getenv("ORBITER_VERBOSE") == "1"
-			}
-			// Resolve trace (process transparency): flag > env.
-			if !trace {
-				trace = os.Getenv("ORBITER_TRACE") == "1"
-			}
-
-			d.jsonMode = format == output.FormatJSON
-			d.renderer = output.NewRenderer(format, trace)
 			d.resolver = resolver.New(sc)
 
 			// Load integrations installed to disk into the Default registry.
@@ -115,9 +120,9 @@ and environment orchestration platform for freelance and contract engineers.`,
 		},
 	}
 
-	root.PersistentFlags().StringVar(&outputFormat, "output", "", "output format: styled (default) or json")
+	root.PersistentFlags().StringVar(&d.outputFormat, "output", "", "output format: styled (default) or json")
 	root.PersistentFlags().BoolVarP(&d.verbose, "verbose", "v", false, "show more detail (data volume); ORBITER_VERBOSE=1")
-	root.PersistentFlags().BoolVarP(&trace, "trace", "t", false, "show the underlying process: plain labels and raw tool output; ORBITER_TRACE=1")
+	root.PersistentFlags().BoolVarP(&d.trace, "trace", "t", false, "show the underlying process: plain labels and raw tool output; ORBITER_TRACE=1")
 
 	// Register all subcommands.
 	root.AddCommand(
@@ -137,8 +142,8 @@ and environment orchestration platform for freelance and contract engineers.`,
 		newTransponderCmd(&d),
 		newResourceCmd(&d),
 		newVesselCmd(&d),
-		newQuarantineCmd(),
-		newUnquarantineCmd(),
+		newQuarantineCmd(&d),
+		newUnquarantineCmd(&d),
 		newStarChartCmd(&d),
 		newAttachCmd(&d),
 		newRelayCmd(&d),

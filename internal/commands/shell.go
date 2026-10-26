@@ -68,11 +68,11 @@ func osEnvMap() map[string]string {
 	return m
 }
 
-func vesselInitRun(out io.Writer, yes bool) error {
+func vesselInitRun(out io.Writer, yes bool) (VesselInitResult, error) {
 	dir := bundle.DefaultIntegrationsDir()
 	states, err := bundle.CatalogEntriesWithState(dir)
 	if err != nil {
-		return fmt.Errorf("check integration state: %w", err)
+		return VesselInitResult{}, fmt.Errorf("check integration state: %w", err)
 	}
 
 	if yes {
@@ -82,32 +82,32 @@ func vesselInitRun(out io.Writer, yes bool) error {
 			entries[i] = s.CatalogEntry
 		}
 		if err := bundle.ExtractSelected(entries, dir); err != nil {
-			return fmt.Errorf("install integrations: %w", err)
+			return VesselInitResult{}, fmt.Errorf("install integrations: %w", err)
 		}
 		fmt.Fprintf(out, "Installed %d integration(s)\n", len(entries))
-		return nil
+		return VesselInitResult{Installed: len(entries)}, nil
 	}
 
 	items := BuildChecklistItems(states)
 	if len(items) == 0 {
 		fmt.Fprintln(out, "No integrations available in catalog.")
-		return nil
+		return VesselInitResult{}, nil
 	}
 
 	initial := NewChecklistModel("Select integrations to install:", items)
 	result, err := tea.NewProgram(initial).Run()
 	if err != nil {
-		return fmt.Errorf("checklist: %w", err)
+		return VesselInitResult{}, fmt.Errorf("checklist: %w", err)
 	}
 
 	final := result.(ChecklistModel)
 	if !final.Done() {
 		fmt.Fprintln(out, "Cancelled.")
-		return nil
+		return VesselInitResult{}, nil
 	}
 
 	if err := ApplySelections(states, final.Selected(), dir); err != nil {
-		return fmt.Errorf("apply selections: %w", err)
+		return VesselInitResult{}, fmt.Errorf("apply selections: %w", err)
 	}
 
 	installed := len(final.Selected())
@@ -126,7 +126,7 @@ func vesselInitRun(out io.Writer, yes bool) error {
 		fmt.Fprintf(out, ", removed %d", removed)
 	}
 	fmt.Fprintln(out)
-	return nil
+	return VesselInitResult{Installed: installed, Removed: removed}, nil
 }
 
 // newInitCmd returns the target-aware init command.
@@ -160,7 +160,8 @@ For shell integration add this to your profile:
 			case "shell":
 				return printShellScript()
 			case "vessel", "":
-				return vesselInitRun(cmd.OutOrStdout(), yes)
+				_, err := vesselInitRun(cmd.OutOrStdout(), yes)
+				return err
 			default:
 				return fmt.Errorf("unknown init target %q — use 'shell' or 'vessel'", target)
 			}

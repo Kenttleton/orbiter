@@ -12,8 +12,8 @@ import (
 
 	bundle "github.com/Kenttleton/orbiter/integrations"
 	integrations "github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/output"
 )
-
 
 // RenderCatalogChecklist returns one display line per catalog entry, suitable
 // for a terminal checklist prompt. Each line is: "Name — Description (roles: role1, role2)"
@@ -60,19 +60,49 @@ func IntegrationInspectInfo(brand string, settings *integrations.SettingsStore, 
 	return result
 }
 
+// inspectLines is the human-readable inspection report, one entry per line.
+func inspectLines(info IntegrationInspectResult) []string {
+	lines := []string{"Integration: " + info.Brand}
+	switch {
+	case info.Quarantined:
+		lines = append(lines,
+			"Status:      QUARANTINED",
+			"Reason:      "+info.QuarantineReason,
+			"Since:       "+info.QuarantineAt.Format(time.RFC3339),
+			"",
+			"To restore:  orbiter unquarantine "+info.Brand)
+	case info.Registered:
+		lines = append(lines, "Status:      active")
+	default:
+		lines = append(lines, "Status:      not installed")
+	}
+	return lines
+}
+
 // WriteInspectReport writes a human-readable inspection report to w.
 func WriteInspectReport(w io.Writer, info IntegrationInspectResult) {
-	fmt.Fprintf(w, "Integration: %s\n", info.Brand)
-	if info.Quarantined {
-		fmt.Fprintf(w, "Status:      QUARANTINED\n")
-		fmt.Fprintf(w, "Reason:      %s\n", info.QuarantineReason)
-		fmt.Fprintf(w, "Since:       %s\n", info.QuarantineAt.Format(time.RFC3339))
-		fmt.Fprintf(w, "\nTo restore:  orbiter unquarantine %s\n", info.Brand)
-	} else if info.Registered {
-		fmt.Fprintf(w, "Status:      active\n")
-	} else {
-		fmt.Fprintf(w, "Status:      not installed\n")
+	for _, l := range inspectLines(info) {
+		fmt.Fprintln(w, l)
 	}
+}
+
+// reportInspect renders an inspection through the renderer: styled mode prints the
+// report, JSON mode emits one result.
+func reportInspect(r output.Renderer, info IntegrationInspectResult) {
+	for _, l := range inspectLines(info) {
+		r.Info(l)
+	}
+	res := InspectResult{Brand: info.Brand, Quarantined: info.Quarantined}
+	switch {
+	case info.Quarantined:
+		since := info.QuarantineAt
+		res.Status, res.Reason, res.Since = "quarantined", info.QuarantineReason, &since
+	case info.Registered:
+		res.Status = "active"
+	default:
+		res.Status = "not_installed"
+	}
+	r.Result(output.Result{Success: true, Message: "inspect " + info.Brand, Data: res})
 }
 
 // BuildChecklistItems converts CatalogEntryState slice into ChecklistItem slice
@@ -122,54 +152,53 @@ func ApplySelections(states []bundle.CatalogEntryState, selected []ChecklistItem
 	return bundle.ExtractSelected(toExtract, dir)
 }
 
-func newVesselInitCmd(_ *deps) *cobra.Command {
+func newVesselInitCmd(d *deps) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize the vessel and install bundled integrations",
 		Args:  cobra.NoArgs,
 		// Override parent PersistentPreRunE — vessel init needs no star chart.
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { d.setupOutput(); return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return vesselInitRun(cmd.OutOrStdout(), yes)
+			out := cmd.OutOrStdout()
+			if d.jsonMode {
+				out = io.Discard // JSON mode: the result is the only output
+			}
+			res, err := vesselInitRun(out, yes)
+			if err != nil {
+				return err
+			}
+			d.done("vessel initialized", res)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "install all integrations without interactive selection")
 	return cmd
 }
 
-func newVesselInspectCmd(_ *deps) *cobra.Command {
+func newVesselInspectCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
-		Use:   "inspect <brand>",
-		Short: "Show details for an installed integration",
-		Args:  cobra.ExactArgs(1),
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		Use:               "inspect <brand>",
+		Short:             "Show details for an installed integration",
+		Args:              cobra.ExactArgs(1),
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { d.setupOutput(); return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			brand := args[0]
-			info := IntegrationInspectInfo(brand, integrations.DefaultSettings, integrations.Default)
-			WriteInspectReport(cmd.OutOrStdout(), info)
+			info := IntegrationInspectInfo(args[0], integrations.DefaultSettings, integrations.Default)
+			reportInspect(d.renderer, info)
 			return nil
 		},
 	}
 }
 
-func newVesselUnquarantineCmd(_ *deps) *cobra.Command {
+func newVesselUnquarantineCmd(d *deps) *cobra.Command {
 	return &cobra.Command{
-		Use:   "unquarantine <brand>",
-		Short: "Remove quarantine from an integration and re-enable it",
-		Args:  cobra.ExactArgs(1),
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		Use:               "unquarantine <brand>",
+		Short:             "Remove quarantine from an integration and re-enable it",
+		Args:              cobra.ExactArgs(1),
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { d.setupOutput(); return nil },
 		RunE: func(cmd *cobra.Command, args []string) error {
-			brand := args[0]
-			if !integrations.DefaultSettings.IsQuarantined(brand) {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s is not quarantined\n", brand)
-				return nil
-			}
-			if err := integrations.Default.UnquarantineBrand(brand); err != nil {
-				return fmt.Errorf("unquarantine %s: %w", brand, err)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s quarantine removed — run 'orbiter init' to reload\n", brand)
-			return nil
+			return unquarantineBrand(d, args[0])
 		},
 	}
 }

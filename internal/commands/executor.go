@@ -147,7 +147,7 @@ func isCatalogBrand(target string) bool {
 func (e *Executor) Survey(ctx context.Context, target string, opts SurveyOptions) error {
 	if target != "" && isCatalogBrand(target) {
 		info := IntegrationInspectInfo(target, integrations.DefaultSettings, integrations.Default)
-		WriteInspectReport(os.Stdout, info)
+		reportInspect(e.renderer, info)
 		return nil
 	}
 

@@ -77,3 +77,32 @@ exec orbiter --output json retro web -y
 stdout '^\{"type":"result",.*"target":"web","retired":true,"nodes":\[\{"name":"web","action":"[a-z]+"\}'
 exec orbiter --output json retro ops -y
 stdout '"target":"ops","retired":true'
+
+# --- integration management (these commands need no star chart) ---
+exec orbiter --output json vessel init -y
+stdout '^\{"type":"result",.*"installed":[0-9]+'
+! stdout '^[^{]'
+
+exec orbiter --output json vessel inspect git
+stdout '"brand":"git".*"status":"[a-z_]+"'
+! stdout '^[^{]'
+
+exec orbiter --output json quarantine git
+stdout '^\{"type":"result",.*"brand":"git","quarantined":true,"changed":true'
+! stdout '^[^{]'
+
+exec orbiter --output json quarantine git
+stdout '"quarantined":true,"changed":false'
+
+exec orbiter --output json vessel inspect git
+stdout '"status":"quarantined".*"reason":"manual quarantine"'
+
+exec orbiter --output json survey git
+stdout '"brand":"git".*"status":"quarantined"'
+! stdout '^[^{]'
+
+exec orbiter --output json unquarantine git
+stdout '"brand":"git","quarantined":false,"changed":true'
+
+exec orbiter --output json vessel unquarantine git
+stdout '"quarantined":false,"changed":false'

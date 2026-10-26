@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"time"
+
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 )
@@ -90,4 +92,27 @@ type RetroResult struct {
 	Target  string      `json:"target"`
 	Retired bool        `json:"retired"`
 	Nodes   []RetroNode `json:"nodes"`
+}
+
+// QuarantineResult is the JSON result of quarantine and unquarantine. Changed is
+// false when the brand was already in the requested state.
+type QuarantineResult struct {
+	Brand       string `json:"brand"`
+	Quarantined bool   `json:"quarantined"`
+	Changed     bool   `json:"changed"`
+}
+
+// InspectResult is the JSON result of vessel inspect and survey <brand>.
+type InspectResult struct {
+	Brand       string     `json:"brand"`
+	Status      string     `json:"status"` // quarantined | active | not_installed
+	Quarantined bool       `json:"quarantined"`
+	Reason      string     `json:"reason,omitempty"`
+	Since       *time.Time `json:"since,omitempty"`
+}
+
+// VesselInitResult is the JSON result of vessel init.
+type VesselInitResult struct {
+	Installed int `json:"installed"`
+	Removed   int `json:"removed"`
 }
