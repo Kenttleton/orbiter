@@ -8,6 +8,8 @@ function Invoke-Orbiter {
         Write-Error $out
         return
     }
+    $session = ''
+    $ranFind = $false
     foreach ($line in ($out -split "`n")) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $parts = $line -split ' ', 2
@@ -20,8 +22,17 @@ function Invoke-Orbiter {
                 Set-Item "env:$($kv[0])" $kv[1]
             }
             'UNSET' { Remove-Item "env:$rest" -ErrorAction SilentlyContinue }
+            'SESSION' { $session = $rest }
+            { $_ -in 'FIND_BINARY', 'FIND_DIR', 'FIND_ENV', 'FIND_FILE' } {
+                # txn, key, optional value (the value may contain spaces)
+                $p = $rest -split ' ', 3
+                if ($p.Length -ge 3) { & $op $p[0] $p[1] $p[2] } else { & $op $p[0] $p[1] }
+                $ranFind = $true
+            }
+            default { Write-Output $line }
         }
     }
+    if ($ranFind -and $session) { Invoke-Orbiter uplink --session $session }
 }
 Set-Alias orbiter Invoke-Orbiter
 
@@ -62,8 +73,41 @@ function _OrbiterHook {
 
 $ExecutionContext.SessionState.InvokeCommand.LocationChangedAction = { _OrbiterHook }
 
-function FIND {
-    param([string]$Name)
-    $cmd = Get-Command $Name -ErrorAction SilentlyContinue
-    if ($cmd) { $cmd.Source } else { "" }
+# JSON-quote one string (escapes backslash and double-quote).
+function _OrbiterJson([string]$s) { '"' + ($s -replace '\\', '\\' -replace '"', '\"') + '"' }
+function _OrbiterReply([string]$Txn, [string]$Json) { $Json | & ::ORBITER:: relay "--txn=$Txn" }
+
+function FIND_BINARY {
+    param([string]$Txn, [string]$Name)
+    $paths = Get-Command $Name -All -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandType -eq 'Application' } |
+        ForEach-Object { $_.Source -replace '\\', '/' } | Select-Object -Unique
+    $items = @($paths | ForEach-Object { _OrbiterJson $_ })
+    _OrbiterReply $Txn ('{"status":"ok","matches":[' + ($items -join ',') + ']}')
+}
+
+function FIND_FILE {
+    param([string]$Txn, [string]$Pattern, [string]$Location = $env:ORBITER_CWD)
+    if (-not (Test-Path -LiteralPath $Location -PathType Container)) {
+        _OrbiterReply $Txn ('{"status":"not_found","message":' + (_OrbiterJson "location does not exist: $Location") + '}')
+        return
+    }
+    $items = @(Get-ChildItem -LiteralPath $Location -Filter $Pattern -File -Recurse -ErrorAction SilentlyContinue |
+        ForEach-Object { _OrbiterJson ($_.FullName -replace '\\', '/') })
+    _OrbiterReply $Txn ('{"status":"ok","matches":[' + ($items -join ',') + ']}')
+}
+
+function FIND_DIR {
+    param([string]$Txn, [string]$Path)
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        _OrbiterReply $Txn ('{"status":"ok","path":' + (_OrbiterJson ($Path -replace '\\', '/')) + ',"exists":true}')
+    } else {
+        _OrbiterReply $Txn '{"status":"ok","path":"","exists":false}'
+    }
+}
+
+function FIND_ENV {
+    param([string]$Txn, [string]$Name)
+    $v = [Environment]::GetEnvironmentVariable($Name); if ($null -eq $v) { $v = '' }
+    _OrbiterReply $Txn ('{"status":"ok","name":' + (_OrbiterJson $Name) + ',"value":' + (_OrbiterJson $v) + '}')
 }
