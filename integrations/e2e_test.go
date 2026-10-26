@@ -31,6 +31,13 @@ func resolvedFor(t *testing.T, i core.Integration) core.ResolvedContext {
 	return core.ResolvedContext{Binaries: bins}
 }
 
+// withBinaries adds the resolved binaries to an otherwise prepared context.
+func withBinaries(t *testing.T, i core.Integration, rc core.ResolvedContext) core.ResolvedContext {
+	t.Helper()
+	rc.Binaries = resolvedFor(t, i).Binaries
+	return rc
+}
+
 func setupBundleRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry(nil)
@@ -78,7 +85,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(gitCtx("tool"))
+		report := i.Scan(withBinaries(t, i, gitCtx("tool")))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (git is installed)")
@@ -98,7 +105,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("init", func(t *testing.T) {
-		report := i.Init(gitCtx("tool"))
+		report := i.Init(withBinaries(t, i, gitCtx("tool")))
 		t.Logf("Init: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true")
@@ -112,7 +119,7 @@ func TestBundledIntegrations_Git(t *testing.T) {
 	})
 
 	t.Run("calibrate", func(t *testing.T) {
-		report := i.Calibrate(gitCtx("tool"))
+		report := i.Calibrate(withBinaries(t, i, gitCtx("tool")))
 		t.Logf("Calibrate: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true after calibrate")
@@ -185,7 +192,7 @@ func TestBundledIntegrations_Node(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (node is installed on this machine)")
@@ -207,7 +214,7 @@ func TestBundledIntegrations_Go(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true")
@@ -227,7 +234,7 @@ func TestBundledIntegrations_Go(t *testing.T) {
 	})
 
 	t.Run("init", func(t *testing.T) {
-		report := i.Init(core.ResolvedContext{})
+		report := i.Init(resolvedFor(t, i))
 		t.Logf("Init: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true")
@@ -241,7 +248,7 @@ func TestBundledIntegrations_Go(t *testing.T) {
 	})
 
 	t.Run("calibrate", func(t *testing.T) {
-		report := i.Calibrate(core.ResolvedContext{})
+		report := i.Calibrate(resolvedFor(t, i))
 		t.Logf("Calibrate: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true after calibrate")
@@ -316,7 +323,7 @@ func TestBundledIntegrations_Make(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (make is installed)")
@@ -365,7 +372,7 @@ func TestBundledIntegrations_Python(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (python3 is installed)")
@@ -408,7 +415,7 @@ func TestBundledIntegrations_Rust(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (rustc is installed)")
@@ -441,7 +448,7 @@ func TestBundledIntegrations_Brew(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		// Only assert if brew is actually installed
 		brewPath := ""
@@ -485,7 +492,7 @@ func TestBundledIntegrations_UV(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		// uv may not be installed everywhere; just verify shape
 		if report.Manager == "" {
@@ -502,7 +509,7 @@ func TestBundledIntegrations_Rustup(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (rustup is installed)")
@@ -551,7 +558,7 @@ func TestBundledIntegrations_Docker(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -610,7 +617,7 @@ func TestBundledIntegrations_OnePassword(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		// op may not be installed everywhere; just verify shape
 		if report.Manager == "" {
@@ -627,7 +634,7 @@ func TestBundledIntegrations_SSHAgent(t *testing.T) {
 	}
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -727,7 +734,7 @@ func TestBundledIntegrations_Just(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -761,7 +768,7 @@ func TestBundledIntegrations_Dotenv(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		// dotenv scan reports present if .env is readable — on CI there may not be a .env
 		// so we only verify the shape of the response, not present=true
@@ -803,7 +810,7 @@ func TestBundledIntegrations_Asdf(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -833,7 +840,7 @@ func TestBundledIntegrations_EnvShell(t *testing.T) {
 
 	t.Run("scan_with_env", func(t *testing.T) {
 		// Set up context with some env vars to check
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true for env/shell")
@@ -885,7 +892,7 @@ func TestBundledIntegrations_VSCode(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -1063,7 +1070,7 @@ func TestBundledIntegrations_GoogleAuth(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
@@ -1097,7 +1104,7 @@ func TestBundledIntegrations_GoogleDrive(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager == "" {
 			t.Error("expected non-empty manager field")
