@@ -112,6 +112,24 @@ Called during `orbit jump` to align the environment to the expected state.
 
 ---
 
+## Declaring Discovery: `binaries` and `[find]`
+
+An integration never searches for its own binaries. It declares what it needs and Orbiter delivers the answer in the `ResolvedContext` before the handler runs.
+
+```toml
+[integration]
+binaries = ["brew"]        # binary names Orbiter resolves for this integration
+
+[find]                     # optional
+files = ["Brewfile"]       # glob patterns (no spaces) searched under the CWD
+dirs  = ["/opt/homebrew"]  # paths whose existence is checked
+envs  = ["HOMEBREW_PREFIX"] # exact env var names
+```
+
+- **Binaries.** Discovery is done by the shell integration (`FIND_BINARY`), which replies with every candidate location. Orbiter records the chosen path in the resource's config (`binaries.<name>`) and hands it to the handler as `ctx.binaries["<name>"]`. A new path never replaces a recorded one without the Captain's confirmation. Whether the binary is still present and reachable is the integration's own report (`StateReport`).
+- **Files, dirs, envs.** Declared in the manifest and carried in the context (`ctx.files`, `ctx.dirs`, `ctx.envs`), but not yet requested or persisted by the lifecycle; they are reserved for the first integration that needs them.
+- **Shell integrations** implement `FIND_BINARY`, `FIND_FILE`, `FIND_DIR` and `FIND_ENV` in their hook script. Each takes a transaction ID first and pipes one JSON object to `orbiter relay --txn=<id>`. How a shell searches is its own choice.
+
 ## Guest ABI
 
 The WASM module communicates with the host through three imported functions in the `orbiter` module namespace:

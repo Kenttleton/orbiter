@@ -335,6 +335,8 @@ Discovery ops are responded to by shell FIND functions. Prompt ops are responded
 
 ### 5.4 FIND Directive Format
 
+> **As implemented:** directives are plain line-protocol lines, `FIND_BINARY <txn> <name>`, preceded by `SESSION <id>`, not the `::ORBITER::` form below (`::ORBITER::` is the install-time binary-path placeholder in the hooks). `FIND_BINARY` is a contract (reply with every candidate location as JSON), not a prescribed search: the shell integration chooses the method, and the bundled hooks ship a `PATH` walk. See Reconciliation Decisions D1 and D2 in [`2026-10-26-find-implementation.md`](2026-10-26-find-implementation.md).
+
 Orbiter emits FIND directives with the transaction ID embedded. The transaction record is written before the directive is emitted.
 
 ```
