@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -508,21 +509,21 @@ func (e *Executor) Retro(ctx context.Context, target string, confirmed bool) err
 }
 
 // Calibrate reconciles drift for the target entity.
-func (e *Executor) Calibrate(ctx context.Context, target string) error {
+func (e *Executor) Calibrate(ctx context.Context, target string) ([]Directive, error) {
 	alias, err := e.resolveTarget(ctx, target)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	parsed, _ := models.ParseID(alias.ID)
 	switch parsed.EntityType {
 	case models.EntityTypeCallsign:
 		result, err := e.sc.CalibrateCallsign(ctx, alias.ID)
 		if err != nil {
-			return fmt.Errorf("calibrate callsign %s: %w", alias.Name, err)
+			return nil, fmt.Errorf("calibrate callsign %s: %w", alias.Name, err)
 		}
 		if len(result.Transponders) == 0 {
 			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
-			return nil
+			return nil, nil
 		}
 		var rows [][]string
 		for _, tr := range result.Transponders {
@@ -533,11 +534,11 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 			rows = append(rows, []string{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.Action, obs})
 		}
 		e.renderer.Table([]string{"transponder", "action", "observation"}, rows)
-		return nil
+		return nil, nil
 	case models.EntityTypeTransponder:
 		tr, err := e.sc.CalibrateTransponder(ctx, alias.ID)
 		if err != nil {
-			return fmt.Errorf("calibrate transponder %s: %w", alias.Name, err)
+			return nil, fmt.Errorf("calibrate transponder %s: %w", alias.Name, err)
 		}
 		obs := ""
 		if tr.Report.Error != "" {
@@ -546,15 +547,25 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 		e.renderer.Table([]string{"transponder", "action", "observation"}, [][]string{
 			{tr.Transponder.Role + "/" + tr.Transponder.Brand, tr.Action, obs},
 		})
-		return nil
+		return nil, nil
 	default:
+		// Discovery first: a binary with no recorded path, or one its integration
+		// reports not-present, is resolved through a FIND round trip before any
+		// calibration runs. uplink continues the flow once the Captain has decided.
+		scan, err := e.sc.ScanBranch(ctx, alias.ID)
+		if err != nil {
+			return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
+		}
+		if needed := e.sc.NeededFinds(scan); len(needed) > 0 {
+			return e.requestFinds(ctx, "calibrate", alias.Name, needed)
+		}
 		result, err := e.sc.CalibrateBranch(ctx, alias.ID)
 		if err != nil {
-			return fmt.Errorf("calibrate %s: %w", alias.Name, err)
+			return nil, fmt.Errorf("calibrate %s: %w", alias.Name, err)
 		}
 		if len(result.Resources) == 0 {
 			e.renderer.Info(fmt.Sprintf("%s: nothing to calibrate", alias.Name))
-			return nil
+			return nil, nil
 		}
 		var rows [][]string
 		for _, r := range result.Resources {
@@ -569,6 +580,41 @@ func (e *Executor) Calibrate(ctx context.Context, target string) error {
 			rows = append(rows, []string{r.Resource.Role + "/" + r.Resource.Brand, r.Action, obs})
 		}
 		e.renderer.Table([]string{"resource", "action", "observation"}, rows)
-		return nil
+		return nil, nil
 	}
+}
+
+// requestFinds opens a session recording what to continue (meta: op + target),
+// writes one pending transaction per request, and returns the directives that ask
+// the shell to run them. The rows exist before the directives are returned.
+func (e *Executor) requestFinds(ctx context.Context, op, target string, needed []starchart.ResourceFind) ([]Directive, error) {
+	meta, err := json.Marshal(map[string]string{"op": op, "target": target})
+	if err != nil {
+		return nil, err
+	}
+	sessionID := models.NewID("ss")
+	if err := e.sc.InsertSession(ctx, sessionID, string(meta)); err != nil {
+		return nil, fmt.Errorf("open session: %w", err)
+	}
+	directives := []Directive{{Op: "SESSION", Key: sessionID}}
+	for _, n := range needed {
+		args, err := json.Marshal(map[string]string{
+			"resource_id": n.ResourceID,
+			"key":         n.Request.Key,
+			"value":       n.Request.Value,
+		})
+		if err != nil {
+			return nil, err
+		}
+		txn := models.NewID("tx")
+		if err := e.sc.InsertTransaction(ctx, starchart.Transaction{
+			ID: txn, SessionID: sessionID, Op: n.Request.Op, Args: string(args),
+			Status: starchart.TransactionStatusPending,
+		}); err != nil {
+			return nil, fmt.Errorf("record %s: %w", n.Request.Op, err)
+		}
+		directives = append(directives, Directive{Op: n.Request.Op, Txn: txn, Key: n.Request.Key, Value: n.Request.Value})
+	}
+	e.renderer.Info(fmt.Sprintf("%s: locating %d binary path(s) before calibrating", target, len(needed)))
+	return directives, nil
 }

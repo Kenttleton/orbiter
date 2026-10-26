@@ -3,6 +3,7 @@ package commands_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
@@ -115,7 +116,7 @@ func TestExecutor_Calibrate(t *testing.T) {
 	g, _ := exec.SC().CreateGalaxy(ctx, "acme")
 	_, _ = exec.SC().CreatePlanet(ctx, "payment-api", g.ID, "")
 
-	err := exec.Calibrate(ctx, "payment-api")
+	_, err := exec.Calibrate(ctx, "payment-api")
 	require.NoError(t, err)
 }
 
@@ -351,4 +352,76 @@ func TestDirective_String_Find(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, c.d.String(), "%+v", c.d)
 	}
+}
+
+// brewStub declares one binary and reports a fixed presence.
+type brewStub struct{ present bool }
+
+func (brewStub) Meta() integrations.Manifest {
+	return integrations.Manifest{Integration: integrations.ManifestIntegration{Brand: "brew", Binaries: []string{"brew"}}}
+}
+func (brewStub) Detect(integrations.DetectContext) integrations.DetectReport {
+	return integrations.DetectReport{}
+}
+func (b brewStub) Init(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+func (b brewStub) Scan(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+func (b brewStub) Calibrate(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+
+func brewExecutor(t *testing.T, present bool, config string) *commands.Executor {
+	t.Helper()
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "brew", brewStub{present: present})
+	sc, err := starchart.OpenWithRegistry(filepath.Join(t.TempDir(), "test.db"), reg)
+	require.NoError(t, err)
+	t.Cleanup(func() { sc.Close() })
+	ctx := context.Background()
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	_, err = sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "brew", "tool", "brew", "[]", config)
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "brew", "api")
+	require.NoError(t, err)
+	return commands.NewExecutor(sc, output.NewRenderer(output.FormatStyled, false))
+}
+
+func TestExecutor_Calibrate_EmitsFindForUnresolvedBinary(t *testing.T) {
+	exec := brewExecutor(t, false, `{}`)
+	ctx := context.Background()
+
+	dirs, err := exec.Calibrate(ctx, "api")
+	require.NoError(t, err)
+	require.Len(t, dirs, 2)
+	assert.Equal(t, "SESSION", dirs[0].Op)
+	assert.Equal(t, "FIND_BINARY", dirs[1].Op)
+	assert.Equal(t, "brew", dirs[1].Key)
+	assert.NotEmpty(t, dirs[1].Txn)
+
+	// The session and its transaction are written before the directives are returned.
+	sess, err := exec.SC().GetSession(ctx, dirs[0].Key)
+	require.NoError(t, err)
+	assert.Equal(t, "active", sess.Status)
+	assert.Contains(t, sess.Meta, `"op":"calibrate"`)
+	assert.Contains(t, sess.Meta, `"target":"api"`)
+
+	tx, err := exec.SC().GetTransaction(ctx, dirs[1].Txn)
+	require.NoError(t, err)
+	assert.Equal(t, dirs[0].Key, tx.SessionID)
+	assert.Equal(t, "FIND_BINARY", tx.Op)
+	assert.Equal(t, starchart.TransactionStatusPending, tx.Status)
+	assert.Contains(t, tx.Args, `"resource_id"`)
+}
+
+func TestExecutor_Calibrate_NoFindWhenBinaryRecordedAndPresent(t *testing.T) {
+	exec := brewExecutor(t, true, `{"binaries":{"brew":"/opt/homebrew/bin/brew"}}`)
+	dirs, err := exec.Calibrate(context.Background(), "api")
+	require.NoError(t, err)
+	assert.Empty(t, dirs)
 }

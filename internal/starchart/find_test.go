@@ -98,3 +98,58 @@ func TestBuildResolvedContext_InjectsRecordedBinary(t *testing.T) {
 	_, ok := rc.Binaries["unrecorded"]
 	assert.False(t, ok, "a declared binary with no recorded path is simply absent")
 }
+
+// brewLike declares one binary and reports a fixed presence.
+type brewLike struct{ present bool }
+
+func (b brewLike) Meta() integrations.Manifest {
+	return integrations.Manifest{Integration: integrations.ManifestIntegration{Brand: "brew", Binaries: []string{"brew"}}}
+}
+func (b brewLike) Detect(integrations.DetectContext) integrations.DetectReport {
+	return integrations.DetectReport{}
+}
+func (b brewLike) Init(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+func (b brewLike) Scan(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+func (b brewLike) Calibrate(integrations.ResolvedContext) integrations.StateReport {
+	return integrations.StateReport{Present: b.present, Reachable: b.present}
+}
+
+func neededFor(t *testing.T, present bool, config string) []starchart.ResourceFind {
+	t.Helper()
+	ctx := t.Context()
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "brew", brewLike{present: present})
+	sc := testDBWithRegistry(t, reg)
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	p, err := sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "brew", "tool", "brew", "[]", config)
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "brew", "api")
+	require.NoError(t, err)
+	scan, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+	return sc.NeededFinds(scan)
+}
+
+func TestNeededFinds_NoRecordedPath(t *testing.T) {
+	got := neededFor(t, false, `{}`)
+	require.Len(t, got, 1)
+	assert.Equal(t, starchart.FindRequest{Op: "FIND_BINARY", Key: "brew"}, got[0].Request)
+	assert.NotEmpty(t, got[0].ResourceID)
+}
+
+func TestNeededFinds_RecordedButIntegrationReportsNotPresent(t *testing.T) {
+	got := neededFor(t, false, `{"binaries":{"brew":"/old/brew"}}`)
+	require.Len(t, got, 1)
+	assert.Equal(t, "brew", got[0].Request.Key)
+}
+
+func TestNeededFinds_RecordedAndPresent(t *testing.T) {
+	assert.Empty(t, neededFor(t, true, `{"binaries":{"brew":"/opt/homebrew/bin/brew"}}`))
+}

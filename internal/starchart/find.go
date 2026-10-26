@@ -138,3 +138,38 @@ func recordedBinaries(configJSON string, declared []string) map[string]string {
 	}
 	return out
 }
+
+// ResourceFind pairs a FIND request with the resource it is for.
+type ResourceFind struct {
+	ResourceID string
+	Request    FindRequest
+}
+
+// NeededFinds lists a FIND_BINARY request for each binary a scanned resource's
+// integration declares when either no path is recorded for it (first INIT) or the
+// integration's own scan report says it is not present (it could not use the
+// recorded path). Orbiter never inspects the recorded path itself. Filesystem
+// resources are native and never need FIND. FIND_FILE/DIR/ENV are not requested
+// here: no integration declares [find] yet.
+func (sc *StarChart) NeededFinds(scan BranchScanResult) []ResourceFind {
+	var out []ResourceFind
+	for _, rs := range scan.Resources {
+		r := rs.Resource
+		if r.Role == integrations.ResourceRoleFilesystem {
+			continue
+		}
+		integration, ok := sc.integrations.Get(r.Role, r.Brand)
+		if !ok {
+			continue
+		}
+		declared := integration.Meta().Integration.Binaries
+		recorded := recordedBinaries(r.Config, declared)
+		for _, name := range declared {
+			if _, has := recorded[name]; has && rs.Report.Present {
+				continue
+			}
+			out = append(out, ResourceFind{ResourceID: r.ID, Request: FindRequest{Op: "FIND_BINARY", Key: name}})
+		}
+	}
+	return out
+}

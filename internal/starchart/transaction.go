@@ -91,6 +91,18 @@ func (sc *StarChart) RelayTransaction(ctx context.Context, txnID, response strin
 	return nil
 }
 
+// GetTransaction returns one transaction by ID (sql.ErrNoRows when absent).
+func (sc *StarChart) GetTransaction(ctx context.Context, id string) (Transaction, error) {
+	var t Transaction
+	var status string
+	err := sc.db.QueryRowContext(ctx,
+		`SELECT id, session_id, op, args, status, COALESCE(payload,''), COALESCE(response,'')
+		 FROM transactions WHERE id=?`, id,
+	).Scan(&t.ID, &t.SessionID, &t.Op, &t.Args, &status, &t.Payload, &t.Response)
+	t.Status = TransactionStatus(status)
+	return t, err
+}
+
 // GetRelayedTransactions returns all transactions for a session with status='relayed'.
 func (sc *StarChart) GetRelayedTransactions(ctx context.Context, sessionID string) ([]Transaction, error) {
 	rows, err := sc.db.QueryContext(ctx,
