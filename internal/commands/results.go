@@ -161,3 +161,18 @@ func (d *deps) emitDirectives(out io.Writer, dirs []Directive) {
 	}
 	d.done("discovery needed", pending)
 }
+
+// redactedReport returns r with every export value replaced, keeping the names.
+// Exports are environment variables bound for the shell and may be secrets; a
+// result a client receives (and may log) must name them but never carry them.
+func redactedReport(r integrations.StateReport) integrations.StateReport {
+	if len(r.Exports) == 0 {
+		return r
+	}
+	masked := make(map[string]string, len(r.Exports))
+	for k := range r.Exports {
+		masked[k] = "[redacted]"
+	}
+	r.Exports = masked
+	return r
+}

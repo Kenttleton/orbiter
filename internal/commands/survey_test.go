@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/commands"
+	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/stretchr/testify/assert"
@@ -110,4 +111,39 @@ func TestSurvey_JSONWithAllIsTheSubtreeAndAlwaysFullDetail(t *testing.T) {
 	acme := node["children"].([]any)[0].(map[string]any)
 	assert.ElementsMatch(t, []string{"platform", "web"}, childNames(acme))
 	assert.Contains(t, buf.String(), "cfg-xyz", "JSON always carries full detail, with or without -v")
+}
+
+// Export values are environment variables bound for the shell and can be secrets
+// (a token). JSON results name them but must never carry their values.
+func TestScanAndCalibrate_JSONNeverCarryExportValues(t *testing.T) {
+	ctx := context.Background()
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "stub-export", stubExportIntegration{})
+	sc, err := starchart.OpenWithRegistry(filepath.Join(t.TempDir(), "test.db"), reg)
+	require.NoError(t, err)
+	t.Cleanup(func() { sc.Close() })
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	_, err = sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "tok", "tool", "stub-export", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "tok", "api")
+	require.NoError(t, err)
+
+	for _, run := range []struct {
+		name string
+		do   func(*commands.Executor) error
+	}{
+		{"scan", func(e *commands.Executor) error { return e.Scan(ctx, "api") }},
+		{"calibrate", func(e *commands.Executor) error { _, err := e.Calibrate(ctx, "api"); return err }},
+	} {
+		buf := &bytes.Buffer{}
+		exec := commands.NewExecutor(sc, output.NewRendererTo(output.FormatJSON, false, buf))
+		require.NoError(t, run.do(exec))
+		out := buf.String()
+		assert.Contains(t, out, "MY_TOKEN", "%s: the export's name is useful to a client", run.name)
+		assert.NotContains(t, out, `"abc"`, "%s: the value must not be in the result", run.name)
+		assert.NotContains(t, out, `"xyz"`, "%s: the value must not be in the result", run.name)
+	}
 }

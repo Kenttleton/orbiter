@@ -282,7 +282,7 @@ func (e *Executor) scanCallsignEntity(ctx context.Context, alias models.Alias) e
 
 func transponderScanItem(tr integrations.TransponderScanResult) ScanItem {
 	return ScanItem{Kind: "transponder", ID: tr.Transponder.ID, Role: tr.Transponder.Role,
-		Brand: tr.Transponder.Brand, Status: tr.BeaconStatus, Report: tr.Report}
+		Brand: tr.Transponder.Brand, Status: tr.BeaconStatus, Report: redactedReport(tr.Report)}
 }
 
 func (e *Executor) scanTransponderEntity(ctx context.Context, alias models.Alias) error {
@@ -312,7 +312,7 @@ func (e *Executor) scanBranchEntity(ctx context.Context, alias models.Alias) err
 	items := []ScanItem{}
 	for _, r := range result.Resources {
 		items = append(items, ScanItem{Kind: "resource", ID: r.Resource.ID, Role: r.Resource.Role,
-			Brand: r.Resource.Brand, Status: r.BeaconStatus, Report: r.Report})
+			Brand: r.Resource.Brand, Status: r.BeaconStatus, Report: redactedReport(r.Report)})
 	}
 	for _, tr := range result.Transponders {
 		items = append(items, transponderScanItem(tr))
@@ -635,9 +635,9 @@ func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool)
 		}
 		items := []CalibrateItem{}
 		for _, r := range result.Resources {
-			before := r.Before
+			before := redactedReport(r.Before)
 			items = append(items, CalibrateItem{Kind: "resource", ID: r.Resource.ID, Role: r.Resource.Role,
-				Brand: r.Resource.Brand, Action: r.Action, Before: &before, After: r.After})
+				Brand: r.Resource.Brand, Action: r.Action, Before: &before, After: redactedReport(r.After)})
 		}
 		defer e.renderer.Result(output.Result{Success: true, Message: "calibrate " + alias.Name,
 			Data: CalibrateResult{Target: alias.Name, TargetID: alias.ID, Items: items}})
@@ -699,5 +699,5 @@ func (e *Executor) requestFinds(ctx context.Context, op, target string, needed [
 
 func transponderCalibrateItem(tr integrations.TransponderCalibrateResult) CalibrateItem {
 	return CalibrateItem{Kind: "transponder", ID: tr.Transponder.ID, Role: tr.Transponder.Role,
-		Brand: tr.Transponder.Brand, Action: tr.Action, After: tr.Report}
+		Brand: tr.Transponder.Brand, Action: tr.Action, After: redactedReport(tr.Report)}
 }
