@@ -102,6 +102,10 @@ type ResolvedContext struct {
 	Transponders map[string][]ResolvedTransponder `json:"transponders"`
 	Responses    map[string]string                `json:"responses,omitempty"`
 	Binaries     map[string]string                `json:"binaries,omitempty"`
+
+	Files map[string][]string `json:"files,omitempty"` // pattern -> native paths (empty = no match)
+	Dirs  map[string]bool     `json:"dirs,omitempty"`  // path -> exists
+	Envs  map[string]string   `json:"envs,omitempty"`  // name -> value ("" = unset)
 }
 
 // ResolvedResource wraps a resource from the branch with its StateReport

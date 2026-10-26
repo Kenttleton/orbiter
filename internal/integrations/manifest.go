@@ -12,6 +12,16 @@ type Manifest struct {
 	Shell        ManifestShell        `toml:"shell"`
 	Config       ManifestConfig       `toml:"config"`
 	Runtime      ManifestRuntime      `toml:"runtime"`
+	Find         ManifestFind         `toml:"find"`
+}
+
+// ManifestFind is the [find] section: discovery Orbiter performs on the
+// integration's behalf before any handler runs. Binaries are declared in
+// [integration] binaries.
+type ManifestFind struct {
+	Files []string `toml:"files"` // glob patterns, no spaces, searched under the CWD
+	Dirs  []string `toml:"dirs"`  // known paths whose existence is checked
+	Envs  []string `toml:"envs"`  // exact env var names
 }
 
 // ManifestIntegration is the [integration] section.

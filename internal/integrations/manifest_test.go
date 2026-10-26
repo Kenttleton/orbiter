@@ -252,3 +252,29 @@ func TestRoleType(t *testing.T) {
 		}
 	}
 }
+
+func TestManifest_ParseFindSection(t *testing.T) {
+	const src = `
+[integration]
+brand = "brew"
+binaries = ["brew"]
+
+[find]
+files = ["Brewfile"]
+dirs  = ["/opt/homebrew"]
+envs  = ["HOMEBREW_PREFIX"]
+`
+	var m integrations.Manifest
+	if _, err := toml.Decode(src, &m); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Find.Files; len(got) != 1 || got[0] != "Brewfile" {
+		t.Errorf("Files = %v", got)
+	}
+	if got := m.Find.Dirs; len(got) != 1 || got[0] != "/opt/homebrew" {
+		t.Errorf("Dirs = %v", got)
+	}
+	if got := m.Find.Envs; len(got) != 1 || got[0] != "HOMEBREW_PREFIX" {
+		t.Errorf("Envs = %v", got)
+	}
+}
