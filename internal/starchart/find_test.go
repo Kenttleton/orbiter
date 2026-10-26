@@ -1,9 +1,13 @@
 package starchart_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/models"
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,4 +80,21 @@ func TestApplyFindResults(t *testing.T) {
 	assert.Equal(t, "/jdk", rc.Envs["JAVA_HOME"])
 	starchart.ApplyFindResults(&rc, starchart.FindRequest{Op: "FIND_DIR", Key: "/opt"}, starchart.FindResult{Exists: true})
 	assert.True(t, rc.Dirs["/opt"])
+}
+
+func TestBuildResolvedContext_InjectsRecordedBinary(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "brew")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+	cfg, _ := json.Marshal(map[string]any{"binaries": map[string]string{"brew": bin, "gone": "/no/such/gone"}})
+	r := models.Resource{ID: "r1", Role: "manager", Brand: "brew", Config: string(cfg)}
+	m := integrations.Manifest{Integration: integrations.ManifestIntegration{Binaries: []string{"brew", "gone", "unrecorded"}}}
+
+	rc := starchart.BuildResolvedContext(r, starchart.LeveledBranch{}, m)
+
+	assert.Equal(t, bin, rc.Binaries["brew"])
+	// Orbiter does not verify the path: a stale record is injected as-is and the
+	// integration's own report says whether the binary is still there.
+	assert.Equal(t, "/no/such/gone", filepath.ToSlash(rc.Binaries["gone"]))
+	_, ok := rc.Binaries["unrecorded"]
+	assert.False(t, ok, "a declared binary with no recorded path is simply absent")
 }

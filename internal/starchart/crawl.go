@@ -246,6 +246,7 @@ func BuildResolvedContext(self integrations.Entity, lb LeveledBranch, manifest i
 	return integrations.ResolvedContext{
 		Platform: lb.Platform,
 		Self:     self,
+		Binaries: recordedBinaries(self.GetConfig(), manifest.Integration.Binaries),
 		Resources: collectFILO(
 			lb.Levels,
 			func(l BranchLevel) []models.Resource { return l.Resources },

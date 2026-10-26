@@ -112,3 +112,29 @@ func ApplyFindResults(rc *integrations.ResolvedContext, req FindRequest, res Fin
 		rc.Envs[req.Key] = res.Value
 	}
 }
+
+// recordedBinaries returns the recorded path for each declared binary,
+// normalized for this host. It deliberately does not check that the path
+// exists: whether the binary is still present and reachable is the
+// integration's report to make. Recording happens at INIT/drift recovery (uplink).
+func recordedBinaries(configJSON string, declared []string) map[string]string {
+	var cfg struct {
+		Binaries map[string]string `json:"binaries"`
+	}
+	if configJSON == "" || json.Unmarshal([]byte(configJSON), &cfg) != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, name := range declared {
+		raw, ok := cfg.Binaries[name]
+		if !ok {
+			continue
+		}
+		p, err := integrations.ParsePath(raw)
+		if err != nil || p.IntoNative() == "" {
+			continue
+		}
+		out[name] = p.IntoNative()
+	}
+	return out
+}
