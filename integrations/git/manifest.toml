@@ -12,7 +12,6 @@ files = [".git/config"]
 timeout_seconds = 30
 allowed = [
   { cmd = "git",        description = "VCS and remote operations" },
-  { cmd = "which",      description = "Locate executables in PATH" },
   { cmd = "ssh-keygen", description = "Generate SSH key pairs for remote authentication" },
   { cmd = "ssh-add",    description = "Add SSH keys to the authentication agent" },
   { cmd = "ssh-agent",  description = "Manage the SSH authentication agent process" },

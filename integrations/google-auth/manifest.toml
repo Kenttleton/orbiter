@@ -11,7 +11,6 @@ allowed = [
   { cmd = "gcloud", description = "Google Cloud SDK authentication operations" },
   { cmd = "stat",   description = "Check credential file and socket existence" },
   { cmd = "pgrep",  description = "Locate running Google auth processes" },
-  { cmd = "which",  description = "Locate executables in PATH" },
 ]
 
 [runtime]

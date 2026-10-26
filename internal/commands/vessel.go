@@ -152,6 +152,21 @@ func ApplySelections(states []bundle.CatalogEntryState, selected []ChecklistItem
 	return bundle.ExtractSelected(toExtract, dir)
 }
 
+// newVesselCmd is the parent of the vessel subcommands (this workstation).
+func newVesselCmd(d *deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "vessel",
+		Short: "Manage the vessel (this workstation)",
+	}
+	cmd.AddCommand(
+		newVesselInitCmd(d),
+		newVesselInspectCmd(d),
+		// alias: orbiter vessel unquarantine → orbiter unquarantine
+		newVesselUnquarantineCmd(d),
+	)
+	return cmd
+}
+
 func newVesselInitCmd(d *deps) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{

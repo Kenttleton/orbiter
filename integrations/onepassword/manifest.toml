@@ -9,7 +9,6 @@ binaries = ["op"]
 timeout_seconds = 15
 allowed = [
   { cmd = "op",    description = "1Password CLI credential and vault operations" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [runtime]

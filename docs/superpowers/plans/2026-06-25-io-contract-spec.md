@@ -1,6 +1,6 @@
 # Orbiter I/O Contract Specification
 
-> **Status:** Design Spec
+> **Status:** Implemented (see 2026-06-26-io-contract-implementation.md). FIND directive format and FIND_BINARY semantics follow 2026-10-26-find-implementation.md, and sync (`-i`) and async (relay) answers are described in docs/cli-conventions.md
 > **Supersedes:** `2026-06-25-relay-uplink-protocol-spec.md`
 > **Depends on:** [`2026-06-24-filesystem-spec.md`](2026-06-24-filesystem-spec.md) ✅ implemented, [`2026-06-23-find-interface-spec.md`](2026-06-23-find-interface-spec.md)
 > **Blocks:** FIND spec implementation plan, relay/uplink implementation

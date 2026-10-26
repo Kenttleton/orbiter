@@ -12,7 +12,6 @@ files = [".vscode/settings.json", ".vscode/launch.json", ".vscode/extensions.jso
 timeout_seconds = 30
 allowed = [
   { cmd = "code",  description = "VS Code editor operations" },
-  { cmd = "which", description = "Locate executables in PATH" },
 ]
 
 [runtime]

@@ -9,7 +9,6 @@ binaries = ["security"]
 timeout_seconds = 15
 allowed = [
   { cmd = "security", description = "macOS Keychain credential access" },
-  { cmd = "which",    description = "Locate executables in PATH" },
 ]
 
 [runtime]
