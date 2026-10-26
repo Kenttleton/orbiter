@@ -208,6 +208,13 @@ orbiter survey payment-api --output json
 ORBITER_OUTPUT=json orbiter scan     # env override
 ```
 
+`survey` is how you enumerate: `orbiter survey vessel` lists the vessel's galaxies, `-a` descends through every descendant, and `-v` adds config, observations and timestamps.
+
+```bash
+orbiter survey vessel -a       # the whole hierarchy
+orbiter survey payment-api -v  # detail for one entity
+```
+
 Progress during multi-step operations (like `orbiter jump`) shows a persistent step list with live status:
 
 ```
@@ -220,7 +227,7 @@ Executing maneuver...
   [5/5]   Sweeping sector...          Scanning payment-api
 ```
 
-Add `--verbose` (or `ORBITER_VERBOSE=1`) to replace thematic labels with plain operational output and stream raw tool output inline — useful for CI and debugging stalled steps.
+Add `--trace` / `-t` (or `ORBITER_TRACE=1`) to replace thematic labels with plain operational output and stream raw tool output inline — useful for CI and debugging stalled steps. `-v` / `--verbose` is a different axis: it asks read commands for more detail (see below). Flag conventions live in [docs/cli-conventions.md](docs/cli-conventions.md).
 
 ---
 

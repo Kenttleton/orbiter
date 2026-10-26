@@ -410,7 +410,7 @@ Each step shows: fraction counter + thematic label (primary) + plain operational
 |Connecting to service|`Establishing link...`|`Connecting to [service]`|
 |Applying changes|`Executing maneuver...`|`Applying changes to [name]`|
 
-**`--verbose` flag** (root-level, also `ORBIT_VERBOSE=1`): replaces thematic labels with plain operational text, keeps the fraction counter, and streams the full raw output of every underlying tool invocation (git, nvm, uv, etc.) inline under each step. Intended for debugging stalled operations, CI pipelines, and engineers who need to see exactly what each tool is doing and why.
+**`--trace` flag** (`-t`, root-level, also `ORBITER_TRACE=1`; originally `--verbose`, renamed so `-v` can mean data volume — see [docs/cli-conventions.md](../../cli-conventions.md)): replaces thematic labels with plain operational text, keeps the fraction counter, and streams the full raw output of every underlying tool invocation (git, nvm, uv, etc.) inline under each step. Intended for debugging stalled operations, CI pipelines, and engineers who need to see exactly what each tool is doing and why.
 
 ### `internal/commands`
 

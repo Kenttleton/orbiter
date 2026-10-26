@@ -390,6 +390,8 @@ Survey does not show deltas.
 
 Survey does not modify state.
 
+Survey is the enumeration command. By default it shows the target and its direct children; `-a` descends through every descendant (`orbit survey vessel -a` is the whole universe) and `-v` adds the bulky detail (config, observations, timestamps). `--output json` always carries full detail. Flag conventions (`-v` data volume, `-t` process transparency, `-a` scope) are in `docs/cli-conventions.md`.
+
 ---
 
 ## Chart
