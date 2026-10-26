@@ -27,19 +27,19 @@ var (
 // using Lipgloss for colors and styling.
 type StyledRenderer struct {
 	w       io.Writer
-	verbose bool
+	trace bool
 	stdin   io.Reader
 }
 
 // NewStyledRenderer returns a StyledRenderer that writes to w.
-func NewStyledRenderer(w io.Writer, verbose bool) *StyledRenderer {
-	return &StyledRenderer{w: w, verbose: verbose, stdin: os.Stdin}
+func NewStyledRenderer(w io.Writer, trace bool) *StyledRenderer {
+	return &StyledRenderer{w: w, trace: trace, stdin: os.Stdin}
 }
 
 // NewStyledRendererWith creates a StyledRenderer with an explicit stdin reader.
 // Use in tests to inject a strings.NewReader; production callers use NewStyledRenderer.
-func NewStyledRendererWith(w io.Writer, r io.Reader, verbose bool) *StyledRenderer {
-	return &StyledRenderer{w: w, verbose: verbose, stdin: r}
+func NewStyledRendererWith(w io.Writer, r io.Reader, trace bool) *StyledRenderer {
+	return &StyledRenderer{w: w, trace: trace, stdin: r}
 }
 
 func (r *StyledRenderer) Info(msg string) {
@@ -135,7 +135,7 @@ func (r *StyledRenderer) Progress(steps []ProgressStep) ProgressList {
 	return &styledProgressList{
 		w:       r.w,
 		steps:   steps,
-		verbose: r.verbose,
+		trace: r.trace,
 		current: 0,
 	}
 }
@@ -146,7 +146,7 @@ func (r *StyledRenderer) JSON(v any) error {
 	return enc.Encode(v)
 }
 
-func (r *StyledRenderer) IsVerbose() bool { return r.verbose }
+func (r *StyledRenderer) IsTrace() bool { return r.trace }
 
 // Prompt implements Renderer. Renders the prompt to the terminal and reads the
 // Captain's response from stdin. Returns the response serialized as a JSON string.

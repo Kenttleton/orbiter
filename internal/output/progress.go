@@ -18,7 +18,7 @@ var (
 type styledProgressList struct {
 	w       io.Writer
 	steps   []ProgressStep
-	verbose bool
+	trace bool
 	current int
 	title   string
 }
@@ -55,7 +55,7 @@ func (p *styledProgressList) render() {
 	for i, step := range p.steps {
 		fraction := fmt.Sprintf("[%d/%d]", i+1, total)
 		var label string
-		if p.verbose {
+		if p.trace {
 			label = step.PlainLabel
 		} else {
 			label = step.ThematicLabel + "  " + styleStepPending.Render(step.PlainLabel)

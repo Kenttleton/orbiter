@@ -19,12 +19,15 @@ type deps struct {
 	sc       *starchart.StarChart
 	renderer output.Renderer
 	resolver resolver.Resolver
+	// verbose is the root -v flag: data volume. Read commands show more detail.
+	// Process transparency is --trace, owned by the renderer (Renderer.IsTrace).
+	verbose bool
 }
 
 // NewRootCommand builds and returns the orbiter root Cobra command with DI wiring.
 func NewRootCommand() *cobra.Command {
 	var outputFormat string
-	var verbose bool
+	var trace bool
 
 	var d deps
 
@@ -62,12 +65,16 @@ and environment orchestration platform for freelance and contract engineers.`,
 				format = output.FormatStyled
 			}
 
-			// Resolve verbose: flag > env.
-			if !verbose {
-				verbose = os.Getenv("ORBITER_VERBOSE") == "1"
+			// Resolve verbose (data volume): flag > env.
+			if !d.verbose {
+				d.verbose = os.Getenv("ORBITER_VERBOSE") == "1"
+			}
+			// Resolve trace (process transparency): flag > env.
+			if !trace {
+				trace = os.Getenv("ORBITER_TRACE") == "1"
 			}
 
-			d.renderer = output.NewRenderer(format, verbose)
+			d.renderer = output.NewRenderer(format, trace)
 			d.resolver = resolver.New(sc)
 
 			// Load integrations installed to disk into the Default registry.
@@ -84,7 +91,8 @@ and environment orchestration platform for freelance and contract engineers.`,
 	}
 
 	root.PersistentFlags().StringVar(&outputFormat, "output", "", "output format: styled (default) or json")
-	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output: plain labels and full tool output")
+	root.PersistentFlags().BoolVarP(&d.verbose, "verbose", "v", false, "show more detail (data volume); ORBITER_VERBOSE=1")
+	root.PersistentFlags().BoolVarP(&trace, "trace", "t", false, "show the underlying process: plain labels and raw tool output; ORBITER_TRACE=1")
 
 	// Register all subcommands.
 	root.AddCommand(

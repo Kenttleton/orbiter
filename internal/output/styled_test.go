@@ -76,22 +76,22 @@ func TestStyledRendererJSONWritesJSON(t *testing.T) {
 	require.Contains(t, buf.String(), `"key"`)
 }
 
-func TestStyledRendererIsVerbose(t *testing.T) {
+func TestStyledRendererIsTrace(t *testing.T) {
 	var buf bytes.Buffer
 	r := output.NewStyledRenderer(&buf, true)
-	require.True(t, r.IsVerbose())
+	require.True(t, r.IsTrace())
 
 	r2 := output.NewStyledRenderer(&buf, false)
-	require.False(t, r2.IsVerbose())
+	require.False(t, r2.IsTrace())
 }
 
-func TestStyledRendererVerboseShowsNoTheme(t *testing.T) {
+func TestStyledRendererTraceShowsNoTheme(t *testing.T) {
 	var buf bytes.Buffer
 	r := output.NewStyledRenderer(&buf, true)
-	r.Info("verbose message")
+	r.Info("trace message")
 	out := buf.String()
-	require.Contains(t, out, "verbose message")
-	require.False(t, strings.Contains(out, "★"), "verbose mode should not show thematic decoration")
+	require.Contains(t, out, "trace message")
+	require.False(t, strings.Contains(out, "★"), "trace mode should not show thematic decoration")
 }
 
 func TestStyledRenderer_Prompt_Confirm_yes(t *testing.T) {

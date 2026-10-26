@@ -19,7 +19,7 @@ type ProgressStep struct {
 	// ThematicLabel is the sci-fi themed label shown in default mode.
 	ThematicLabel string `json:"thematic_label"`
 	// PlainLabel is the operational description always shown alongside the thematic label,
-	// and shown exclusively in verbose mode.
+	// and shown exclusively in trace mode (--trace).
 	PlainLabel string `json:"plain_label"`
 	// Status is the current state of the step: "pending" | "running" | "done" | "failed".
 	// Empty string means the step has not started. Used by the JSON renderer.
@@ -59,8 +59,10 @@ type Renderer interface {
 	// JSON encodes v as JSON and writes it to stdout.
 	// Used for machine-readable output (TUI, 3rd party wrappers).
 	JSON(v any) error
-	// IsVerbose reports whether verbose mode is enabled.
-	IsVerbose() bool
+	// IsTrace reports whether trace mode (--trace) is enabled: plain operational
+	// labels and the underlying tools' raw output. This is process transparency,
+	// not data volume; volume is the command's own -v flag.
+	IsTrace() bool
 	// Prompt presents a CaptainPrompt to the Captain and returns the response as a JSON string.
 	//
 	// Styled mode: blocks on stdin, collects input, serializes to JSON, returns response string.

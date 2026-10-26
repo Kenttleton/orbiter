@@ -8,7 +8,7 @@ import (
 
 // NewRootCommandForTest returns a root Cobra command wired to the given StarChart,
 // bypassing the file-system open in PersistentPreRunE. The renderer defaults to
-// plain/non-verbose so tests don't need to configure output.
+// plain/non-trace so tests don't need to configure output.
 func NewRootCommandForTest(sc *starchart.StarChart) *cobra.Command {
 	d := &deps{
 		sc:       sc,

@@ -29,7 +29,7 @@ func TestProgressListStartAndFinish(t *testing.T) {
 	require.Contains(t, out, "1/2")
 }
 
-func TestProgressListVerboseShowsPlainLabels(t *testing.T) {
+func TestProgressListTraceShowsPlainLabels(t *testing.T) {
 	var buf bytes.Buffer
 	r := output.NewStyledRenderer(&buf, true)
 
@@ -43,7 +43,7 @@ func TestProgressListVerboseShowsPlainLabels(t *testing.T) {
 
 	out := buf.String()
 	require.Contains(t, out, "Cloning acme/payment-api")
-	require.False(t, strings.Contains(out, "Plotting course"), "verbose mode must suppress thematic labels")
+	require.False(t, strings.Contains(out, "Plotting course"), "trace mode must suppress thematic labels")
 }
 
 func TestProgressListFailSetsError(t *testing.T) {

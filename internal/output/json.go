@@ -13,12 +13,12 @@ import (
 // are intentional no-ops — JSON mode is for wrappers, not humans.
 type JSONRenderer struct {
 	w       io.Writer
-	verbose bool
+	trace bool
 }
 
 // NewJSONRenderer returns a JSONRenderer that writes to w.
-func NewJSONRenderer(w io.Writer, verbose bool) *JSONRenderer {
-	return &JSONRenderer{w: w, verbose: verbose}
+func NewJSONRenderer(w io.Writer, trace bool) *JSONRenderer {
+	return &JSONRenderer{w: w, trace: trace}
 }
 
 func (r *JSONRenderer) Info(_ string)    {}
@@ -46,7 +46,7 @@ func (r *JSONRenderer) JSON(v any) error {
 	return enc.Encode(v)
 }
 
-func (r *JSONRenderer) IsVerbose() bool { return r.verbose }
+func (r *JSONRenderer) IsTrace() bool { return r.trace }
 
 // Prompt implements Renderer for JSON mode. Emits a captain_prompt event and returns ("", nil).
 // The caller must insert the transaction record before calling Prompt.

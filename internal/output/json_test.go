@@ -34,13 +34,13 @@ func TestJSONRendererInfoWritesNothing(t *testing.T) {
 	require.Empty(t, buf.String())
 }
 
-func TestJSONRendererIsVerbose(t *testing.T) {
+func TestJSONRendererIsTrace(t *testing.T) {
 	var buf bytes.Buffer
 	r := output.NewJSONRenderer(&buf, true)
-	require.True(t, r.IsVerbose())
+	require.True(t, r.IsTrace())
 
 	r2 := output.NewJSONRenderer(&buf, false)
-	require.False(t, r2.IsVerbose())
+	require.False(t, r2.IsTrace())
 }
 
 func TestJSONRenderer_Plan_emitsEvent(t *testing.T) {
