@@ -17,6 +17,20 @@ import (
 // autoApprove is used in tests to approve all commands without reading stdin.
 func autoApprove(_, _ string) bool { return true }
 
+// resolvedFor stands in for the lifecycle's FIND resolution: it looks up each
+// binary the manifest declares and passes the result as ctx.Binaries, exactly
+// as BuildResolvedContext does in production. Test-only; production never uses LookPath.
+func resolvedFor(t *testing.T, i core.Integration) core.ResolvedContext {
+	t.Helper()
+	bins := map[string]string{}
+	for _, name := range i.Meta().Integration.Binaries {
+		if p, err := exec.LookPath(name); err == nil {
+			bins[name] = p
+		}
+	}
+	return core.ResolvedContext{Binaries: bins}
+}
+
 func setupBundleRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry(nil)
@@ -580,7 +594,7 @@ func TestBundledIntegrations_KeychainMacOS(t *testing.T) {
 		if runtime.GOOS != "darwin" {
 			t.Skip("keychain scan only valid on darwin")
 		}
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true on darwin (security binary should exist)")
@@ -664,7 +678,7 @@ func TestBundledIntegrations_NVM(t *testing.T) {
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Scan: %+v", report)
 		if report.Manager != "nvm" {
 			t.Errorf("expected manager=nvm, got %q", report.Manager)
@@ -949,7 +963,7 @@ func TestBundledIntegrations_GitHub_Tool(t *testing.T) {
 		// which the WASM deserializes to an empty role string — falling through to
 		// the default "tool" branch. This is intentional: the test exercises the
 		// tool scan path without needing to set Self.Role explicitly.
-		report := i.Scan(core.ResolvedContext{})
+		report := i.Scan(resolvedFor(t, i))
 		t.Logf("Tool Scan: %+v", report)
 		if !report.Present {
 			t.Error("expected present=true (gh is installed)")
