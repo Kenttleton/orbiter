@@ -151,9 +151,10 @@ func (r *StyledRenderer) IsVerbose() bool { return r.verbose }
 // Prompt implements Renderer. Renders the prompt to the terminal and reads the
 // Captain's response from stdin. Returns the response serialized as a JSON string.
 func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
+	out := sr.promptWriter()
 	switch p.Op {
 	case "CONFIRM":
-		fmt.Fprintf(sr.w, "\n  %s\n  Allow? [y/N] ", p.Message)
+		fmt.Fprintf(out, "\n  %s\n  Allow? [y/N] ", p.Message)
 		var ans string
 		fmt.Fscan(sr.stdin, &ans)
 		confirmed := strings.ToLower(strings.TrimSpace(ans)) == "y"
@@ -161,12 +162,12 @@ func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
 		return string(b), nil
 
 	case "SELECT":
-		fmt.Fprintf(sr.w, "\n  %s\n", p.Message)
+		fmt.Fprintf(out, "\n  %s\n", p.Message)
 		for i, opt := range p.Options {
-			fmt.Fprintf(sr.w, "    %d. %s\n", i+1, opt)
+			fmt.Fprintf(out, "    %d. %s\n", i+1, opt)
 		}
 		if p.Variant == "multi" {
-			fmt.Fprint(sr.w, "  Enter numbers separated by spaces: ")
+			fmt.Fprint(out, "  Enter numbers separated by spaces: ")
 			var line string
 			fmt.Fscan(sr.stdin, &line)
 			parts := strings.Fields(line)
@@ -182,7 +183,7 @@ func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
 			return string(b), nil
 		}
 		// single
-		fmt.Fprint(sr.w, "  Enter number: ")
+		fmt.Fprint(out, "  Enter number: ")
 		var idx int
 		fmt.Fscan(sr.stdin, &idx)
 		if idx < 1 || idx > len(p.Options) {
@@ -193,9 +194,9 @@ func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
 
 	case "TEXT":
 		if p.Variant == "obscured" {
-			fmt.Fprintf(sr.w, "\n  %s (input hidden): ", p.Message)
+			fmt.Fprintf(out, "\n  %s (input hidden): ", p.Message)
 		} else {
-			fmt.Fprintf(sr.w, "\n  %s: ", p.Message)
+			fmt.Fprintf(out, "\n  %s: ", p.Message)
 		}
 		scanner := bufio.NewScanner(sr.stdin)
 		scanner.Scan()
@@ -206,4 +207,14 @@ func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown prompt op: %q", p.Op)
 	}
+}
+
+// promptWriter returns where prompt text goes. The shell hook captures orbiter's
+// stdout to read directives, so on a real terminal (writing to os.Stdout) a prompt
+// there would be invisible while orbiter waits for an answer: send it to stderr.
+func (sr *StyledRenderer) promptWriter() io.Writer {
+	if f, ok := sr.w.(*os.File); ok && f == os.Stdout {
+		return os.Stderr
+	}
+	return sr.w
 }
