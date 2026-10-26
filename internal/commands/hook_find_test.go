@@ -139,3 +139,56 @@ func TestFindFile_Recursive(t *testing.T) {
 		t.Errorf("missing root: got %+v, want not_found", r)
 	}
 }
+
+// A calibrate that needs two binaries emits two FIND lines; the wrapper must run
+// both, relay both, call uplink once, and print nothing it was not asked to.
+func TestWrapper_TwoFindLines(t *testing.T) {
+	for _, tc := range []struct{ shell, hook string }{
+		{"bash", "bash/hook.bash"},
+		{"zsh", "zsh/hook.zsh"},
+	} {
+		t.Run(tc.shell, func(t *testing.T) {
+			bin, err := exec.LookPath(tc.shell)
+			if err != nil {
+				t.Skipf("%s not installed", tc.shell)
+			}
+			dir := t.TempDir()
+			out := filepath.Join(dir, "out")
+			if err := os.MkdirAll(out, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			fake := filepath.Join(dir, "orbiter-fake")
+			script := "#!/bin/sh\ncase \"$1\" in\n" +
+				"relay) cat > \"" + out + "/${2#--txn=}\" ;;\n" +
+				"uplink) echo \"$3\" > \"" + out + "/uplink\" ;;\n" +
+				"calibrate) printf 'SESSION ss1\\nFIND_BINARY tx1 sh\\nFIND_BINARY tx2 ls\\n' ;;\n" +
+				"esac\n"
+			if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			src, err := os.ReadFile(filepath.Join("..", "..", "integrations", tc.hook))
+			if err != nil {
+				t.Fatal(err)
+			}
+			hookPath := filepath.Join(dir, filepath.Base(tc.hook))
+			if err := os.WriteFile(hookPath, []byte(strings.ReplaceAll(string(src), "::ORBITER::", fake)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			b, err := exec.Command(bin, "-c", "source '"+hookPath+"'; orbiter calibrate").CombinedOutput()
+			if err != nil {
+				t.Fatalf("%v\n%s", err, b)
+			}
+			if strings.TrimSpace(string(b)) != "" {
+				t.Errorf("wrapper printed noise: %q", b)
+			}
+			for _, txn := range []string{"tx1", "tx2"} {
+				if _, err := os.Stat(filepath.Join(out, txn)); err != nil {
+					t.Errorf("%s was not relayed: %v", txn, err)
+				}
+			}
+			if got, _ := os.ReadFile(filepath.Join(out, "uplink")); strings.TrimSpace(string(got)) != "ss1" {
+				t.Errorf("uplink session = %q, want ss1 (the --session value)", got)
+			}
+		})
+	}
+}

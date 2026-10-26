@@ -20,7 +20,7 @@ function orbiter() {
             UNSET)   unset "$_rest" ;;
             SESSION) _session="$_rest" ;;
             FIND_BINARY|FIND_DIR|FIND_ENV|FIND_FILE)
-                local _txn="${_rest%% *}" _args="${_rest#* }" _key _val=""
+                local _txn="${_rest%% *}" _args="${_rest#* }" _key="" _val=""
                 _key="${_args%% *}"
                 [[ "$_args" == *" "* ]] && _val="${_args#* }"
                 if [[ -n "$_val" ]]; then "$_op" "$_txn" "$_key" "$_val"; else "$_op" "$_txn" "$_key"; fi
