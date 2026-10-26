@@ -100,7 +100,9 @@ function FIND_BINARY
         set seen $seen "$p"
         set items $items (_orbiter_json_str "$p")
     end
-    _orbiter_find_reply $txn '{"status":"ok","matches":['(string join , $items)']}'
+    # Quote the joined list: an empty list would otherwise drop the whole argument.
+    set -l joined (string join , $items)
+    _orbiter_find_reply $txn "{\"status\":\"ok\",\"matches\":[$joined]}"
 end
 
 function FIND_FILE
@@ -117,7 +119,9 @@ function FIND_FILE
     for f in (find "$location" -type f -name "$pattern" 2>/dev/null)
         set items $items (_orbiter_json_str "$f")
     end
-    _orbiter_find_reply $txn '{"status":"ok","matches":['(string join , $items)']}'
+    # Quote the joined list: an empty list would otherwise drop the whole argument.
+    set -l joined (string join , $items)
+    _orbiter_find_reply $txn "{\"status\":\"ok\",\"matches\":[$joined]}"
 end
 
 function FIND_DIR
