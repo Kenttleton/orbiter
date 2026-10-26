@@ -46,6 +46,7 @@ func newPlanetAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("planet %q registered under %q (%s)", args[0], galaxy, p.ID))
+			d.done("planet registered", EntityResult{Type: "planet", ID: p.ID, Name: args[0], Galaxy: galaxy, System: system})
 			return nil
 		},
 	}
@@ -88,6 +89,7 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 				alias.ID = p.ID
 			}
 
+			var discovered []DiscoveryOutcome
 			if discover {
 				cwd, err := os.Getwd()
 				if err != nil {
@@ -101,12 +103,15 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 					r, err := d.sc.CreateResource(ctx, s.Brand, s.Role, s.Brand, "[]", "{}")
 					if err != nil {
 						d.renderer.Success(fmt.Sprintf("  skip %s/%s: %v", s.Role, s.Brand, err))
+						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "skipped", Error: err.Error()})
 						continue
 					}
 					if _, err := d.sc.Attach(ctx, r.ID, alias.ID); err != nil {
 						d.renderer.Success(fmt.Sprintf("  registered %s/%s but attach failed: %v", s.Role, s.Brand, err))
+						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attach_failed", Error: err.Error()})
 					} else {
 						d.renderer.Success(fmt.Sprintf("  discovered and attached %s/%s", s.Role, s.Brand))
+						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attached"})
 					}
 				}
 			}
@@ -116,6 +121,7 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("planet %q initialized — status: %s", args[0], beacon.Status))
+			d.done("planet initialized", EntityResult{Type: "planet", ID: alias.ID, Name: args[0], Galaxy: galaxy, System: system, Status: beacon.Status, Discovered: discovered})
 			return nil
 		},
 	}

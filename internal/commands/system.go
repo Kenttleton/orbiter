@@ -36,6 +36,7 @@ func newSystemAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("system %q registered under %q (%s)", args[0], galaxy, sys.ID))
+			d.done("system registered", EntityResult{Type: "system", ID: sys.ID, Name: args[0], Galaxy: galaxy})
 			return nil
 		},
 	}
@@ -72,6 +73,7 @@ func newSystemInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("system %q initialized — status: %s", args[0], beacon.Status))
+			d.done("system initialized", EntityResult{Type: "system", ID: alias.ID, Name: args[0], Galaxy: galaxy, Status: beacon.Status})
 			return nil
 		},
 	}

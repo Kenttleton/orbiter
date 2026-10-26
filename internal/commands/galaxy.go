@@ -31,6 +31,7 @@ func newGalaxyAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("galaxy %q registered (%s)", args[0], g.ID))
+			d.done("galaxy registered", EntityResult{Type: "galaxy", ID: g.ID, Name: args[0]})
 			return nil
 		},
 	}
@@ -59,6 +60,7 @@ func newGalaxyInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("galaxy %q initialized — status: %s", args[0], beacon.Status))
+			d.done("galaxy initialized", EntityResult{Type: "galaxy", ID: alias.ID, Name: args[0], Status: beacon.Status})
 			return nil
 		},
 	}

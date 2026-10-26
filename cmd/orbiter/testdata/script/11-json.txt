@@ -7,3 +7,46 @@ exec orbiter galaxy add test-corp
 ! exec orbiter --output json survey nonexistent
 stdout '^\{"type":"error","txn":"[0-9a-z]{16}","data":\{"message":"[^"]*not found'
 ! stderr .
+
+# --- build commands return the entity they registered or initialized ---
+exec orbiter --output json galaxy add acme
+stdout '^\{"type":"result","txn":"[0-9a-z]{16}","data":\{"success":true,"message":"[^"]*","data":\{"type":"galaxy","id":"[0-9a-z]{16}","name":"acme"\}\}\}$'
+! stdout '^[^{]'   # no free-form text, only event lines
+
+exec orbiter --output json system add platform --galaxy acme
+stdout '"type":"system".*"name":"platform".*"galaxy":"acme"'
+
+exec orbiter --output json planet add api --galaxy acme --system platform
+stdout '"type":"planet".*"name":"api".*"galaxy":"acme".*"system":"platform"'
+
+exec orbiter --output json callsign add work
+stdout '"type":"callsign".*"name":"work"'
+
+exec orbiter --output json transponder add gh --role env --brand github --location GH_TOKEN
+stdout '"type":"transponder".*"name":"gh".*"role":"env".*"brand":"github"'
+
+exec orbiter --output json resource add go --role runtime --brand go
+stdout '"type":"resource".*"name":"go".*"role":"runtime".*"brand":"go"'
+
+exec orbiter --output json attach go api
+stdout '"from":"go".*"to":"api"'
+stdout '"id":"[0-9a-z]{16}"'
+! stdout '^[^{]'
+
+exec orbiter --output json galaxy init beta
+stdout '"type":"galaxy".*"name":"beta".*"status":"[a-z]+"'
+
+exec orbiter --output json system init ops --galaxy acme
+stdout '"type":"system".*"name":"ops".*"status":"[a-z]+"'
+
+exec orbiter --output json planet init web --galaxy acme
+stdout '"type":"planet".*"name":"web".*"status":"[a-z]+"'
+
+exec orbiter --output json callsign init work2
+stdout '"type":"callsign".*"name":"work2".*"status":"[a-z]+"'
+
+exec orbiter --output json resource init node --role runtime --brand node
+stdout '"type":"resource".*"name":"node".*"status":"[a-z]+"'
+
+exec orbiter --output json transponder init gh2 --role env --brand github --location GH_TOKEN
+stdout '"type":"transponder".*"name":"gh2".*"status":"[a-z]+"'

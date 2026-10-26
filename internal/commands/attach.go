@@ -27,6 +27,7 @@ Examples:
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("%q → %q attached (%s)", args[0], args[1], att.ID))
+			d.done("attached", AttachResult{ID: att.ID, From: args[0], To: args[1]})
 			return nil
 		},
 	}

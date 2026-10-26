@@ -38,6 +38,7 @@ func newResourceAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("resource %q registered (%s/%s) (%s)", args[0], role, brand, r.ID))
+			d.done("resource registered", EntityResult{Type: "resource", ID: r.ID, Name: args[0], Role: role, Brand: brand})
 			return nil
 		},
 	}
@@ -80,6 +81,7 @@ func newResourceInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("resource %q initialized — status: %s", args[0], beacon.Status))
+			d.done("resource initialized", EntityResult{Type: "resource", ID: alias.ID, Name: args[0], Role: role, Brand: brand, Status: beacon.Status})
 			return nil
 		},
 	}

@@ -31,6 +31,7 @@ func newCallsignAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("callsign %q registered (%s)", args[0], cs.ID))
+			d.done("callsign registered", EntityResult{Type: "callsign", ID: cs.ID, Name: args[0]})
 			return nil
 		},
 	}
@@ -59,6 +60,7 @@ func newCallsignInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("callsign %q initialized — status: %s", args[0], beacon.Status))
+			d.done("callsign initialized", EntityResult{Type: "callsign", ID: alias.ID, Name: args[0], Status: beacon.Status})
 			return nil
 		},
 	}

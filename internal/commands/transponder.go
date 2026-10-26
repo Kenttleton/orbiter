@@ -38,6 +38,7 @@ func newTransponderAddCmd(d *deps) *cobra.Command {
 				return err
 			}
 			d.renderer.Success(fmt.Sprintf("transponder %q registered (%s/%s) (%s)", args[0], role, brand, tp.ID))
+			d.done("transponder registered", EntityResult{Type: "transponder", ID: tp.ID, Name: args[0], Role: role, Brand: brand})
 			return nil
 		},
 	}
@@ -79,6 +80,7 @@ func newTransponderInitCmd(d *deps) *cobra.Command {
 			}
 			beacon, _ := d.sc.GetBeacon(ctx, alias.ID)
 			d.renderer.Success(fmt.Sprintf("transponder %q initialized — status: %s", args[0], beacon.Status))
+			d.done("transponder initialized", EntityResult{Type: "transponder", ID: alias.ID, Name: args[0], Role: role, Brand: brand, Status: beacon.Status})
 			return nil
 		},
 	}
