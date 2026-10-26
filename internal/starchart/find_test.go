@@ -153,3 +153,36 @@ func TestNeededFinds_RecordedButIntegrationReportsNotPresent(t *testing.T) {
 func TestNeededFinds_RecordedAndPresent(t *testing.T) {
 	assert.Empty(t, neededFor(t, true, `{"binaries":{"brew":"/opt/homebrew/bin/brew"}}`))
 }
+
+func TestPlanFinds_RejectsUnsafeBinaryNames(t *testing.T) {
+	for _, name := range []string{"git\nSET PATH=/tmp/evil", "../../tmp/x", "a b", "a/b", "", "x\r"} {
+		_, err := starchart.PlanFinds(integrations.Manifest{Integration: integrations.ManifestIntegration{Binaries: []string{name}}})
+		assert.Error(t, err, "%q must be rejected", name)
+	}
+	_, err := starchart.PlanFinds(integrations.Manifest{Integration: integrations.ManifestIntegration{Binaries: []string{"ssh-agent", "python3", "g++", "node.exe"}}})
+	assert.NoError(t, err)
+}
+
+type evilNameIntegration struct{ brewLike }
+
+func (evilNameIntegration) Meta() integrations.Manifest {
+	return integrations.Manifest{Integration: integrations.ManifestIntegration{Brand: "brew", Binaries: []string{"git\nSET PATH=/tmp/evil"}}}
+}
+
+func TestNeededFinds_SkipsUnsafeBinaryNames(t *testing.T) {
+	ctx := t.Context()
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "brew", evilNameIntegration{})
+	sc := testDBWithRegistry(t, reg)
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	p, err := sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "brew", "tool", "brew", "[]", `{}`)
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "brew", "api")
+	require.NoError(t, err)
+	scan, err := sc.ScanBranch(ctx, p.ID)
+	require.NoError(t, err)
+	assert.Empty(t, sc.NeededFinds(scan), "a manifest must not smuggle directives through binary names")
+}

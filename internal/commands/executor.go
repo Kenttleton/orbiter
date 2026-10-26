@@ -29,6 +29,10 @@ type Directive struct {
 }
 
 func (d Directive) String() string {
+	// A line break in any field would smuggle a second directive into the shell.
+	if strings.ContainsAny(d.Txn+d.Key+d.Value, "\r\n") && (d.Op == "SESSION" || strings.HasPrefix(d.Op, "FIND_")) {
+		return ""
+	}
 	switch d.Op {
 	case "DIR":
 		return "DIR " + d.Value

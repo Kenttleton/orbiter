@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -24,10 +25,18 @@ type FindResult struct {
 	Value   string
 }
 
+// safeBinaryName admits only plain file names. Binary names come from manifests
+// (untrusted for third-party bundles) and are written into directive lines the
+// shell executes, so a line break, space or path separator must never get through.
+var safeBinaryName = regexp.MustCompile(`^[A-Za-z0-9._+-]+$`)
+
 // PlanFinds lists every FIND the manifest asks Orbiter to run on its behalf.
 func PlanFinds(m integrations.Manifest) ([]FindRequest, error) {
 	var reqs []FindRequest
 	for _, b := range m.Integration.Binaries {
+		if !safeBinaryName.MatchString(b) {
+			return nil, fmt.Errorf("binary name %q is not a plain file name", b)
+		}
 		reqs = append(reqs, FindRequest{Op: "FIND_BINARY", Key: b})
 	}
 	for _, f := range m.Find.Files {
@@ -167,6 +176,9 @@ func (sc *StarChart) NeededFinds(scan BranchScanResult) []ResourceFind {
 		declared := integration.Meta().Integration.Binaries
 		recorded := recordedBinaries(r.Config, declared)
 		for _, name := range declared {
+			if !safeBinaryName.MatchString(name) {
+				continue // never turn an unsafe manifest name into a directive
+			}
 			if _, has := recorded[name]; has && rs.Report.Present {
 				continue
 			}

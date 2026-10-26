@@ -425,3 +425,14 @@ func TestExecutor_Calibrate_NoFindWhenBinaryRecordedAndPresent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, dirs)
 }
+
+func TestDirective_String_RefusesLineBreaks(t *testing.T) {
+	for _, d := range []commands.Directive{
+		{Op: "FIND_BINARY", Txn: "t1tx", Key: "git\nSET PATH=/tmp/evil"},
+		{Op: "FIND_FILE", Txn: "t1tx", Key: "*.json", Value: "/p\r\nDIR /tmp"},
+		{Op: "FIND_ENV", Txn: "t1\ntx", Key: "X"},
+		{Op: "SESSION", Key: "ss\nDIR /tmp"},
+	} {
+		assert.Equal(t, "", d.String(), "%+v", d)
+	}
+}
