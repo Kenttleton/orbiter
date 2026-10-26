@@ -31,8 +31,9 @@ func NewRootCommandForTest(sc *starchart.StarChart) *cobra.Command {
 // NewRootCommandForTestWithRenderer is NewRootCommandForTest with a caller-chosen
 // renderer (for example a JSON renderer, whose prompts stay pending).
 func NewRootCommandForTestWithRenderer(sc *starchart.StarChart, r output.Renderer) *cobra.Command {
-	d := &deps{sc: sc, renderer: r}
+	_, isJSON := r.(*output.JSONRenderer)
+	d := &deps{sc: sc, renderer: r, jsonMode: isJSON}
 	root := &cobra.Command{Use: "orbiter", SilenceUsage: true}
-	root.AddCommand(newRelayCmd(d), newUplinkCmd(d))
+	root.AddCommand(newRelayCmd(d), newUplinkCmd(d), newCalibrateCmd(d))
 	return root
 }

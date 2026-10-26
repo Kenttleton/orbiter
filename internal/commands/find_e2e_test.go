@@ -196,3 +196,51 @@ func TestFindRecoveryLoop_UnresolvedFindStillCalibratesAndDoesNotLoop(t *testing
 			"the resumed calibrate must not start another FIND round, got %q", line)
 	}
 }
+
+// In JSON mode discovery requests are data, not shell directive lines: a client
+// that is not a shell answers them itself, then calls relay and uplink.
+func TestCalibrate_JSONModeReportsDiscoveryRequestsAsAResult(t *testing.T) {
+	ctx := context.Background()
+	reg := integrations.NewRegistry(nil)
+	reg.Register("tool", "brew", brewOnDisk{})
+	sc, err := starchart.OpenWithRegistry(filepath.Join(t.TempDir(), "test.db"), reg)
+	require.NoError(t, err)
+	t.Cleanup(func() { sc.Close() })
+	g, err := sc.CreateGalaxy(ctx, "acme")
+	require.NoError(t, err)
+	_, err = sc.CreatePlanet(ctx, "api", g.ID, "")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "brew", "tool", "brew", "[]", `{}`)
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "brew", "api")
+	require.NoError(t, err)
+
+	out := &bytes.Buffer{}
+	root := commands.NewRootCommandForTestWithRenderer(sc, output.NewRendererTo(output.FormatJSON, false, out))
+	root.SetOut(out)
+	root.SetErr(out)
+	root.SetArgs([]string{"calibrate", "api"})
+	require.NoError(t, root.Execute())
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	require.Len(t, lines, 1, "exactly one event, no directive lines: %q", out.String())
+	var e output.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &e))
+	require.Equal(t, "result", e.Type)
+	var res struct {
+		Data struct {
+			Status   string `json:"status"`
+			Session  string `json:"session"`
+			Requests []struct {
+				Txn, Op, Key string
+			} `json:"requests"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(e.Data, &res))
+	assert.Equal(t, "needs_discovery", res.Data.Status)
+	assert.NotEmpty(t, res.Data.Session)
+	require.Len(t, res.Data.Requests, 1)
+	assert.Equal(t, "FIND_BINARY", res.Data.Requests[0].Op)
+	assert.Equal(t, "brew", res.Data.Requests[0].Key)
+	assert.NotEmpty(t, res.Data.Requests[0].Txn)
+}

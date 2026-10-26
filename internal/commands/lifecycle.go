@@ -53,9 +53,7 @@ func newCalibrateCmd(d *deps) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, dir := range directives {
-				fmt.Fprintln(cmd.OutOrStdout(), dir.String())
-			}
+			d.emitDirectives(cmd.OutOrStdout(), directives)
 			return nil
 		},
 	}

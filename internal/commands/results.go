@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -115,4 +118,46 @@ type InspectResult struct {
 type VesselInitResult struct {
 	Installed int `json:"installed"`
 	Removed   int `json:"removed"`
+}
+
+// DiscoveryRequest is one thing the client must find and relay (see orbiter relay).
+type DiscoveryRequest struct {
+	Txn   string `json:"txn"`
+	Op    string `json:"op"` // FIND_BINARY | FIND_FILE | FIND_DIR | FIND_ENV
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
+}
+
+// PendingDiscovery is the JSON result of a command that cannot continue until the
+// client answers discovery requests: relay each answer, then run uplink --session.
+type PendingDiscovery struct {
+	Status   string             `json:"status"` // needs_discovery
+	Session  string             `json:"session"`
+	Requests []DiscoveryRequest `json:"requests"`
+}
+
+// emitDirectives reports directives a command produced. Styled mode prints the
+// shell line protocol (the hook acts on it). JSON mode reports the session and its
+// discovery requests as one result, because a client that is not a shell answers
+// them itself.
+func (d *deps) emitDirectives(out io.Writer, dirs []Directive) {
+	if !d.jsonMode {
+		for _, dir := range dirs {
+			fmt.Fprintln(out, dir.String())
+		}
+		return
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	pending := PendingDiscovery{Status: "needs_discovery", Requests: []DiscoveryRequest{}}
+	for _, dir := range dirs {
+		switch {
+		case dir.Op == "SESSION":
+			pending.Session = dir.Key
+		case strings.HasPrefix(dir.Op, "FIND_"):
+			pending.Requests = append(pending.Requests, DiscoveryRequest{Txn: dir.Txn, Op: dir.Op, Key: dir.Key, Value: dir.Value})
+		}
+	}
+	d.done("discovery needed", pending)
 }

@@ -97,9 +97,7 @@ func (u *uplinker) resume(ctx context.Context, cmd *cobra.Command, meta string) 
 	if err != nil {
 		return err
 	}
-	for _, dir := range directives {
-		fmt.Fprintln(cmd.OutOrStdout(), dir.String())
-	}
+	u.d.emitDirectives(cmd.OutOrStdout(), directives)
 	return nil
 }
 
