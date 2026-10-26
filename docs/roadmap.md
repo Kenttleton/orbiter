@@ -20,14 +20,12 @@ Last updated: 2026-10-26.
 
 ## 1. Harden (before the GUI)
 
-- [ ] **StateReport config contract.** Plan: `2026-06-18-statereport-config-contract.md`. Drops the named fields (`BinaryPath`, `InstallDir`, `InPath`, `Manager`, `Exports`) from `StateReport` and moves them into `Config`. It touches 21 integrations in five languages and needs their WASM rebuilt. The plan predates FIND and still lists the dropped `local` integration (Task 6): refresh it before executing.
+- [ ] **StateReport config contract.** Plan: `2026-06-18-statereport-config-contract.md`. Drops the named fields (`BinaryPath`, `InstallDir`, `InPath`, `Manager`, `Exports`) from `StateReport` and moves them into `Config`. The plan predates FIND: it lists 20 integrations plus the deleted `local`, and misses 8 added since (bash, zsh, fish, powershell, google-auth, google-drive, tmux, json), so 28 integrations exist today. Refresh before executing.
 - [ ] **Transponder-only integrations never get binaries.** keychain (macos), vault (1password) and agent (ssh-agent) read `ctx.binaries`, but `NeededFinds` only looks at resources. Needs a short design: where a transponder records its binary path.
 - [ ] **Prompts that bypass the transaction flow.** These read `os.Stdin` directly, so `-i` and `relay` do not cover them:
   - [ ] `jump` confirmation (`executor.go`, `Jump`)
   - [ ] `retro` confirmation (`executor.go`, `Retro`); JSON clients pass `-y` meanwhile
   - [ ] "Always allow this exact command?" after an approval (`StdinAlwaysAllowFunc`, `internal/wasm/loader.go`)
-- [ ] **Decide the `native` manager.** `integrations/orbiter/` is an empty directory, possibly intended as the `native` manager the manifests accept (`manager = ["nvm", "native"]`). Nothing implements `native` today.
-- [ ] **TUI stubs.** `tui.Run`, `UniverseModel`, `BeaconModel` are placeholders and `orbiter starchart` does nothing. Deliberately parked while the GUI is the priority; decide whether to keep, remove or make the command say so.
 - [ ] **Present/Reachable spec.** The FIND spec references a "Present/Reachable refactor" that was never written and no longer applies: integrations self-report both in `StateReport` and Orbiter stores them. Reduce the references to that one sentence.
 - [ ] **Deferred review minors (FIND).**
   - [ ] zsh `FIND_DIR` uses a local named `path`, which overwrites `PATH` inside the function
@@ -56,6 +54,15 @@ Direction, not yet specified: Wails shell, Vue/Quasar UI, Pixi.js for the 2D orb
 - [ ] Spec.
 - [ ] Build.
 - [ ] Windows verification pass (see section 1).
+
+## 4. After the GUI
+
+- [ ] TUI. Deprioritized in favor of the GUI as the first UI; the stubs (`tui.Run`, the models, the no-op `orbiter starchart`) stay until then.
+
+## Design notes
+
+- **Filesystem is Orbiter's.** It is native Go on every OS, not an integration, and cannot be replaced.
+- **Native installs are standalone.** A tool installed without a manager (Node from the website) is its own block, not a child of a manager. The tool's integration holds the native information; managers (nvm, brew) supply contextual overrides to install locations. There is no `native` manager integration to build.
 
 ## Conventions to keep
 
