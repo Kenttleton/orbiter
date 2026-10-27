@@ -50,11 +50,11 @@ operation the session was opened for.`,
 				return nil // exit 0 silently
 			}
 
-			u := &uplinker{d: d, sessionID: sessionID, errw: cmd.ErrOrStderr()}
+			u := &uplinker{d: d, sessionID: sessionID}
 			for _, tx := range txns {
 				if err := u.process(ctx, tx); err != nil {
 					// Non-fatal: log and continue.
-					fmt.Fprintf(cmd.ErrOrStderr(), "uplink: transaction %s (%s): %v\n", tx.ID, tx.Op, err)
+					d.renderer.Warning(fmt.Sprintf("uplink: transaction %s (%s): %v", tx.ID, tx.Op, err))
 				}
 				_ = d.sc.MarkTransactionProcessed(ctx, tx.ID)
 			}
@@ -93,7 +93,12 @@ func (u *uplinker) resume(ctx context.Context, cmd *cobra.Command, meta string) 
 	if json.Unmarshal([]byte(meta), &m) != nil || m.Op != "calibrate" {
 		return nil
 	}
-	directives, err := NewExecutor(u.d.sc, u.d.renderer).CalibrateAfterFind(ctx, m.Target)
+	exec := NewExecutor(u.d.sc, u.d.renderer)
+	calibrate := exec.CalibrateAfterFind
+	if u.reconciled {
+		calibrate = exec.Calibrate // a newly registered shell still has to be found
+	}
+	directives, err := calibrate(ctx, m.Target)
 	if err != nil {
 		return err
 	}
@@ -104,13 +109,17 @@ func (u *uplinker) resume(ctx context.Context, cmd *cobra.Command, meta string) 
 // process dispatches one relayed transaction by op. FIND-originated SELECT and
 // CONFIRM carry a resource_id; ones without it keep the original prompt behavior.
 func (u *uplinker) process(ctx context.Context, tx starchart.Transaction) error {
-	fromFind := parseFindArgs(tx.Args).ResourceID != ""
+	args := parseFindArgs(tx.Args)
+	fromFind := args.ResourceID != ""
 	switch tx.Op {
 	case "FIND_BINARY":
 		return u.findBinary(ctx, tx)
 	case "FIND_FILE", "FIND_DIR", "FIND_ENV":
 		return nil // not persisted yet: no integration declares [find]
 	case "SELECT":
+		if args.Kind == "shell" {
+			return u.shellChosen(ctx, tx)
+		}
 		if fromFind {
 			return u.selected(ctx, tx)
 		}

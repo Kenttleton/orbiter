@@ -66,6 +66,10 @@ never free-form text. A command ends in exactly one terminal event:
 | `error` | The command failed. `data` is `{message}`. The process exits 1 and stderr stays empty. |
 | `captain_prompt` | A command needs the Captain's answer (async): relay the response, then run `uplink`. |
 
+A `warning` event is not terminal: it reports something that did not stop the command (a transaction `uplink` could not process, for example), and the command still ends in one of the events above.
+
+Nothing is written to stderr. Everything a client needs is on stdout, and everything it sends comes in on stdin (`-i`).
+
 Detail flags: JSON **always carries full detail**, so `-v` does not change it. Scope flags
 (`-a`) do, because a client has to be able to ask for the whole subtree. `-t` never adds
 free-form text to JSON stdout.

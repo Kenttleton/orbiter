@@ -130,10 +130,12 @@ type DiscoveryRequest struct {
 	Value string `json:"value,omitempty"`
 }
 
-// PendingDiscovery is the JSON result of a command that cannot continue until the
-// client answers discovery requests: relay each answer, then run uplink --session.
+// PendingDiscovery is the JSON result of a command that cannot continue until the client
+// answers: relay each answer, then run uplink --session. Status is needs_discovery when it
+// asks the client to find things (Requests), or needs_decision when it asks the Captain to
+// choose (a captain_prompt event already carries the transaction to answer).
 type PendingDiscovery struct {
-	Status   string             `json:"status"` // needs_discovery
+	Status   string             `json:"status"` // needs_discovery | needs_decision
 	Session  string             `json:"session"`
 	Requests []DiscoveryRequest `json:"requests"`
 }
@@ -160,6 +162,11 @@ func (d *deps) emitDirectives(out io.Writer, dirs []Directive) {
 		case strings.HasPrefix(dir.Op, "FIND_"):
 			pending.Requests = append(pending.Requests, DiscoveryRequest{Txn: dir.Txn, Op: dir.Op, Key: dir.Key, Value: dir.Value})
 		}
+	}
+	if len(pending.Requests) == 0 {
+		pending.Status = "needs_decision"
+		d.done("decision needed", pending)
+		return
 	}
 	d.done("discovery needed", pending)
 }

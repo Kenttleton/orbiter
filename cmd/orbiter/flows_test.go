@@ -92,6 +92,24 @@ func flowSetup(env *testscript.Env) error {
 	env.Setenv("SHELL", filepath.Join(bin, shellName))
 	env.Setenv("FLOW_SHELL", shellName)
 
+	// A second shell, for flows where the Captain's terminal changes. Flows that do not use
+	// it ignore it; $FLOW_OTHER_SHELL names it and $FLOW_OTHER_SHELL_PATH is where it is linked.
+	for _, candidate := range []string{"bash", "zsh", "fish"} {
+		if candidate == shellName {
+			continue
+		}
+		p, err := exec.LookPath(candidate)
+		if err != nil {
+			continue
+		}
+		if err := os.Symlink(p, filepath.Join(bin, candidate)); err != nil {
+			return err
+		}
+		env.Setenv("FLOW_OTHER_SHELL", candidate)
+		env.Setenv("FLOW_OTHER_SHELL_PATH", filepath.Join(bin, candidate))
+		break
+	}
+
 	shim := ""
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
 		if _, err := os.Stat(filepath.Join(dir, "orbiter")); err == nil {

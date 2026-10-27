@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/models"
@@ -18,11 +17,15 @@ import (
 type uplinker struct {
 	d         *deps
 	sessionID string
-	errw      io.Writer
+	// reconciled is set when a shell was replaced this run: the new shell has no recorded
+	// location yet, so the run that continues must look for it (a full calibrate).
+	reconciled bool
 }
 
 // findArgs is the JSON stored in a FIND-originated transaction's args.
 type findArgs struct {
+	Kind       string   `json:"kind"` // "shell": the choice of a replacement shell
+	Brand      string   `json:"brand"`
 	ResourceID string   `json:"resource_id"`
 	Key        string   `json:"key"`
 	Value      string   `json:"value"`
@@ -77,6 +80,22 @@ func (u *uplinker) findBinary(ctx context.Context, tx starchart.Transaction) err
 		Op:      "CONFIRM",
 		Message: fmt.Sprintf("%s moved from %s to %s, update?", a.Key, old, found.Unix),
 	}, map[string]any{"resource_id": a.ResourceID, "key": a.Key, "new": found.Unix, "old": old})
+}
+
+// shellChosen handles the Captain's answer to the choice of a replacement for a drifted shell.
+func (u *uplinker) shellChosen(ctx context.Context, tx starchart.Transaction) error {
+	a := parseFindArgs(tx.Args)
+	var r struct {
+		Selected string `json:"selected"`
+	}
+	if err := json.Unmarshal([]byte(tx.Response), &r); err != nil || r.Selected == "" {
+		return fmt.Errorf("the answer to the shell choice names no shell")
+	}
+	if err := reconcileShell(ctx, u.d.sc, a.ResourceID, a.Brand, r.Selected); err != nil {
+		return err
+	}
+	u.reconciled = true
+	return nil
 }
 
 // selected handles a relayed SELECT that originated from a FIND.
@@ -145,7 +164,7 @@ func (u *uplinker) ask(ctx context.Context, p output.CaptainPrompt, args map[str
 		return err
 	}
 	if err := u.process(ctx, tx); err != nil {
-		fmt.Fprintf(u.errw, "uplink: transaction %s (%s): %v\n", tx.ID, tx.Op, err)
+		u.d.renderer.Warning(fmt.Sprintf("uplink: transaction %s (%s): %v", tx.ID, tx.Op, err))
 	}
 	return u.d.sc.MarkTransactionProcessed(ctx, txn)
 }

@@ -2,8 +2,6 @@ package output_test
 
 import (
 	"bytes"
-	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -151,43 +149,6 @@ func TestStyledRenderer_Prompt_Text_short(t *testing.T) {
 	}
 	if resp != `{"value":"hello world"}` {
 		t.Errorf("resp = %q, want value:hello world", resp)
-	}
-}
-
-// The shell hook captures orbiter's stdout to read directives, so a prompt on
-// stdout would be invisible while orbiter waits for an answer. On a real terminal
-// (writer is os.Stdout) the prompt must go to stderr.
-func TestStyledRenderer_Prompt_goesToStderrWhenWritingToStdout(t *testing.T) {
-	capture := func(f **os.File) (restore func() string) {
-		orig := *f
-		rd, wr, err := os.Pipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		*f = wr
-		return func() string {
-			wr.Close()
-			*f = orig
-			b, _ := io.ReadAll(rd)
-			return string(b)
-		}
-	}
-	restoreOut := capture(&os.Stdout)
-	restoreErr := capture(&os.Stderr)
-
-	r := output.NewStyledRendererWith(os.Stdout, strings.NewReader("y\n"), false)
-	_, err := r.Prompt(output.CaptainPrompt{Op: "CONFIRM", Message: "move brew?"})
-
-	stderr := restoreErr()
-	stdout := restoreOut()
-	if err != nil {
-		t.Fatalf("Prompt: %v", err)
-	}
-	if !strings.Contains(stderr, "move brew?") {
-		t.Errorf("stderr = %q, want the prompt text", stderr)
-	}
-	if strings.Contains(stdout, "move brew?") {
-		t.Errorf("stdout = %q, must not carry the prompt", stdout)
 	}
 }
 

@@ -196,3 +196,23 @@ func TestJSONRenderer_Prompt_attachedIgnoresMalformedLines(t *testing.T) {
 		t.Errorf("resp = %q err = %v", resp, err)
 	}
 }
+
+// Everything goes through stdout, so a warning in JSON mode is an event on stdout, not text on
+// stderr. It is not terminal: the command still ends in a result, plan or error.
+func TestJSONRenderer_Warning_emitsAWarningEvent(t *testing.T) {
+	var buf bytes.Buffer
+	r := output.NewJSONRenderer(&buf, false)
+	r.Warning("brew not found by the shell")
+
+	var e output.Event
+	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &e); err != nil {
+		t.Fatalf("unmarshal Event: %v — raw: %s", err, buf.String())
+	}
+	if e.Type != "warning" || len(e.Txn) != 16 {
+		t.Errorf("Type = %q Txn = %q", e.Type, e.Txn)
+	}
+	var data struct{ Message string }
+	if err := json.Unmarshal(e.Data, &data); err != nil || data.Message != "brew not found by the shell" {
+		t.Errorf("data = %s (err %v)", e.Data, err)
+	}
+}

@@ -157,7 +157,7 @@ func (r *StyledRenderer) IsTrace() bool { return r.trace }
 // Prompt implements Renderer. Renders the prompt to the terminal and reads the
 // Captain's response from stdin. Returns the response serialized as a JSON string.
 func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
-	out := sr.promptWriter()
+	out := sr.w
 	switch p.Op {
 	case "CONFIRM":
 		fmt.Fprintf(out, "\n  %s\n  Allow? [y/N] ", p.Message)
@@ -213,14 +213,4 @@ func (sr *StyledRenderer) Prompt(p CaptainPrompt) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown prompt op: %q", p.Op)
 	}
-}
-
-// promptWriter returns where prompt text goes. The shell hook captures orbiter's
-// stdout to read directives, so on a real terminal (writing to os.Stdout) a prompt
-// there would be invisible while orbiter waits for an answer: send it to stderr.
-func (sr *StyledRenderer) promptWriter() io.Writer {
-	if f, ok := sr.w.(*os.File); ok && f == os.Stdout {
-		return os.Stderr
-	}
-	return sr.w
 }

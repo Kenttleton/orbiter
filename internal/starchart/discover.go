@@ -28,7 +28,7 @@ func (sc *StarChart) DiscoverPlanet(ctx context.Context, cwd string) ([]integrat
 }
 
 // DiscoverVessel is the same discovery for the vessel: this machine's environment, with no
-// project files. An integration whose manifest rules need files is never asked.
+// project files. Every registered integration is asked unless its manifest rules need files.
 func (sc *StarChart) DiscoverVessel(ctx context.Context) ([]integrations.SuggestedResource, error) {
 	if sc.integrations == nil {
 		return nil, nil

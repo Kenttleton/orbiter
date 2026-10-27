@@ -234,6 +234,21 @@ func (sc *StarChart) RecordedBinary(ctx context.Context, resourceID, name string
 	return cfg.Binaries[name], nil
 }
 
+// RecordedBinaries returns every binary path recorded in the resource's config, by name.
+func (sc *StarChart) RecordedBinaries(ctx context.Context, resourceID string) (map[string]string, error) {
+	var r models.Resource
+	if err := sc.Get(ctx, "resources", resourceID, &r); err != nil {
+		return nil, err
+	}
+	var cfg struct {
+		Binaries map[string]string `json:"binaries"`
+	}
+	if r.Config == "" || json.Unmarshal([]byte(r.Config), &cfg) != nil {
+		return nil, nil
+	}
+	return cfg.Binaries, nil
+}
+
 // RecordBinary merges {"binaries":{name:path}} into the resource's config JSON,
 // preserving every other key. The path is stored in forward-slash form so the
 // StarChart stays portable; it is re-parsed for the current host on every read.

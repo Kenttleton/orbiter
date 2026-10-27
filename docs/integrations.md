@@ -136,7 +136,9 @@ A shell is a resource on the vessel, like any resource in the map. An integratio
 
 - **Registration is discovery.** It is the same discovery a planet uses. Orbiter asks the registered integrations to `detect`; a shell integration answers whether this environment is its own, and says what to register (`resources: [{role: "shell", brand: "zsh"}]`). Orbiter registers and attaches those resources to the vessel with the same code as `planet init --discover`. A shell integration declares no manifest detection rules, so it is always asked and decides for itself (for example from `$SHELL`, or an exported version variable).
 - **After that, the map is the record.** When the vessel already has a shell resource, `orbiter shell init` delegates to it and asks no one. Swapping shells is the ordinary entity commands (retro, add and attach, or discovery again).
-- **The hook.** The manifest declares the hook script (`[shell] exports = [{ hook = "hook.zsh", ... }]`). Installing the integration installs that file beside the manifest, and `orbiter shell init` prints it with `::ORBITER::` replaced by the path to the binary.
+- **The hook.** The manifest declares the hook script (`[shell] exports = [{ hook = "hook.zsh", ... }]`). The hook is a file in the integration's folder, and `orbiter shell init` prints it with `::ORBITER::` replaced by the path to the binary.
+
+An integration is a folder: the manifest, the WASM, and any file the manifest declares. There is no install or uninstall mechanism, so that a folder can be carried between machines. Orbiter uses an integration if its folder is in `~/.orbiter/integrations`; `orbiter vessel init` simply copies the bundled folders there, and `retro` removes a resource from the tree and leaves the folder alone.
 
 ## Guest ABI
 

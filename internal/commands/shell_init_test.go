@@ -20,6 +20,7 @@ import (
 type fakeShell struct {
 	brand    string
 	detected bool
+	present  bool // what its scan reports: the shell is there
 	asked    *int // incremented each time Orbiter asks it to detect
 }
 
@@ -100,7 +101,10 @@ func TestShellInit_NoRecordMeansDiscoveryThenRegistration(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, loaded, "the shell integrations are loaded only because there was no record")
-	assert.Equal(t, "# beta hook, binary /bin/orbiter\n", script, "the answering integration's own hook, with the binary path filled in")
+	// Everything goes through stdout, and stdout is what the profile evaluates, so the news that
+	// a shell was registered is a comment line in the script: harmless to evaluate.
+	assert.Equal(t, "# orbiter: registered beta as this vessel's shell\n# beta hook, binary /bin/orbiter\n", script,
+		"a comment saying what was registered, then the integration's own hook with the binary path filled in")
 	assert.Equal(t, "beta", registeredShell(t, sc), "the shell is a resource on the vessel, like any other")
 }
 
@@ -169,7 +173,7 @@ func TestShellInit_SeveralAnswerYes_TheChoiceIsStable(t *testing.T) {
 	dir, sc := shellFixture(t, reg, "alpha", "beta")
 	script, err := newShell(sc, dir, func() error { return nil }).Script(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "# alpha hook, binary /bin/orbiter\n", script)
+	assert.Equal(t, "# orbiter: registered alpha as this vessel's shell\n# alpha hook, binary /bin/orbiter\n", script)
 	assert.Equal(t, "alpha", registeredShell(t, sc))
 }
 

@@ -1,0 +1,60 @@
+# Flow 2: the vessel's shell drifts, and the Captain reconciles it.
+#
+# The vessel needs a shell. It is a resource on the vessel like any other, recorded the first time
+# a terminal loads Orbiter's profile line. Here the recorded shell's integration goes missing (as
+# after copying a star chart to another machine), a scan flags it, and calibrate looks for shells
+# through the installed integrations, shows what was found and what is missing, and lets the
+# Captain choose.
+
+step set up the vessel and let the terminal of the Captain register its shell
+exec orbiter --output json vessel init -y
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"'
+
+step the vessel has a shell on record
+exec orbiter --output json survey vessel -v
+stdout '"role":"shell"'
+
+step the integration of the recorded shell goes missing
+rm $HOME/.orbiter/integrations/$FLOW_SHELL
+
+step a scan flags the drift: nothing is installed that can speak for the recorded shell
+exec orbiter --output json scan vessel
+stdout '"role":"shell"'
+stdout '"status":"failed"'
+
+step the Captain opens a terminal running a different shell
+env SHELL=$FLOW_OTHER_SHELL_PATH
+
+step calibrate shows what is missing and what was found; the client chooses the first shell offered
+client -- calibrate vessel
+stdout '"op":"SELECT"'
+stdout 'has drifted: its integration folder is not in the integrations directory'
+stdout 'Shells found by the integrations in the integrations directory: '
+
+step the shell of the vessel is now the one the Captain chose, and the drifted one is gone
+exec orbiter --output json survey vessel -v
+stdout '"role":"shell"'
+stdout '"brand":"'$FLOW_OTHER_SHELL'"'
+! stdout '"brand":"'$FLOW_SHELL'"'
+
+
+step the new shell has no recorded location yet: calibrate asks for discovery
+client -- calibrate vessel
+stdout '"status":"needs_discovery"'
+stdout '"op":"FIND_BINARY","key":"'$FLOW_OTHER_SHELL'"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+
+step the terminal of the Captain now runs the shell Orbiter has on record, and answers the search with its own hook
+# The hook comes from the shell integration Orbiter delegates to; nothing is detected this time.
+exec $FLOW_OTHER_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" '$FLOW_OTHER_SHELL
+
+step uplink records the location and the shell of the vessel is healthy
+# Blocked: the shell integration's health check runs its own shell (for example `bash --version`),
+# and the host's hard-coded banned list quarantines any integration that runs a shell by name,
+# before it reads the manifest. So a shell can never scan healthy. Roadmap Phase 3.
+finding a shell integration is quarantined when it scans: the host bans running shells by name, ahead of the manifest allowlist (roadmap Phase 3)
+skip 'blocked by roadmap Phase 3: remove this line and the finding above when a shell integration can run its own health check'
+client -- uplink --session=$SESSION
+stdout '"role":"shell"'
+stdout '"action":"healthy"'

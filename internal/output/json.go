@@ -35,7 +35,16 @@ func NewJSONRenderer(w io.Writer, trace bool) *JSONRenderer {
 
 func (r *JSONRenderer) Info(_ string)    {}
 func (r *JSONRenderer) Success(_ string) {}
-func (r *JSONRenderer) Warning(_ string) {}
+
+// Warning implements Renderer for JSON mode: a non-terminal "warning" event on stdout. The
+// command still ends in a result, plan or error.
+func (jr *JSONRenderer) Warning(msg string) {
+	data, err := json.Marshal(map[string]string{"message": msg})
+	if err != nil {
+		return
+	}
+	jr.emitEvent("warning", models.NewID("tx"), data)
+}
 
 // Error implements Renderer for JSON mode: one "error" event. A command that fails
 // returns the error; the process wrapper (commands.Execute) reports it here.

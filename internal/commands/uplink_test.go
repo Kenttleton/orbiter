@@ -156,7 +156,9 @@ func TestUplinkFind_ZeroMatchesLeavesConfigAlone(t *testing.T) {
 	f := setupFind(t, "FIND_BINARY", `{}`, "", `{"status":"ok","matches":[]}`)
 	require.NoError(t, f.uplink(t))
 	assert.Empty(t, f.recorded(t))
-	assert.Contains(t, f.stderr.String(), "not found")
+	assert.Contains(t, f.stdout.String(), `"type":"warning"`, "reported as an event on stdout, not text on stderr")
+	assert.Contains(t, f.stdout.String(), "not found")
+	assert.Empty(t, f.stderr.String(), "nothing is written to stderr")
 }
 
 func TestUplinkFind_TwoMatchesRaisesSelectAndStaysActive(t *testing.T) {

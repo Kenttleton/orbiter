@@ -617,17 +617,22 @@ func (e *Executor) calibrate(ctx context.Context, target string, skipFinds bool)
 		})
 		return nil, nil
 	default:
-		// Discovery first: a binary with no recorded path, or one its integration
-		// reports not-present, is resolved through a FIND round trip before any
-		// calibration runs. uplink continues the flow once the Captain has decided.
+		scan, err := e.sc.ScanBranch(ctx, alias.ID)
+		if err != nil {
+			return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
+		}
+		// Discovery first: a binary with no recorded path, or one its integration reports
+		// not-present, is resolved through a FIND round trip before any calibration runs.
+		// uplink continues the flow once the Captain has decided.
 		if !skipFinds {
-			scan, err := e.sc.ScanBranch(ctx, alias.ID)
-			if err != nil {
-				return nil, fmt.Errorf("scan %s: %w", alias.Name, err)
-			}
 			if needed := e.sc.NeededFinds(scan); len(needed) > 0 {
 				return e.requestFinds(ctx, "calibrate", alias.Name, needed)
 			}
+		}
+		// A shell that has drifted (its integration gone, or the shell no longer where it was
+		// recorded) is the Captain's choice. FIND has had its turn by now.
+		if pending, err := e.handleShellDrift(ctx, alias, scan); err != nil || len(pending) > 0 {
+			return pending, err
 		}
 		result, err := e.sc.CalibrateBranch(ctx, alias.ID)
 		if err != nil {

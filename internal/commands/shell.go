@@ -41,12 +41,19 @@ func (s shellInit) script(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	note := ""
 	if brand == "" {
 		if brand, err = s.discover(ctx, vessel.ID); err != nil {
 			return "", err
 		}
+		// stdout only: this output is evaluated by the shell, so the news is a comment.
+		note = fmt.Sprintf("# orbiter: registered %s as this vessel's shell\n", brand)
 	}
-	return s.hook(brand)
+	hook, err := s.hook(brand)
+	if err != nil {
+		return "", err
+	}
+	return note + hook, nil
 }
 
 // recorded returns the brand of the shell resource attached to the vessel ("" if none).
@@ -84,13 +91,12 @@ func (s shellInit) discover(ctx context.Context, vesselID string) (string, error
 	}
 	slices.SortFunc(shells, func(a, b core.SuggestedResource) int { return strings.Compare(a.Brand, b.Brand) })
 	if len(shells) == 0 {
-		return "", fmt.Errorf("no installed shell integration reported this environment as its own — run 'orbiter vessel init' to install the bundled integrations")
+		return "", fmt.Errorf("no shell integration reported this environment as its own — an integration is a folder in ~/.orbiter/integrations ('orbiter vessel init' copies the bundled ones there)")
 	}
 	for _, o := range registerSuggestions(ctx, s.sc, shells[:1], vesselID) {
 		if o.Outcome != "attached" {
 			return "", fmt.Errorf("register shell %s: %s", o.Brand, o.Error)
 		}
-		fmt.Fprintf(os.Stderr, "orbiter: registered %s as this vessel's shell\n", o.Brand)
 	}
 	return shells[0].Brand, nil
 }
@@ -100,7 +106,7 @@ func (s shellInit) discover(ctx context.Context, vesselID string) (string, error
 func (s shellInit) hook(brand string) (string, error) {
 	manifestBytes, err := os.ReadFile(filepath.Join(s.dir, brand, "manifest.toml"))
 	if err != nil {
-		return "", fmt.Errorf("shell %q is registered but not installed — run 'orbiter vessel init': %w", brand, err)
+		return "", fmt.Errorf("shell %q is registered but its integration folder is not in ~/.orbiter/integrations ('orbiter vessel init' copies the bundled ones there): %w", brand, err)
 	}
 	var m core.Manifest
 	if _, err := toml.Decode(string(manifestBytes), &m); err != nil {
