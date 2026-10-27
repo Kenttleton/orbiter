@@ -5,10 +5,6 @@ description = "Integrates Orbiter with pwsh (PowerShell 7+) via LocationChangedA
 roles = ["shell"]
 binaries = ["pwsh"]
 
-[detection]
-[[detection.env]]
-key = "PSHOME"
-
 [shell]
 exports = [
   { hook = "hook.ps1", description = "LocationChangedAction hook for directory-change context detection" },

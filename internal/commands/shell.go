@@ -21,27 +21,28 @@ import (
 
 // shellInit decides which integration operates as the Captain's shell and returns its hook.
 //
-// Orbiter knows no shell by name. A shell integration is anything registered in the shell
-// role. When Orbiter has a record of which one the Captain uses (a shell resource attached to
-// the vessel) it simply delegates to it. Only when it has no record does it go out, in, out:
-// ask each registered shell integration whether this environment is its own, take the answer,
-// record it, and delegate. The Captain can swap the recorded shell later.
+// The shell is a resource on the vessel, like any resource in the map. When one is recorded
+// Orbiter delegates to it. When none is, Orbiter discovers the vessel's shell the way it
+// discovers a planet's resources: it asks the registered integrations to detect, registers
+// what they suggest, and attaches it to the vessel. Orbiter names no shell.
 type shellInit struct {
 	sc   *starchart.StarChart
-	reg  *core.Registry
-	dir  string            // where integrations are installed
-	env  map[string]string // the environment offered to integrations that are asked to detect
-	self string            // this binary's path, filled into the hook
-	load func() error      // loads the installed shell integrations into reg
+	dir  string       // where integrations are installed
+	self string       // this binary's path, filled into the hook
+	load func() error // loads the installed shell integrations into the registry
 }
 
 func (s shellInit) script(ctx context.Context) (string, error) {
-	brand, err := s.recorded(ctx)
+	vessel, err := s.sc.GetVessel(ctx)
+	if err != nil {
+		return "", fmt.Errorf("find the vessel: %w", err)
+	}
+	brand, err := s.recorded(ctx, vessel.ID)
 	if err != nil {
 		return "", err
 	}
 	if brand == "" {
-		if brand, err = s.detectAndRegister(ctx); err != nil {
+		if brand, err = s.discover(ctx, vessel.ID); err != nil {
 			return "", err
 		}
 	}
@@ -49,12 +50,8 @@ func (s shellInit) script(ctx context.Context) (string, error) {
 }
 
 // recorded returns the brand of the shell resource attached to the vessel ("" if none).
-func (s shellInit) recorded(ctx context.Context) (string, error) {
-	vessel, err := s.sc.GetVessel(ctx)
-	if err != nil {
-		return "", fmt.Errorf("find the vessel: %w", err)
-	}
-	att, err := s.sc.AttachedTo(ctx, vessel.ID)
+func (s shellInit) recorded(ctx context.Context, vesselID string) (string, error) {
+	att, err := s.sc.AttachedTo(ctx, vesselID)
 	if err != nil {
 		return "", fmt.Errorf("read the vessel's attachments: %w", err)
 	}
@@ -66,36 +63,36 @@ func (s shellInit) recorded(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// detectAndRegister asks every registered shell integration to detect, records the first
-// (by brand, so the choice is stable) that answers yes, and returns its brand.
-func (s shellInit) detectAndRegister(ctx context.Context) (string, error) {
+// discover finds the vessel's shell through the registered integrations, registers it, and
+// returns its brand. When several integrations suggest a shell the first by brand is used,
+// so the choice is stable.
+func (s shellInit) discover(ctx context.Context, vesselID string) (string, error) {
 	if s.load != nil {
 		if err := s.load(); err != nil {
 			return "", fmt.Errorf("load shell integrations: %w", err)
 		}
 	}
-	candidates := s.reg.AllForRole(core.ResourceRoleShell)
-	slices.SortFunc(candidates, func(a, b core.Integration) int {
-		return strings.Compare(a.Meta().Integration.Brand, b.Meta().Integration.Brand)
-	})
-	for _, c := range candidates {
-		if !c.Detect(core.DetectContext{Env: s.env}).Detected {
-			continue
-		}
-		brand := c.Meta().Integration.Brand
-		if _, err := s.sc.CreateResource(ctx, brand, core.ResourceRoleShell, brand, "[]", "{}"); err != nil {
-			// A resource of that name may already exist unattached; attach it.
-			if _, rerr := s.sc.Resolve(ctx, brand); rerr != nil {
-				return "", fmt.Errorf("record shell %s: %w", brand, err)
-			}
-		}
-		if _, err := s.sc.Attach(ctx, brand, "vessel"); err != nil {
-			return "", fmt.Errorf("attach shell %s to the vessel: %w", brand, err)
-		}
-		fmt.Fprintf(os.Stderr, "orbiter: registered %s as this vessel's shell\n", brand)
-		return brand, nil
+	suggestions, err := s.sc.DiscoverVessel(ctx)
+	if err != nil {
+		return "", fmt.Errorf("discover the shell: %w", err)
 	}
-	return "", fmt.Errorf("no installed shell integration reported this environment as its own — run 'orbiter vessel init' to install the bundled integrations")
+	var shells []core.SuggestedResource
+	for _, sg := range suggestions {
+		if sg.Role == core.ResourceRoleShell {
+			shells = append(shells, sg)
+		}
+	}
+	slices.SortFunc(shells, func(a, b core.SuggestedResource) int { return strings.Compare(a.Brand, b.Brand) })
+	if len(shells) == 0 {
+		return "", fmt.Errorf("no installed shell integration reported this environment as its own — run 'orbiter vessel init' to install the bundled integrations")
+	}
+	for _, o := range registerSuggestions(ctx, s.sc, shells[:1], vesselID) {
+		if o.Outcome != "attached" {
+			return "", fmt.Errorf("register shell %s: %s", o.Brand, o.Error)
+		}
+		fmt.Fprintf(os.Stderr, "orbiter: registered %s as this vessel's shell\n", o.Brand)
+	}
+	return shells[0].Brand, nil
 }
 
 // hook reads the hook script the integration's manifest declares, from the install
@@ -132,7 +129,7 @@ func (d *deps) printShellScript(ctx context.Context) error {
 	}
 	dir := bundle.DefaultIntegrationsDir()
 	script, err := shellInit{
-		sc: d.sc, reg: core.Default, dir: dir, env: osEnvMap(), self: self,
+		sc: d.sc, dir: dir, self: self,
 		load: func() error {
 			return bundle.LoadInstalled(dir, core.Default, wasm.RendererPrompts(d.renderer, d.sc), core.ResourceRoleShell)
 		},
@@ -142,17 +139,6 @@ func (d *deps) printShellScript(ctx context.Context) error {
 	}
 	fmt.Print(script)
 	return nil
-}
-
-// osEnvMap parses os.Environ() into a key→value map.
-func osEnvMap() map[string]string {
-	raw := os.Environ()
-	m := make(map[string]string, len(raw))
-	for _, kv := range raw {
-		k, v, _ := strings.Cut(kv, "=")
-		m[k] = v
-	}
-	return m
 }
 
 func vesselInitRun(out io.Writer, yes bool) (VesselInitResult, error) {

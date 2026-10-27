@@ -99,19 +99,15 @@ func newPlanetInitCmd(d *deps) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("discover: %w", err)
 				}
-				for _, s := range suggestions {
-					r, err := d.sc.CreateResource(ctx, s.Brand, s.Role, s.Brand, "[]", "{}")
-					if err != nil {
-						d.renderer.Success(fmt.Sprintf("  skip %s/%s: %v", s.Role, s.Brand, err))
-						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "skipped", Error: err.Error()})
-						continue
-					}
-					if _, err := d.sc.Attach(ctx, r.ID, alias.ID); err != nil {
-						d.renderer.Success(fmt.Sprintf("  registered %s/%s but attach failed: %v", s.Role, s.Brand, err))
-						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attach_failed", Error: err.Error()})
-					} else {
-						d.renderer.Success(fmt.Sprintf("  discovered and attached %s/%s", s.Role, s.Brand))
-						discovered = append(discovered, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attached"})
+				discovered = registerSuggestions(ctx, d.sc, suggestions, alias.ID)
+				for _, o := range discovered {
+					switch o.Outcome {
+					case "skipped":
+						d.renderer.Success(fmt.Sprintf("  skip %s/%s: %s", o.Role, o.Brand, o.Error))
+					case "attach_failed":
+						d.renderer.Success(fmt.Sprintf("  registered %s/%s but attach failed: %s", o.Role, o.Brand, o.Error))
+					default:
+						d.renderer.Success(fmt.Sprintf("  discovered and attached %s/%s", o.Role, o.Brand))
 					}
 				}
 			}

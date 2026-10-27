@@ -132,10 +132,10 @@ envs  = ["HOMEBREW_PREFIX"] # exact env var names
 
 ## Operating as a shell
 
-An integration whose manifest lists the `shell` role operates as a shell. Orbiter does not know any shell by name; it only knows the role.
+A shell is a resource on the vessel, like any resource in the map. An integration whose manifest lists the `shell` role operates as one. Orbiter does not know any shell by name; it only knows the role.
 
-- **Detection.** `detect` receives the environment Orbiter has (`DetectContext.Env`) and answers whether this environment is the integration's own (`detected`). Each shell integration decides for itself, for example from `$SHELL` or an exported version variable.
-- **Registration.** When Orbiter has no record of a shell, it asks every registered shell integration to `detect`, records the one that answers yes as a `shell` resource on the vessel, and delegates to it. When a shell is already recorded, Orbiter uses its own record and asks no one. The Captain can swap the recorded shell later.
+- **Registration is discovery.** It is the same discovery a planet uses. Orbiter asks the registered integrations to `detect`; a shell integration answers whether this environment is its own, and says what to register (`resources: [{role: "shell", brand: "zsh"}]`). Orbiter registers and attaches those resources to the vessel with the same code as `planet init --discover`. A shell integration declares no manifest detection rules, so it is always asked and decides for itself (for example from `$SHELL`, or an exported version variable).
+- **After that, the map is the record.** When the vessel already has a shell resource, `orbiter shell init` delegates to it and asks no one. Swapping shells is the ordinary entity commands (retro, add and attach, or discovery again).
 - **The hook.** The manifest declares the hook script (`[shell] exports = [{ hook = "hook.zsh", ... }]`). Installing the integration installs that file beside the manifest, and `orbiter shell init` prints it with `::ORBITER::` replaced by the path to the binary.
 
 ## Guest ABI

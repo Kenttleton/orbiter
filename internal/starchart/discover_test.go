@@ -104,3 +104,45 @@ func TestDiscoverPlanet_PreFilterSkipsNoMatchingFile(t *testing.T) {
 
 	assert.Equal(t, 0, counter.calls, "integration whose file rule doesn't match should be skipped")
 }
+
+// suggestingIntegration answers detect with a fixed report.
+type suggestingIntegration struct {
+	countingIntegration
+	role      string
+	suggested []integrations.SuggestedResource
+}
+
+func (s *suggestingIntegration) Meta() integrations.Manifest {
+	m := s.countingIntegration.Meta()
+	m.Integration.Roles = []string{s.role}
+	return m
+}
+func (s *suggestingIntegration) Detect(integrations.DetectContext) integrations.DetectReport {
+	s.calls++
+	return integrations.DetectReport{Detected: len(s.suggested) > 0, Resources: s.suggested}
+}
+
+// The vessel is discovered the way a planet is: every registered integration whose manifest
+// rules allow is asked to detect, and what they suggest comes back. There are no files at the
+// vessel level, so an integration whose rules need files is never asked.
+func TestDiscoverVessel_AsksIntegrationsAndReturnsTheirSuggestions(t *testing.T) {
+	sc := openTestSC(t)
+	reg := integrations.NewRegistry(nil)
+	yes := &suggestingIntegration{countingIntegration: countingIntegration{brand: "alpha"}, role: "shell",
+		suggested: []integrations.SuggestedResource{{Role: "shell", Brand: "alpha"}}}
+	no := &suggestingIntegration{countingIntegration: countingIntegration{brand: "beta"}, role: "shell"}
+	needsFiles := &suggestingIntegration{countingIntegration: countingIntegration{brand: "gamma", files: []string{"go.mod"}}, role: "tool",
+		suggested: []integrations.SuggestedResource{{Role: "tool", Brand: "gamma"}}}
+	reg.Register("shell", "alpha", yes)
+	reg.Register("shell", "beta", no)
+	reg.Register("tool", "gamma", needsFiles)
+	sc.SetIntegrations(reg)
+
+	got, err := sc.DiscoverVessel(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, []integrations.SuggestedResource{{Role: "shell", Brand: "alpha"}}, got)
+	assert.Equal(t, 1, yes.calls)
+	assert.Equal(t, 1, no.calls, "asked, and said no")
+	assert.Equal(t, 0, needsFiles.calls, "its manifest rules need files the vessel does not have")
+}

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
+	"github.com/Kenttleton/orbiter/internal/starchart"
 )
 
 // EntityResult is the JSON result of the build commands (add and init). Status is
@@ -175,4 +177,24 @@ func redactedReport(r integrations.StateReport) integrations.StateReport {
 	}
 	r.Exports = masked
 	return r
+}
+
+// registerSuggestions registers what discovery suggested and attaches each resource to
+// attachTo. One step serves every level of the map: a planet's `init --discover` and the
+// vessel's shell use the same code.
+func registerSuggestions(ctx context.Context, sc *starchart.StarChart, suggestions []integrations.SuggestedResource, attachTo string) []DiscoveryOutcome {
+	var outcomes []DiscoveryOutcome
+	for _, s := range suggestions {
+		r, err := sc.CreateResource(ctx, s.Brand, s.Role, s.Brand, "[]", "{}")
+		if err != nil {
+			outcomes = append(outcomes, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "skipped", Error: err.Error()})
+			continue
+		}
+		if _, err := sc.Attach(ctx, r.ID, attachTo); err != nil {
+			outcomes = append(outcomes, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attach_failed", Error: err.Error()})
+			continue
+		}
+		outcomes = append(outcomes, DiscoveryOutcome{Role: s.Role, Brand: s.Brand, Outcome: "attached"})
+	}
+	return outcomes
 }

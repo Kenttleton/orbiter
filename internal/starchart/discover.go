@@ -15,31 +15,46 @@ func (sc *StarChart) DiscoverPlanet(ctx context.Context, cwd string) ([]integrat
 	if sc.integrations == nil {
 		return nil, nil
 	}
-
 	files, err := listFiles(cwd)
 	if err != nil {
 		return nil, err
 	}
-	env := osEnvMap()
-
-	dc := integrations.DetectContext{
+	return sc.discover(integrations.DetectContext{
 		Platform: currentPlatform(),
 		CWD:      cwd,
 		Files:    files,
-		Env:      env,
-	}
+		Env:      osEnvMap(),
+	}), nil
+}
 
+// DiscoverVessel is the same discovery for the vessel: this machine's environment, with no
+// project files. An integration whose manifest rules need files is never asked.
+func (sc *StarChart) DiscoverVessel(ctx context.Context) ([]integrations.SuggestedResource, error) {
+	if sc.integrations == nil {
+		return nil, nil
+	}
+	cwd, _ := os.Getwd()
+	return sc.discover(integrations.DetectContext{
+		Platform: currentPlatform(),
+		CWD:      cwd,
+		Files:    map[string]string{},
+		Env:      osEnvMap(),
+	}), nil
+}
+
+// discover asks every registered integration whose manifest rules match to detect, and
+// returns what they suggest. An integration with no rules is always asked: it decides.
+func (sc *StarChart) discover(dc integrations.DetectContext) []integrations.SuggestedResource {
 	var suggestions []integrations.SuggestedResource
 	for _, i := range sc.integrations.All() {
-		if !i.Meta().Detection.MatchesAny(files, env) {
+		if !i.Meta().Detection.MatchesAny(dc.Files, dc.Env) {
 			continue
 		}
-		report := i.Detect(dc)
-		if report.Detected {
+		if report := i.Detect(dc); report.Detected {
 			suggestions = append(suggestions, report.Resources...)
 		}
 	}
-	return suggestions, nil
+	return suggestions
 }
 
 // osEnvMap parses os.Environ() into a key→value map.
