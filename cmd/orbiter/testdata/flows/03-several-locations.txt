@@ -1,0 +1,37 @@
+# Flow 3: the shell finds git in two places, and the Captain chooses which one the vessel uses.
+#
+# Two different git executables are on the PATH. Orbiter does not guess: it asks the Captain to
+# choose, records that path, and from then on gives the integration exactly that binary.
+
+step set up: the vessel, a project that uses git, and a second git on the PATH
+exec orbiter --output json vessel init -y
+exec orbiter --output json galaxy add acme
+exec orbiter --output json planet add api --galaxy acme
+exec orbiter --output json resource add git --role tool --brand git
+exec orbiter --output json attach git api
+env PATH=$PATH:$WORK/bin2
+
+step calibrate: the run needs git found
+client -- calibrate api
+stdout '"status":"needs_discovery"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+
+step the shell answers with every git it finds, in PATH order
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" git'
+
+step uplink asks the Captain to choose between them; the client picks the second
+client -select=2 -- uplink --session=$SESSION
+stdout '"op":"SELECT"'
+stdout 'Multiple locations found for git'
+stdout '/bin/git'
+stdout '/bin2/git'
+
+step the second git is the one on record
+exec orbiter --output json survey api -v
+stdout '"binaries":\{"git":"[^"]*/bin2/git"\}'
+
+step a later scan uses exactly that binary and finds it healthy
+client -- scan api
+stdout '"status":"healthy"'
+stdout '"binary_path":"[^"]*/bin2/git"'

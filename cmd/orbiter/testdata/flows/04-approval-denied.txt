@@ -1,0 +1,25 @@
+# Flow 4: the Captain says no.
+#
+# A real integration asks before it runs a command. When the Captain denies it, the command does
+# not run, the integration is not punished for asking, and nothing is recorded as if it had worked.
+
+step set up: the vessel and a project that uses git
+exec orbiter --output json vessel init -y
+exec orbiter --output json galaxy add acme
+exec orbiter --output json planet add api --galaxy acme
+exec orbiter --output json resource add git --role tool --brand git
+exec orbiter --output json attach git api
+
+step calibrate with the client denying every prompt
+client -deny -- calibrate api
+stdout '"message":"git wants to run: git --version"'
+! stdout 'Always allow'
+
+step nothing ran, so nothing was learned: git is still waiting to be found
+stdout '"status":"needs_discovery"'
+exec orbiter --output json survey api -v
+! stdout '"binaries"'
+
+step the integration was not quarantined for being refused
+exec orbiter --output json vessel inspect git
+stdout '"quarantined":false'

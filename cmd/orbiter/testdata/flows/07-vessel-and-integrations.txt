@@ -1,0 +1,65 @@
+# Flow 7: setting up a vessel and managing the integrations on it.
+#
+# An integration is a folder in ~/.orbiter/integrations. `vessel init` copies the bundled folders
+# there; there is no other install step. This flow is what a Captain does on a new machine: set
+# up the vessel, load the profile line, look at an integration, and quarantine one that is behaving
+# badly.
+
+step set up the vessel, every way it can be asked for
+exec orbiter init --yes
+stdout 'Installed [0-9]+ integration\(s\)'
+exec orbiter init vessel --yes
+stdout 'Installed [0-9]+ integration\(s\)'
+exec orbiter vessel init --yes
+stdout 'Installed [0-9]+ integration\(s\)'
+exists $HOME/.orbiter/integrations/git/manifest.toml
+
+step an unknown init target is a mistake
+! exec orbiter init badtarget
+stderr 'unknown init target'
+
+step the profile line: Orbiter finds the shell of the Captain through the shell integrations
+# No environment is faked. The flow runs as a login in the host shell, and Orbiter asks the
+# shell integrations which of them is this shell.
+exec orbiter init shell
+stdout 'orbiter'
+exec orbiter shell init
+stdout 'orbiter'
+
+step look at an integration
+exec orbiter vessel inspect git
+stdout 'Integration: git'
+stdout 'Status:'
+finding vessel inspect reports "not installed" for an integration whose folder is in the integrations directory: it never loads the integration it reports on (roadmap Phase 4)
+exec orbiter vessel inspect unknown-brand
+stdout 'not installed'
+
+step quarantine an integration that is misbehaving
+exec orbiter quarantine git
+stdout 'git is now quarantined'
+exec orbiter survey git
+stdout 'QUARANTINED'
+stdout 'manual quarantine'
+stdout 'orbiter unquarantine git'
+exec orbiter vessel inspect git
+stdout 'QUARANTINED'
+
+step quarantining again changes nothing
+exec orbiter quarantine git
+stdout 'already quarantined'
+
+step lift the quarantine
+exec orbiter unquarantine git
+stdout 'quarantine removed'
+exec orbiter survey git
+! stdout 'QUARANTINED'
+exec orbiter unquarantine git
+stdout 'not quarantined'
+
+step the vessel command does the same through its own subcommand
+exec orbiter quarantine golang
+stdout 'golang is now quarantined'
+exec orbiter vessel unquarantine golang
+stdout 'quarantine removed'
+exec orbiter survey golang
+! stdout 'QUARANTINED'

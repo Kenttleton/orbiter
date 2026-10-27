@@ -7,8 +7,22 @@ Two kinds of tests, with different rules.
 | **Unit tests** | `internal/...`, `integrations/` | Mocked. Fake integrations, in-memory stores, no real tools. Fast and deterministic. |
 | **Flows** | `cmd/orbiter/testdata/flows/*.txt` | Not mocked. Real bundled integrations installed by `vessel init`, real tools, real prompts. Each flow is an ordered list of steps that mimics real use end to end. |
 
-The scripts in `cmd/orbiter/testdata/script/` are older CLI-level scripts that use unregistered
-resources; they are being converted into flows (see the roadmap).
+Every end-to-end test is a flow; there are no other scripts. The flows (`cmd/orbiter/testdata/flows/`)
+are numbered and each tells one story:
+
+| Flow | Story |
+| ---- | ----- |
+| 01 | Register a project that uses git and have Orbiter find it (approval, discovery through the user's own shell, record, healthy) |
+| 02 | The vessel's shell drifts and the Captain reconciles it |
+| 03 | The shell finds git in two places and the Captain chooses |
+| 04 | The Captain denies an approval |
+| 05 | Retiring things from the tree; the integration folder stays |
+| 06 | A client that is not attached answers prompts with `relay` |
+| 07 | Setting up a vessel and managing its integrations (init, profile line, inspect, quarantine) |
+| 08 | Building the universe: hierarchy, resources, callsigns, transponders |
+| 09 | Calibrate and jump, with a tool the Captain has trusted |
+| 10 | The mistakes a Captain makes, and what Orbiter says |
+| 11 | The JSON contract of every command |
 
 ## Running flows
 

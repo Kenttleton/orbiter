@@ -1,0 +1,99 @@
+# Flow 8: building the universe: galaxy, system, planet, resources and callsigns.
+#
+# The hierarchy the Captain builds, with real integrations behind the resources. The first scan of
+# a real integration asks the Captain before it runs anything, so a client answers once and
+# trusts the commands; after that the same scans run without a prompt, as they do in daily use.
+
+step set up the vessel so the resources are real
+exec orbiter --output json vessel init -y
+
+step a galaxy, a system in it, a planet in the galaxy and a planet in the system
+exec orbiter galaxy add acme-corp
+stdout 'galaxy.*acme-corp.*registered'
+exec orbiter survey acme-corp
+stdout 'entity'
+stdout 'acme-corp'
+stdout 'unverified'
+exec orbiter system add frontend --galaxy acme-corp
+stdout 'system.*frontend.*registered'
+exec orbiter survey frontend
+stdout 'frontend'
+exec orbiter planet add payments-api --galaxy acme-corp
+stdout 'planet.*payments-api.*registered'
+exec orbiter planet add auth-service --galaxy acme-corp --system frontend
+stdout 'planet.*auth-service.*registered'
+exec orbiter survey auth-service
+stdout 'auth-service'
+
+step an empty planet has nothing to scan or chart
+exec orbiter survey payments-api
+stdout 'resources.*0'
+stdout 'transponders.*0'
+exec orbiter scan payments-api
+stdout 'no resources attached'
+exec orbiter chart payments-api
+stdout 'no resources to chart'
+
+step register two resources and attach them to the planet
+exec orbiter resource add git-tool --role tool --brand git
+stdout 'resource.*git-tool.*registered'
+stdout 'tool/git'
+exec orbiter attach git-tool payments-api
+stdout 'attached'
+exec orbiter survey payments-api
+stdout 'resources.*1'
+exec orbiter resource add go-runtime --role runtime --brand golang
+exec orbiter attach go-runtime payments-api
+exec orbiter survey payments-api
+stdout 'resources.*2'
+
+step the first scan asks the Captain, who approves and trusts the commands
+client -- scan payments-api
+stdout '"role":"tool","brand":"git"'
+stdout '"role":"runtime","brand":"golang"'
+
+step trusted, the same scan runs without a prompt and shows both resources
+exec orbiter scan payments-api
+stdout 'tool/git'
+stdout 'runtime/go'
+
+step a callsign holds the transponders that give access to things
+exec orbiter callsign add acme-keys
+stdout 'callsign.*acme-keys.*registered'
+exec orbiter survey acme-keys
+stdout 'callsign'
+stdout 'transponders.*0'
+exec orbiter transponder add corp-gh --role file --brand github --location /tmp/token
+stdout 'transponder.*corp-gh.*registered'
+stdout 'file/github'
+exec orbiter attach corp-gh acme-keys
+stdout 'attached'
+exec orbiter survey acme-keys
+stdout 'transponders.*1'
+exec orbiter scan acme-keys
+stdout 'file/github'
+
+step the callsign flows down: attached to a planet, its transponders are visible there
+exec orbiter attach acme-keys payments-api
+stdout 'attached'
+exec orbiter scan payments-api
+stdout 'tool/git'
+exec orbiter survey payments-api
+stdout 'transponders.*[1-9]'
+
+step a callsign on a galaxy flows down to a planet that has none of its own
+exec orbiter galaxy add beta-corp
+exec orbiter callsign add beta-keys
+exec orbiter transponder add beta-gh --role file --brand github --location /tmp/beta-token
+exec orbiter attach beta-gh beta-keys
+exec orbiter attach beta-keys beta-corp
+exec orbiter planet add beta-api --galaxy beta-corp
+exec orbiter scan beta-api
+stdout 'file/github|no resources attached'
+
+step a transponder attached directly to a planet is seen next to the inherited callsign
+exec orbiter transponder add direct-gitea --role file --brand gitea --location /tmp/gitea-token
+exec orbiter attach direct-gitea beta-api
+exec orbiter scan beta-api
+stdout 'file/github'
+stdout 'file/gitea'

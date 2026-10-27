@@ -46,9 +46,11 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [x] **Flow harness.** Isolated per flow (own `HOME`, own `PATH` holding exactly the tools it provides), numbered steps, findings recorded without failing, a client that answers prompts like a GUI would, and an end-of-run report.
 - [x] **Flow 1: register a project and calibrate git.** Nine steps with the real git integration: `vessel init`, register, survey, calibrate (the client answers the approval and always-allow prompts), the user's own shell answers `FIND_BINARY` through the hook Orbiter auto-detects, `uplink` records the path and calibrates, the path is in the star chart, a later scan is healthy. It found two bugs, both fixed (the always-allow prompt read raw stdin; shell detection never worked in a real shell) and one open finding:
   - [ ] the first approval names the bare command (`git --version`) instead of a resolved binary path, because the first scan runs before FIND (Phase 3)
-- [ ] **More flows**, each an ordered, real use case: discovery with several matches (SELECT, answered with `-select`), a manager-governed install, a transponder credential reaching the shell, retro, the async `relay` path with a background run, and the approval denied.
-- [ ] **Convert the older CLI scripts** in `cmd/orbiter/testdata/script/` (they use unregistered resources) into flows with real registered resources.
-- [x] **WASM approval path with a real integration** is exercised by flow 1 (approve and always-allow, answered by the client).
+- [x] **More flows, each an ordered real use case** (flows 02 to 06): the shell drifts and the Captain reconciles it; several matches (SELECT, answered with `-select`); the approval denied; retro (the resource leaves the tree, the integration folder stays); an unattached client answering with `relay`. The transponder-credential and manager-governed flows are written with the features they exercise (Phase 2 and Phase 3).
+- [x] **The older CLI scripts are flows now** (07 to 11), with real registered resources. `vessel init` runs first, prompts go through the client, and the `BASH_VERSION` hack is gone. The script directory and its test are removed.
+- [x] **WASM approval path with a real integration** is exercised by flows 01, 06 and 08 (approve and always-allow, answered by the client, attached and by relay).
+
+Phase 1 is complete. The findings its flows produced are in the phases they belong to.
 
 ## Phase 2: Credentials work
 
@@ -58,17 +60,21 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
   - [ ] `jump` confirmation (`executor.go`, `Jump`)
   - [ ] `retro` confirmation (`executor.go`, `Retro`); JSON clients pass `-y` meanwhile
   - [x] "Always allow this exact command?" after an approval (done; flow 1 stalled on it before the fix)
+- [ ] **A flow for it:** a transponder credential reaching the shell (the flow lands with the feature).
 - [ ] **Credential prompting.** `StateReport.NeedsInput` and `ResolvedContext.Responses` exist, and the comment says the host collects answers and calls the integration again, but no production code reads either. This is what a `TEXT` (obscured) prompt through the transaction flow is for. *needs: the prompts item above.*
 
 ## Phase 3: Binary trust
 
 - [ ] **Design the expected path.** The manifest declares only binary names today. Decide how a manifest states the expected location for a local install and how a manager supplies its override (see Design notes).
 - [ ] **FIND before the first scan.** A resource with no recorded binary is scanned first, so the integration asks the Captain to approve running a bare command name (`git --version`), which executes whatever is first on `PATH`. Decide the binary before anything runs, so approvals name the resolved path. Found by flow 1.
+- [ ] **A flow for it:** a manager-governed install, where the manager supplies the install location and Orbiter reconciles it with what FIND found (the flow lands with the feature).
 - [ ] **Expected vs actual.** Compare the expected location (local install) or the manager's override against the path FIND found, and ask the Captain to rectify a mismatch. *needs: the design item.*
 - [ ] **Honor `sensitive`.** `shell.exports[].sensitive` (the github manifest sets it) is read by nothing; redact those values wherever exports are logged or shown.
 
 ## Phase 4: The integration contract
 
+- [ ] **`vessel inspect` loads what it reports on.** It says "not installed" for an integration whose folder is in the integrations directory, because it never loads the integration. Found by flow 07.
+- [ ] **Start up without compiling every integration.** Every command compiles every installed integration (about 0.4 s each), even `galaxy add`; flow 08 takes 18 s. Load what a command needs. Found by flow 08.
 - [ ] **Remove the remaining stderr writes.** Nothing should be written to stderr. These predate this work and still are: the `jump` plan and its "Execute maneuver?" prompt and the `retro` "Execute retro?" prompt (`executor.go`); the terminal fallbacks for the approval and always-allow questions (`internal/wasm/loader.go`); the quarantine notice (`internal/integrations/registry.go`) and the settings parse warning (`settings.go`); `orbiter: load integrations` (`root.go`); and the plain-text error `Execute` prints in styled mode. The hard part: the shell hook captures stdout to read directives, so a prompt on stdout stays invisible until the command exits. The shell hooks should stream events and answer prompts on stdin (the hook acting as the client `-i` describes) instead of capturing the output.
 - [ ] **StateReport config contract.** Plan: `2026-06-18-statereport-config-contract.md`. Drops the named fields (`BinaryPath`, `InstallDir`, `InPath`, `Manager`, `Exports`) from `StateReport` and moves them into `Config`. The plan predates FIND and the design notes below: it lists 20 integrations plus the deleted `local` and misses 8 added since (bash, zsh, fish, powershell, google-auth, google-drive, tmux, json), so 28 integrations exist today. The host acts only on `exports` (`git` and `github` emit it) and `install_dir`; `binary_path`, `in_path` and `manager` are informational. Refresh it before executing; in `Config`, `binary_path` is the actual path an integration reports using, separate from the manifest's expected path. *needs: Phase 3 design.*
 - [ ] **Validate config against the manifest's `[config]` schema.** `ManifestConfigField.Required` and `Fields` are read by nothing, so `resource add --config` is not validated.

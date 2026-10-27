@@ -1,14 +1,21 @@
-# JSON mode contract: every command ends in exactly one terminal event
-# (result, plan, or error) and never prints free-form text on stdout.
+# Flow 11: the JSON contract: every command ends in exactly one terminal event (result, plan, or
+# error) and never prints free-form text on stdout.
+#
+# This is what a client such as the desktop app depends on. The vessel is set up first, so the
+# resources are backed by real integrations; commands that run an integration go through the client,
+# which answers the Captain's prompts.
 
+step set up the vessel and a galaxy
+exec orbiter --output json vessel init -y
 exec orbiter galaxy add test-corp
 
-# --- errors are events on stdout; exit is non-zero; stderr stays empty ---
+step errors are events on stdout
+
 ! exec orbiter --output json survey nonexistent
 stdout '^\{"type":"error","txn":"[0-9a-z]{16}","data":\{"message":"[^"]*not found'
 ! stderr .
 
-# --- build commands return the entity they registered or initialized ---
+step build commands return the entity they registered or initialized
 exec orbiter --output json galaxy add acme
 stdout '^\{"type":"result","txn":"[0-9a-z]{16}","data":\{"success":true,"message":"[^"]*","data":\{"type":"galaxy","id":"[0-9a-z]{16}","name":"acme"\}\}\}$'
 ! stdout '^[^{]'   # no free-form text, only event lines
@@ -25,8 +32,8 @@ stdout '"type":"callsign".*"name":"work"'
 exec orbiter --output json transponder add gh --role env --brand github --location GH_TOKEN
 stdout '"type":"transponder".*"name":"gh".*"role":"env".*"brand":"github"'
 
-exec orbiter --output json resource add go --role runtime --brand go
-stdout '"type":"resource".*"name":"go".*"role":"runtime".*"brand":"go"'
+exec orbiter --output json resource add go --role runtime --brand golang
+stdout '"type":"resource".*"name":"go".*"role":"runtime".*"brand":"golang"'
 
 exec orbiter --output json attach go api
 stdout '"from":"go".*"to":"api"'
@@ -51,9 +58,9 @@ stdout '"type":"resource".*"name":"node".*"status":"[a-z]+"'
 exec orbiter --output json transponder init gh2 --role env --brand github --location GH_TOKEN
 stdout '"type":"transponder".*"name":"gh2".*"status":"[a-z]+"'
 
-# --- lifecycle commands ---
-exec orbiter --output json scan api
-stdout '^\{"type":"result",.*"target":"api".*"items":\[.*"kind":"resource".*"role":"runtime","brand":"go","status":"failed","report":\{'
+step lifecycle commands report their results; a real integration asks first, so the client answers
+client -- scan api
+stdout '^\{"type":"result",.*"target":"api".*"items":\[.*"kind":"resource".*"role":"runtime","brand":"golang","status":"failed","report":\{'
 ! stdout '^[^{]'
 
 exec orbiter --output json scan work
@@ -62,8 +69,11 @@ stdout '"target":"work".*"items":\['
 exec orbiter --output json scan web
 stdout '"target":"web".*"items":\[\]'
 
-exec orbiter --output json calibrate api
-stdout '^\{"type":"result",.*"target":"api".*"items":\[.*"kind":"resource".*"role":"runtime","brand":"go","action":"failed","before":\{.*"after":\{'
+# A real integration that has not been located yet makes calibrate ask for discovery; the shape of a
+# finished calibrate (items with before and after) is checked by flows 1 and 9.
+client -- calibrate api
+stdout '"status":"needs_discovery"'
+stdout '"op":"FIND_BINARY","key":"go"'
 ! stdout '^[^{]'
 
 # chart always ends in a plan event, even when there is nothing to chart

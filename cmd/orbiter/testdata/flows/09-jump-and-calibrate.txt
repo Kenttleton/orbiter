@@ -1,0 +1,47 @@
+# Flow 9: calibrate and jump, first on an empty planet, then with a tool the Captain has trusted.
+#
+# Calibrate reconciles drift; jump moves the Captain into a planet after making it ready. With
+# nothing attached both have nothing to do. With a real tool they ask the Captain once, and once the
+# Captain has trusted the tool's commands, daily use runs without a prompt.
+
+step set up: the vessel, a galaxy and an empty planet
+exec orbiter --output json vessel init -y
+exec orbiter galaxy add acme-corp
+exec orbiter planet add payments-api --galaxy acme-corp
+
+step with nothing attached, calibrate and jump have nothing to do
+exec orbiter calibrate payments-api
+stdout 'nothing to calibrate'
+exec orbiter jump payments-api --yes
+
+step attach git, and let the first calibrate ask the Captain and look for git
+exec orbiter resource add git-tool --role tool --brand git
+exec orbiter attach git-tool payments-api
+client -- calibrate payments-api
+stdout '"status":"needs_discovery"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+
+step the shell of the Captain finds git, and the run continues
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" git'
+client -- uplink --session=$SESSION
+stdout '"action":"healthy"'
+
+step the shell the profile line registered is on the vessel too, so it has to be located once as well
+client -- calibrate payments-api
+stdout '"status":"needs_discovery"'
+stdout '"op":"FIND_BINARY","key":"'$FLOW_SHELL'"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" '$FLOW_SHELL
+client -- uplink --session=$SESSION
+stdout '"action":"healthy"'
+
+step everything is trusted and located, so calibrate and jump run quietly
+exec orbiter calibrate payments-api
+stdout 'tool/git'
+exec orbiter jump payments-api --yes
+
+step jumping to something that does not exist is a mistake
+! exec orbiter jump nonexistent-planet --yes
+stderr 'not found|no target'

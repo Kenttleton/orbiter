@@ -1,0 +1,30 @@
+# Flow 6: a client that is not attached.
+#
+# A GUI that did not start orbiter with a pipe cannot answer on stdin. It reads the prompt events
+# on stdout and answers each one from a separate process with `orbiter relay`, using the txn from
+# the event. Orbiter holds the integration's command open until the answer arrives, then goes on.
+
+step set up: the vessel and a project that uses git
+exec orbiter --output json vessel init -y
+exec orbiter --output json galaxy add acme
+exec orbiter --output json planet add api --galaxy acme
+exec orbiter --output json resource add git --role tool --brand git
+exec orbiter --output json attach git api
+
+step calibrate: every prompt is answered by relay while the run waits
+client -async -- calibrate api
+stdout '"message":"git wants to run: git --version"'
+stdout '"status":"needs_discovery"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+
+step the shell answers the search
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" git'
+
+step uplink continues the run, still without being attached
+client -async -- uplink --session=$SESSION
+stdout '"action":"healthy"'
+
+step the path is on record
+exec orbiter --output json survey api -v
+stdout '"binaries":\{"git":"[^"]*/bin/git"\}'

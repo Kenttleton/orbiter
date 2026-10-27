@@ -1,27 +1,28 @@
-# Error cases: missing args, unknown targets, bad flags.
+# Flow 10: the mistakes a Captain makes, and what Orbiter says.
+#
+# Commands that need an entity that does not exist fail with a message that names the problem,
+# missing flags are reported as missing, and wrong argument counts are caught before anything runs.
 
-# Commands requiring a star chart fail gracefully if entity not found
+step set up: a vessel with one galaxy
+exec orbiter --output json vessel init -y
 exec orbiter galaxy add test-corp
 
+step a command that needs an entity that is not there says so
 ! exec orbiter survey nonexistent
 stderr 'not found|no target'
-
 ! exec orbiter scan nonexistent
 stderr 'not found|no target'
-
 ! exec orbiter jump nonexistent --yes
 stderr 'not found|no target'
 
-# Missing required flags
+step a required flag that is missing is named
 ! exec orbiter planet add orphan-planet
 stderr 'required flag.*galaxy|galaxy.*required'
-
 ! exec orbiter resource add myres --role tool
 stderr 'required flag.*brand|brand.*required'
-
 ! exec orbiter resource add myres --brand git
 stderr 'required flag.*role|role.*required'
 
-# attach requires exactly 2 args
+step the wrong number of arguments is caught
 ! exec orbiter attach only-one
 stderr 'accepts 2 arg'

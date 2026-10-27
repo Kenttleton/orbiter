@@ -1,0 +1,45 @@
+# Flow 5: retiring things from the tree.
+#
+# retro removes a resource from the tree. The integration that served it is a folder in the
+# integrations directory, and it stays there: another resource can use it, and nothing about
+# retiring a resource is an uninstall.
+
+step set up: a project with a git resource
+exec orbiter --output json vessel init -y
+exec orbiter --output json galaxy add acme
+exec orbiter --output json planet add api --galaxy acme
+exec orbiter --output json resource add git --role tool --brand git
+exec orbiter --output json attach git api
+exec orbiter survey api
+stdout 'tool/git'
+
+step retire the resource: it leaves the tree
+exec orbiter --output json retro git -y
+stdout '"retired":true'
+exec orbiter survey api
+! stdout 'tool/git'
+
+step the integration is untouched: its folder is still there, and another resource can use it
+exists $HOME/.orbiter/integrations/git/manifest.toml
+exists $HOME/.orbiter/integrations/git/git.wasm
+exec orbiter --output json resource add git2 --role tool --brand git
+exec orbiter --output json attach git2 api
+exec orbiter survey api
+stdout 'tool/git'
+
+step retire the planet: it and what hangs from it leave the tree
+exec orbiter --output json retro api -y
+stdout '"retired":true'
+! exec orbiter survey api
+exists $HOME/.orbiter/integrations/git/manifest.toml
+
+step retiring a galaxy retires what is under it, leaf first
+exec orbiter galaxy add bigcorp
+exec orbiter planet add billing --galaxy bigcorp
+exec orbiter retro bigcorp --yes
+stdout 'bigcorp'
+stdout 'retire|retired'
+! exec orbiter survey bigcorp
+stderr 'not found|no target'
+! exec orbiter survey billing
+stderr 'not found|no target'

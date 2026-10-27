@@ -33,10 +33,12 @@ import (
 //
 //	step <title>                  log "STEP n: title"
 //	finding <text>                record something the flow learned without failing it
-//	client [-deny] [-select=N] [-text=V] [!] -- <orbiter args>
+//	client [-async] [-deny] [-select=N] [-text=V] [!] -- <orbiter args>
 //	                              run `orbiter --output json -i <args>` as a client: events go
 //	                              to stdout, prompts are answered (approve by default; select
-//	                              option N; text V) and each answer is logged
+//	                              option N; text V) and each answer is logged. With -async the
+//	                              client is not attached (no -i): it answers each prompt from a
+//	                              separate process with `orbiter relay`, as a GUI would
 //	capture <NAME> <regex>        set $NAME to the first group of regex in the last stdout
 func TestFlows(t *testing.T) {
 	// Flows run as parallel subtests, so the report is printed once they have all finished.
@@ -65,6 +67,18 @@ func flowSetup(env *testscript.Env) error {
 	bin := filepath.Join(env.WorkDir, "bin")
 	for _, d := range []string{home, bin} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
+			return err
+		}
+	}
+	// A second, different git, for flows with several matches: a flow opts in with
+	// `env PATH=$PATH:$WORK/bin2`. It is a distinct file, so it is a distinct candidate.
+	bin2 := filepath.Join(env.WorkDir, "bin2")
+	if err := os.MkdirAll(bin2, 0o755); err != nil {
+		return err
+	}
+	if realGit, err := exec.LookPath("git"); err == nil {
+		wrapper := "#!/bin/sh\nexec " + realGit + " \"$@\"\n"
+		if err := os.WriteFile(filepath.Join(bin2, "git"), []byte(wrapper), 0o755); err != nil {
 			return err
 		}
 	}
@@ -241,7 +255,7 @@ func cmdCapture(ts *testscript.TestScript, neg bool, args []string) {
 
 // cmdClient runs orbiter attached (-i) and answers its prompts like a GUI would.
 func cmdClient(ts *testscript.TestScript, neg bool, args []string) {
-	approve, selectN, text := true, 1, ""
+	approve, selectN, text, async := true, 1, "", false
 	rest := args
 loop:
 	for len(rest) > 0 {
@@ -251,6 +265,8 @@ loop:
 			break loop
 		case a == "-deny":
 			approve = false
+		case a == "-async":
+			async = true
 		case strings.HasPrefix(a, "-select="):
 			selectN, _ = strconv.Atoi(strings.TrimPrefix(a, "-select="))
 		case strings.HasPrefix(a, "-text="):
@@ -272,13 +288,18 @@ loop:
 		ts.Fatalf("client: orbiter not found on PATH")
 	}
 
-	cmd := exec.Command(exe, append([]string{"--output", "json", "-i"}, rest...)...)
-	cmd.Dir = ts.MkAbs(".")
-	cmd.Env = []string{
+	flags := []string{"--output", "json", "-i"}
+	if async {
+		flags = []string{"--output", "json"} // not attached: answers come back through relay
+	}
+	env := []string{
 		"HOME=" + ts.Getenv("HOME"), "PATH=" + ts.Getenv("PATH"),
 		"ORBITER_APPROVAL_TIMEOUT=" + ts.Getenv("ORBITER_APPROVAL_TIMEOUT"),
 		"GIT_CONFIG_NOSYSTEM=1", "TERM=dumb", "SHELL=" + ts.Getenv("SHELL"),
 	}
+	cmd := exec.Command(exe, append(flags, rest...)...)
+	cmd.Dir = ts.MkAbs(".")
+	cmd.Env = env
 	stderr := &lockedBuffer{}
 	cmd.Stderr = stderr
 	stdin, err := cmd.StdinPipe()
@@ -348,7 +369,15 @@ reading:
 		default:
 			ts.Fatalf("client: unknown prompt op %q", p.Op)
 		}
-		ts.Logf("  prompt %s %q -> %s", p.Op, p.Message, shown)
+		ts.Logf("  prompt %s %q -> %s%s", p.Op, p.Message, shown, map[bool]string{true: " (async, by relay)", false: ""}[async])
+		if async {
+			relay := exec.Command(exe, "relay", "--txn="+e.Txn, "--response="+response)
+			relay.Dir, relay.Env = cmd.Dir, env
+			if b, err := relay.CombinedOutput(); err != nil {
+				ts.Fatalf("client: relay failed: %v\n%s", err, b)
+			}
+			continue
+		}
 		fmt.Fprintf(stdin, `{"txn":%q,"response":%s}`+"\n", e.Txn, response)
 	}
 	_ = stdin.Close()
