@@ -127,3 +127,31 @@ func TestExecuteRetro(t *testing.T) {
 	err = sc.Get(ctx, "resources", r.ID, &resource)
 	assert.ErrorIs(t, err, starchart.ErrNotFound, "resource should have been retired")
 }
+
+// The thing being retired is always retired. A resource is attached to its parent (a planet, or
+// the vessel), and that attachment is what the retire removes. Only the descendants of the
+// target that something outside the retire set also uses are detached instead.
+func TestRetro_TheTargetItselfIsRetiredEvenThoughItIsAttachedToItsParent(t *testing.T) {
+	sc := testDB(t)
+	ctx := context.Background()
+
+	r, err := sc.CreateResource(ctx, "tooly", "tool", "tooly", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.Attach(ctx, "tooly", "vessel")
+	require.NoError(t, err)
+
+	plan, err := sc.PlanRetro(ctx, r.ID)
+	require.NoError(t, err)
+	require.Len(t, plan.Nodes, 1)
+	assert.Equal(t, "retire", plan.Nodes[0].Action, "not 'detach': the target is the thing being retired")
+
+	require.NoError(t, sc.ExecuteRetro(ctx, plan))
+
+	vessel, err := sc.GetVessel(ctx)
+	require.NoError(t, err)
+	att, err := sc.AttachedTo(ctx, vessel.ID)
+	require.NoError(t, err)
+	assert.Empty(t, att.Resources, "it is no longer on the vessel")
+	_, err = sc.Resolve(ctx, "tooly")
+	assert.ErrorIs(t, err, starchart.ErrNotFound, "and no longer resolves")
+}

@@ -43,13 +43,18 @@ func (sc *StarChart) PlanRetro(ctx context.Context, targetID string) (RetroPlan,
 	plan := RetroPlan{TargetID: targetID, TargetName: targetName}
 	for _, entityID := range subtree {
 		name, _ := sc.aliasOf(ctx, entityID)
-		shared, err := sc.hasAttachmentOutside(ctx, entityID, retireSet)
-		if err != nil {
-			return RetroPlan{}, err
-		}
+		// The target is always retired: its own attachment to its parent is what retiring
+		// removes. Only its descendants that something outside the retire set also uses are
+		// detached instead.
 		action := "retire"
-		if shared {
-			action = "detach"
+		if entityID != targetID {
+			shared, err := sc.hasAttachmentOutside(ctx, entityID, retireSet)
+			if err != nil {
+				return RetroPlan{}, err
+			}
+			if shared {
+				action = "detach"
+			}
 		}
 		plan.Nodes = append(plan.Nodes, RetroNode{EntityID: entityID, Name: name, Action: action})
 	}
