@@ -19,25 +19,38 @@ stdout 'tool/git'
 stdout 'unverified'
 
 step calibrate: the real git integration asks the Captain before it runs git
-# The client approves "git wants to run: git --version" (a txn-tagged prompt), and then
-# orbiter asks a second question that is NOT a txn-tagged prompt: "Always allow this exact
-# command?" reads os.Stdin directly, so an attached client never sees it and the run stalls.
-# Roadmap, Phase 2: "Remaining prompts go through the transaction flow".
-finding calibrate stalls after an approved prompt: the always-allow question reads stdin directly (roadmap Phase 2)
+# The client answers both questions about the command, each a txn-tagged prompt:
+# "git wants to run: git --version", then "Always allow this exact command?".
+client -- calibrate api
+stdout '"op":"CONFIRM"'
+stdout '"message":"git wants to run: git --version"'
+stdout '"message":"Always allow this exact command for \\"git\\"'
 finding the approval names the bare command (git --version), not a resolved binary path: it is asked before FIND has run (roadmap Phase 3)
-skip 'blocked by roadmap Phase 2: remove this line and the findings above when always-allow goes through the transaction flow'
 
-# ---- intended steps from here (not run until the blocker above is fixed) ----
-#
-# step calibrate again with the client answering: the run asks for discovery
-#   client -- calibrate api
-#   stdout '"status":"needs_discovery"'
-#   capture SESSION '"session":"([0-9a-z]+)"'
-#   capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
-# step the client plays the shell and answers FIND_BINARY with the git on the flow's PATH
-#   (the answer is {"status":"ok","matches":["$WORK/bin/git"]}), then continues the run
-#   exec orbiter --output json relay --txn=$TXN --response=...
-#   client -- uplink --session=$SESSION
-# step the recorded path is visible and the resource verifies healthy
-#   exec orbiter --output json survey api -v   -> config has binaries.git = $WORK/bin/git
-#   client -- scan api                          -> status healthy
+step the run cannot go on until git is found: it asks the client for discovery
+stdout '"status":"needs_discovery"'
+stdout '"op":"FIND_BINARY","key":"git"'
+capture SESSION '"session":"([0-9a-z]+)"'
+capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
+
+step the client plays the shell: the real shell hook answers FIND_BINARY and relays the result
+# Not a stub: this is the user's own shell (the flow's $FLOW_SHELL, the host login shell, zsh
+# on a Mac) loading the integration Orbiter auto-detects for it, then calling its
+# FIND_BINARY function, which walks the flow's PATH and relays the JSON answer.
+exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" git'
+
+step continue the run: uplink records the path and calibrates again
+client -- uplink --session=$SESSION
+stdout '"type":"result"'
+stdout '"action":"healthy"'
+stdout '"binary_path":"[^"]*/bin/git"'
+
+step the recorded path is in the star chart, in the form that travels between machines
+exec orbiter --output json survey api -v
+stdout '"binaries":\{"git":"[^"]*/bin/git"\}'
+
+step a later scan finds git healthy and needs nothing more from the Captain
+client -- scan api
+stdout '"status":"healthy"'
+stdout '"present":true'
+! stdout '"status":"needs_discovery"'

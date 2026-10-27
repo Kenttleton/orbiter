@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kenttleton/orbiter/integrations"
 	core "github.com/Kenttleton/orbiter/internal/integrations"
+	"github.com/Kenttleton/orbiter/internal/wasm"
 )
 
 func TestCatalogEntries_ReturnsAllBundled(t *testing.T) {
@@ -33,7 +34,7 @@ func TestInstallSelected_RegistersInRegistry(t *testing.T) {
 		t.Skip("no catalog entries")
 	}
 
-	if err := integrations.InstallSelected(entries, reg, nil); err != nil {
+	if err := integrations.InstallSelected(entries, reg, wasm.Prompts{}); err != nil {
 		t.Fatalf("InstallSelected: %v", err)
 	}
 
@@ -57,7 +58,7 @@ func TestDefaultIntegrationsDir_NotEmpty(t *testing.T) {
 func TestLoadInstalled_EmptyDir(t *testing.T) {
 	reg := core.NewRegistry(nil)
 	approve := func(_, _ string) bool { return true }
-	if err := integrations.LoadInstalled(t.TempDir(), reg, approve); err != nil {
+	if err := integrations.LoadInstalled(t.TempDir(), reg, wasm.Prompts{Approve: approve, AlwaysAllow: approve}); err != nil {
 		t.Fatalf("LoadInstalled on empty dir: %v", err)
 	}
 }
@@ -152,7 +153,7 @@ func TestLoadInstalled_AfterExtract(t *testing.T) {
 
 	reg := core.NewRegistry(nil)
 	approve := func(_, _ string) bool { return true }
-	if err := integrations.LoadInstalled(dir, reg, approve); err != nil {
+	if err := integrations.LoadInstalled(dir, reg, wasm.Prompts{Approve: approve, AlwaysAllow: approve}); err != nil {
 		t.Fatalf("LoadInstalled: %v", err)
 	}
 

@@ -37,3 +37,8 @@ func NewRootCommandForTestWithRenderer(sc *starchart.StarChart, r output.Rendere
 	root.AddCommand(newRelayCmd(d), newUplinkCmd(d), newCalibrateCmd(d))
 	return root
 }
+
+// ShellScriptFor exposes shell selection for tests.
+func ShellScriptFor(env map[string]string, self string) (string, error) {
+	return shellScriptFor(env, self)
+}

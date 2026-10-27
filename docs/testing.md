@@ -27,7 +27,9 @@ Every flow gets its own work directory, `HOME` and `PATH`.
 
 - **Setup** (`flowSetup` in `flows_test.go`): creates `HOME`, links the host tools a flow may
   discover into the flow's own `bin/` (today: `git`), and sets `PATH` to that directory plus
-  the `orbiter` binary only. FIND therefore sees exactly one of each tool, and a flow never
+  the `orbiter` binary only. It also plays the user's login: `$SHELL` is the host's real
+  login shell (zsh on a Mac) and `$FLOW_SHELL` its name, so a flow can run its commands in
+  that shell. Orbiter is never told which shell; it auto-detects, which is what the flow checks. FIND therefore sees exactly one of each tool, and a flow never
   depends on what else is installed. It also sets a short approval timeout, so a flow that
   forgets to answer a prompt fails in seconds.
 - **Teardown:** the work directory is removed by testscript, and each flow adds a line to

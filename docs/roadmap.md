@@ -31,18 +31,20 @@ Items inside a phase are in dependency order; "needs:" names a prerequisite.
 - [x] WASM approval flow works in JSON mode, sync (`-i`, answered on stdin) or async (`orbiter relay`).
 - [x] Cleanup: removed the stale `build-integration-local` target, the unused `which` allowlist entries, and `stubs.go`; marked the I/O contract spec implemented.
 - [x] JSON `scan` and `calibrate` results leaked export values (tokens); they now name exports and redact the values.
+- [x] Flow harness and flow 1 (register a project and calibrate git, nine steps, real integration, real shell): `docs/testing.md`.
+- [x] "Always allow this exact command?" goes through the transaction flow (sync with `-i`, async with `relay`), sharing one session with the approval prompt.
+- [x] Shell auto-detection works in a real shell. It relied on `BASH_VERSION` and `ZSH_VERSION`, which shells do not export, so `orbiter shell init` found nothing; it now falls back to the login shell (`$SHELL`).
 
 ## Phase 1: Prove the core works end to end
 
 Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. See `docs/testing.md`.
 
 - [x] **Flow harness.** Isolated per flow (own `HOME`, own `PATH` holding exactly the tools it provides), numbered steps, findings recorded without failing, a client that answers prompts like a GUI would, and an end-of-run report.
-- [ ] **Flow 1: register a project and calibrate git.** Steps 1 to 3 pass with the real git integration (`vessel init`, register, survey). Step 4 (calibrate) is blocked by the Phase 2 prompts item: the real integration's approval is answered, then "Always allow this exact command?" reads stdin directly and the run stalls. The intended remaining steps are written in the flow, unrun. Findings so far:
-  - [ ] the always-allow question bypasses the transaction flow (Phase 2)
-  - [ ] the approval names the bare command (`git --version`) instead of a resolved binary path, because the first scan runs before FIND (Phase 3)
+- [x] **Flow 1: register a project and calibrate git.** Nine steps with the real git integration: `vessel init`, register, survey, calibrate (the client answers the approval and always-allow prompts), the user's own shell answers `FIND_BINARY` through the hook Orbiter auto-detects, `uplink` records the path and calibrates, the path is in the star chart, a later scan is healthy. It found two bugs, both fixed (the always-allow prompt read raw stdin; shell detection never worked in a real shell) and one open finding:
+  - [ ] the first approval names the bare command (`git --version`) instead of a resolved binary path, because the first scan runs before FIND (Phase 3)
 - [ ] **More flows**, each an ordered, real use case: discovery with several matches (SELECT, answered with `-select`), a manager-governed install, a transponder credential reaching the shell, retro, the async `relay` path with a background run, and the approval denied.
 - [ ] **Convert the older CLI scripts** in `cmd/orbiter/testdata/script/` (they use unregistered resources) into flows with real registered resources.
-- [ ] **WASM approval path with a real integration** is exercised by flow 1 once unblocked (the approval function is otherwise only tested directly).
+- [x] **WASM approval path with a real integration** is exercised by flow 1 (approve and always-allow, answered by the client).
 
 ## Phase 2: Credentials work
 
@@ -51,7 +53,7 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [ ] **Remaining prompts go through the transaction flow.** These read `os.Stdin` directly, so `-i` and `relay` do not cover them:
   - [ ] `jump` confirmation (`executor.go`, `Jump`)
   - [ ] `retro` confirmation (`executor.go`, `Retro`); JSON clients pass `-y` meanwhile
-  - [ ] "Always allow this exact command?" after an approval (`StdinAlwaysAllowFunc`, `internal/wasm/loader.go`); with `-i` it would read the next stdin line as its answer
+  - [x] "Always allow this exact command?" after an approval (done; flow 1 stalled on it before the fix)
 - [ ] **Credential prompting.** `StateReport.NeedsInput` and `ResolvedContext.Responses` exist, and the comment says the host collects answers and calls the integration again, but no production code reads either. This is what a `TEXT` (obscured) prompt through the transaction flow is for. *needs: the prompts item above.*
 
 ## Phase 3: Binary trust
@@ -80,6 +82,7 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [ ] Schema version and compatibility policy for the contract, since third parties will build on it.
 - [ ] `hook` and `jump` have no event form (they emit the shell line protocol). Decide whether a client that wants shell state needs one.
 - [ ] fish and PowerShell hooks: never run (neither shell is installed on the dev machine).
+- [ ] Shell detection falls back to `$SHELL`, the login shell, which is wrong when another shell runs inside it. Decide whether to detect the parent process instead.
 
 ## Phase 6: Deferred FIND review minors
 

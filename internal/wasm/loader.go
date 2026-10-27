@@ -66,47 +66,83 @@ var ApprovalPollInterval = 200 * time.Millisecond
 //
 // A nil store means the answer cannot be awaited, so an unanswered prompt denies.
 func RendererApproveFunc(r output.Renderer, store PromptStore) ApproveFunc {
-	var (
-		once    sync.Once
-		session string
-		openErr error
-	)
+	c := &confirmer{r: r, store: store}
 	return func(brand, fullCmd string) bool {
-		ctx := context.Background()
-		prompt := output.CaptainPrompt{
-			Txn:     models.NewID("tx"),
-			Op:      "CONFIRM",
-			Message: fmt.Sprintf("%s wants to run: %s", brand, fullCmd),
-		}
-		recorded := false
-		if store != nil {
-			once.Do(func() { session, openErr = store.OpenSession(ctx, `{"op":"approval"}`) })
-			if openErr == nil {
-				payload, _ := json.Marshal(prompt)
-				recorded = store.RecordPrompt(ctx, session, prompt.Txn, prompt.Op, string(payload)) == nil
-			}
-		}
-		resp, err := r.Prompt(prompt)
-		if err != nil {
-			return false
-		}
-		if resp == "" && recorded {
-			resp = awaitRelayedResponse(ctx, store, prompt.Txn)
-		}
-		if recorded {
-			_ = store.CloseTransaction(ctx, prompt.Txn)
-		}
-		if resp == "" {
-			return false
-		}
-		var result struct {
-			Confirmed bool `json:"confirmed"`
-		}
-		if err := json.Unmarshal([]byte(resp), &result); err != nil {
-			return false
-		}
-		return result.Confirmed
+		return c.ask(fmt.Sprintf("%s wants to run: %s", brand, fullCmd))
 	}
+}
+
+// RendererAlwaysAllowFunc returns an AlwaysAllowFunc with the same transaction flow as
+// RendererApproveFunc. An unanswered prompt does not grant a permanent allow.
+func RendererAlwaysAllowFunc(r output.Renderer, store PromptStore) AlwaysAllowFunc {
+	c := &confirmer{r: r, store: store}
+	return func(brand, fullCmd string) bool {
+		return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", brand, fullCmd))
+	}
+}
+
+// Prompts are the two questions the Captain is asked about a command an integration
+// wants to run: whether to run it now, and whether to trust it from then on.
+type Prompts struct {
+	Approve     ApproveFunc     // nil: StdinApproveFunc
+	AlwaysAllow AlwaysAllowFunc // nil: StdinAlwaysAllowFunc
+}
+
+// RendererPrompts returns both questions asked through the renderer, sharing one
+// session so the two prompts about a command belong together.
+func RendererPrompts(r output.Renderer, store PromptStore) Prompts {
+	c := &confirmer{r: r, store: store}
+	return Prompts{
+		Approve: func(brand, fullCmd string) bool {
+			return c.ask(fmt.Sprintf("%s wants to run: %s", brand, fullCmd))
+		},
+		AlwaysAllow: func(brand, fullCmd string) bool {
+			return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", brand, fullCmd))
+		},
+	}
+}
+
+// confirmer asks CONFIRM prompts through a renderer and a store, one session per confirmer.
+type confirmer struct {
+	r       output.Renderer
+	store   PromptStore
+	once    sync.Once
+	session string
+	openErr error
+}
+
+// ask records the prompt, shows it, and returns the Captain's answer (false when none).
+func (c *confirmer) ask(message string) bool {
+	ctx := context.Background()
+	prompt := output.CaptainPrompt{Txn: models.NewID("tx"), Op: "CONFIRM", Message: message}
+	recorded := false
+	if c.store != nil {
+		c.once.Do(func() { c.session, c.openErr = c.store.OpenSession(ctx, `{"op":"approval"}`) })
+		if c.openErr == nil {
+			payload, _ := json.Marshal(prompt)
+			recorded = c.store.RecordPrompt(ctx, c.session, prompt.Txn, prompt.Op, string(payload)) == nil
+		}
+	}
+	resp, err := c.r.Prompt(prompt)
+	if err != nil {
+		return false
+	}
+	if resp == "" && recorded {
+		resp = awaitRelayedResponse(ctx, c.store, prompt.Txn)
+	}
+	if recorded {
+		_ = c.store.CloseTransaction(ctx, prompt.Txn)
+	}
+	if resp == "" {
+		return false
+	}
+	var result struct {
+		Confirmed bool `json:"confirmed"`
+	}
+	if err := json.Unmarshal([]byte(resp), &result); err != nil {
+		return false
+	}
+	return result.Confirmed
 }
 
 // awaitRelayedResponse polls the store until the transaction has a response or
@@ -145,12 +181,15 @@ type WASMIntegration struct {
 
 // Load compiles wasmBytes, instantiates the module, and returns a WASMIntegration
 // ready to serve calls. The module stays alive for the lifetime of the integration.
-// If approve is nil, StdinApproveFunc is used.
-func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte, settings *integrations.SettingsStore, registry *integrations.Registry, approve ApproveFunc) (*WASMIntegration, error) {
+// A nil field in prompts falls back to reading the terminal.
+func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte, settings *integrations.SettingsStore, registry *integrations.Registry, prompts Prompts) (*WASMIntegration, error) {
+	approve, alwaysAllow := prompts.Approve, prompts.AlwaysAllow
 	if approve == nil {
 		approve = StdinApproveFunc
 	}
-	alwaysAllow := StdinAlwaysAllowFunc
+	if alwaysAllow == nil {
+		alwaysAllow = StdinAlwaysAllowFunc
+	}
 
 	rt := SharedRuntime(ctx)
 

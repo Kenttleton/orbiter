@@ -78,6 +78,20 @@ func flowSetup(env *testscript.Env) error {
 		}
 	}
 
+	// The flow plays the user's terminal with the host's real login shell (zsh on a Mac),
+	// so Orbiter's own auto-detection is what finds the right shell integration. Orbiter is
+	// never told which shell; the flow only sets $SHELL the way a login would.
+	hostShell := os.Getenv("SHELL")
+	if hostShell == "" {
+		hostShell = "/bin/bash"
+	}
+	shellName := filepath.Base(hostShell)
+	if err := os.Symlink(hostShell, filepath.Join(bin, shellName)); err != nil {
+		return err
+	}
+	env.Setenv("SHELL", filepath.Join(bin, shellName))
+	env.Setenv("FLOW_SHELL", shellName)
+
 	shim := ""
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
 		if _, err := os.Stat(filepath.Join(dir, "orbiter")); err == nil {
@@ -245,7 +259,7 @@ loop:
 	cmd.Env = []string{
 		"HOME=" + ts.Getenv("HOME"), "PATH=" + ts.Getenv("PATH"),
 		"ORBITER_APPROVAL_TIMEOUT=" + ts.Getenv("ORBITER_APPROVAL_TIMEOUT"),
-		"GIT_CONFIG_NOSYSTEM=1", "TERM=dumb",
+		"GIT_CONFIG_NOSYSTEM=1", "TERM=dumb", "SHELL=" + ts.Getenv("SHELL"),
 	}
 	stderr := &lockedBuffer{}
 	cmd.Stderr = stderr

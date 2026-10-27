@@ -16,6 +16,7 @@ import (
 	core "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
+// printShellScript prints the shell integration script for the detected shell.
 func printShellScript() error {
 	self, err := os.Executable()
 	if err != nil {
@@ -25,9 +26,25 @@ func printShellScript() error {
 	if err != nil {
 		return fmt.Errorf("resolve symlinks: %w", err)
 	}
+	script, err := shellScriptFor(osEnvMap(), self)
+	if err != nil {
+		return err
+	}
+	fmt.Print(script)
+	return nil
+}
 
-	env := osEnvMap()
-
+// shellScriptFor returns the hook script for the detected shell, with the binary path
+// filled in. The shell is detected first from the manifests' detection rules over the
+// exported environment, then from the login shell ($SHELL). The rules alone are not
+// enough: shells keep BASH_VERSION and ZSH_VERSION as shell variables and do not export
+// them, so a child process such as orbiter never sees them.
+func shellScriptFor(env map[string]string, self string) (string, error) {
+	type candidate struct {
+		brand    string
+		manifest core.Manifest
+	}
+	var candidates []candidate
 	for _, entry := range bundle.CatalogEntries() {
 		if !slices.Contains(entry.Roles, core.ResourceRoleShell) {
 			continue
@@ -37,24 +54,45 @@ func printShellScript() error {
 			continue
 		}
 		var m core.Manifest
-		if _, err2 := toml.Decode(string(manifestBytes), &m); err2 != nil {
+		if _, err := toml.Decode(string(manifestBytes), &m); err != nil {
 			continue
 		}
-		if !m.Detection.MatchesAny(nil, env) {
-			continue
-		}
-		hookFile := m.Shell.HookFile()
-		if hookFile == "" {
-			continue
-		}
-		script, err := bundle.BundleFS.ReadFile(entry.Brand + "/" + hookFile)
-		if err != nil {
-			continue
-		}
-		fmt.Print(strings.ReplaceAll(string(script), "::ORBITER::", self))
-		return nil
+		candidates = append(candidates, candidate{entry.Brand, m})
 	}
-	return fmt.Errorf("no shell integration detected — run orbiter in bash, zsh, fish, or pwsh")
+
+	render := func(c candidate) (string, bool) {
+		hookFile := c.manifest.Shell.HookFile()
+		if hookFile == "" {
+			return "", false
+		}
+		script, err := bundle.BundleFS.ReadFile(c.brand + "/" + hookFile)
+		if err != nil {
+			return "", false
+		}
+		return strings.ReplaceAll(string(script), "::ORBITER::", self), true
+	}
+
+	for _, c := range candidates {
+		if c.manifest.Detection.MatchesAny(nil, env) {
+			if script, ok := render(c); ok {
+				return script, nil
+			}
+		}
+	}
+	// The login shell: "/bin/zsh" selects the zsh integration, "pwsh" the powershell one.
+	if login := strings.TrimSuffix(filepath.Base(env["SHELL"]), ".exe"); login != "." && login != "" {
+		if login == "pwsh" {
+			login = "powershell"
+		}
+		for _, c := range candidates {
+			if c.brand == login {
+				if script, ok := render(c); ok {
+					return script, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("no shell integration detected — run orbiter in bash, zsh, fish, or pwsh")
 }
 
 // osEnvMap parses os.Environ() into a key→value map.

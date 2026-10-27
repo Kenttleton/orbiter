@@ -192,3 +192,69 @@ func TestRendererApproveFunc_attached_closed_stdin_denies_at_once(t *testing.T) 
 		t.Errorf("must not wait out the timeout, took %v", time.Since(start))
 	}
 }
+
+// "Always allow this exact command?" is the second question asked about a command an
+// integration wants to run. It is a prompt like any other: tagged with a txn, answered
+// on the attached stdin (sync) or through relay (async), never read from raw stdin.
+func TestRendererAlwaysAllowFunc_attached_answers_on_stdin(t *testing.T) {
+	fastApproval(t, 5*time.Second)
+	stdinR, stdinW := io.Pipe()
+	stdoutR, stdoutW := io.Pipe()
+	r := output.NewJSONRenderer(stdoutW, false)
+	r.Attach(stdinR)
+	fn := wasm.RendererAlwaysAllowFunc(r, newMemStore())
+
+	var message string
+	go func() {
+		line, _ := bufio.NewReader(stdoutR).ReadString('\n')
+		var e struct {
+			Txn  string `json:"txn"`
+			Data struct {
+				Message string `json:"message"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal([]byte(line), &e)
+		message = e.Data.Message
+		io.WriteString(stdinW, `{"txn":"`+e.Txn+`","response":{"confirmed":true}}`+"\n")
+	}()
+	if !fn("git", "git --version") {
+		t.Fatal("a confirmed answer must allow always")
+	}
+	if !strings.Contains(message, "Always allow") || !strings.Contains(message, "git --version") {
+		t.Errorf("the prompt must say what is being trusted, got %q", message)
+	}
+}
+
+func TestRendererAlwaysAllowFunc_async_relay_and_timeout(t *testing.T) {
+	fastApproval(t, 80*time.Millisecond)
+	store := newMemStore()
+	fn := wasm.RendererAlwaysAllowFunc(output.NewJSONRenderer(&bytes.Buffer{}, false), store)
+	go func() { store.relay(<-store.recorded, `{"confirmed":true}`) }()
+	oldT := wasm.ApprovalTimeout
+	wasm.ApprovalTimeout = 5 * time.Second
+	if !fn("git", "git --version") {
+		t.Fatal("a relayed confirmation must allow always")
+	}
+	wasm.ApprovalTimeout = oldT
+	if fn("git", "git --version") {
+		t.Fatal("no answer within the timeout must not grant a permanent allow")
+	}
+}
+
+// Both questions about one command belong to one session.
+func TestRendererPrompts_share_one_session(t *testing.T) {
+	fastApproval(t, 5*time.Second)
+	store := newMemStore()
+	p := wasm.RendererPrompts(output.NewJSONRenderer(&bytes.Buffer{}, false), store)
+	go func() {
+		for i := 0; i < 2; i++ {
+			store.relay(<-store.recorded, `{"confirmed":true}`)
+		}
+	}()
+	if !p.Approve("git", "git --version") || !p.AlwaysAllow("git", "git --version") {
+		t.Fatal("both relayed confirmations must be honored")
+	}
+	if store.sessions != 1 {
+		t.Errorf("sessions = %d, want 1 shared by both prompts", store.sessions)
+	}
+}

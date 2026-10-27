@@ -17,6 +17,9 @@ import (
 // autoApprove is used in tests to approve all commands without reading stdin.
 func autoApprove(_, _ string) bool { return true }
 
+// autoPrompts approves every command and trusts it, without reading stdin.
+var autoPrompts = wasm.Prompts{Approve: autoApprove, AlwaysAllow: autoApprove}
+
 // resolvedFor stands in for the lifecycle's FIND resolution: it looks up each
 // binary the manifest declares and passes the result as ctx.Binaries, exactly
 // as BuildResolvedContext does in production. Test-only; production never uses LookPath.
@@ -41,7 +44,7 @@ func withBinaries(t *testing.T, i core.Integration, rc core.ResolvedContext) cor
 func setupBundleRegistry(t *testing.T) *core.Registry {
 	t.Helper()
 	reg := core.NewRegistry(nil)
-	if err := integrations.InstallSelected(integrations.CatalogEntries(), reg, autoApprove); err != nil {
+	if err := integrations.InstallSelected(integrations.CatalogEntries(), reg, autoPrompts); err != nil {
 		t.Fatalf("InstallSelected: %v", err)
 	}
 	return reg
@@ -57,7 +60,7 @@ func TestTinyGoPOC_gjsonSjson(t *testing.T) {
 		Integration: core.ManifestIntegration{Brand: "poc", Roles: []string{"tool"}},
 		Commands:    core.ManifestCommands{Allowed: []core.ManifestCommandEntry{}},
 	}
-	i, err := wasm.Load(context.Background(), manifest, wasmBytes, reg.Settings(), reg, autoApprove)
+	i, err := wasm.Load(context.Background(), manifest, wasmBytes, reg.Settings(), reg, autoPrompts)
 	if err != nil {
 		t.Fatalf("load poc wasm: %v", err)
 	}

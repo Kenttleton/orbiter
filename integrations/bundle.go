@@ -66,8 +66,8 @@ func CatalogEntries() []CatalogEntry {
 // InstallSelected loads and registers the integrations matching the given
 // catalog entries into the provided registry. Entries whose WASM file cannot
 // be loaded are logged and skipped.
-// approve is the Captain prompt func passed to each WASM integration; nil uses StdinApproveFunc.
-func InstallSelected(entries []CatalogEntry, registry *core.Registry, approve wasm.ApproveFunc) error {
+// prompts are the Captain questions passed to each WASM integration; nil fields read the terminal.
+func InstallSelected(entries []CatalogEntry, registry *core.Registry, prompts wasm.Prompts) error {
 	dirs, err := fs.ReadDir(bundleFS, ".")
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry, approve wa
 			continue
 		}
 
-		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, approve)
+		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, prompts)
 		if err != nil {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue
@@ -125,10 +125,10 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry, approve wa
 // LoadInstalled scans dir for integration directories and loads any that
 // contain a manifest.toml and a matching <name>.wasm file. Loaded integrations
 // are registered in the provided registry.
-// approve is passed to each loaded WASMIntegration; nil uses StdinApproveFunc.
+// prompts are passed to each loaded WASMIntegration; nil fields read the terminal.
 // This is used to load third-party integrations the Captain has installed,
 // and is called at startup for every command that opens the StarChart.
-func LoadInstalled(dir string, registry *core.Registry, approve wasm.ApproveFunc) error {
+func LoadInstalled(dir string, registry *core.Registry, prompts wasm.Prompts) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -161,7 +161,7 @@ func LoadInstalled(dir string, registry *core.Registry, approve wasm.ApproveFunc
 			continue
 		}
 
-		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, approve)
+		i, err := wasm.Load(ctx, manifest, wasmBytes, registry.Settings(), registry, prompts)
 		if err != nil {
 			log.Printf("orbiter: load %s: %v", name, err)
 			continue
