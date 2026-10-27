@@ -1114,3 +1114,42 @@ func TestBundledIntegrations_GoogleDrive(t *testing.T) {
 		}
 	})
 }
+
+// Whether a shell integration is the active shell is the integration's own decision. Orbiter
+// hands it the environment and takes its answer; it never matches shell names itself.
+func TestBundledShellIntegrations_DecideForThemselves(t *testing.T) {
+	reg := setupBundleRegistry(t)
+	cases := []struct {
+		brand string
+		env   map[string]string
+		want  bool
+	}{
+		{"zsh", map[string]string{"SHELL": "/bin/zsh"}, true},
+		{"zsh", map[string]string{"SHELL": "/opt/homebrew/bin/zsh"}, true},
+		{"zsh", map[string]string{"ZSH_VERSION": "5.9"}, true},
+		{"zsh", map[string]string{"SHELL": "/bin/bash"}, false},
+		{"zsh", map[string]string{}, false},
+		{"bash", map[string]string{"SHELL": "/bin/bash"}, true},
+		{"bash", map[string]string{"BASH_VERSION": "5.2"}, true},
+		{"bash", map[string]string{"SHELL": "/bin/zsh"}, false},
+		{"bash", map[string]string{}, false},
+		{"fish", map[string]string{"SHELL": "/usr/local/bin/fish"}, true},
+		{"fish", map[string]string{"FISH_VERSION": "3.7"}, true},
+		{"fish", map[string]string{"SHELL": "/bin/bash"}, false},
+		{"fish", map[string]string{}, false},
+		{"powershell", map[string]string{"SHELL": "/usr/local/bin/pwsh"}, true},
+		{"powershell", map[string]string{"PSHOME": "/opt/microsoft/powershell/7"}, true},
+		{"powershell", map[string]string{"SHELL": "/bin/zsh"}, false},
+		{"powershell", map[string]string{}, false},
+	}
+	for _, c := range cases {
+		i, ok := reg.Get("shell", c.brand)
+		if !ok {
+			t.Fatalf("shell/%s is not registered", c.brand)
+		}
+		got := i.Detect(core.DetectContext{Env: c.env}).Detected
+		if got != c.want {
+			t.Errorf("%s with env %v: detected = %v, want %v", c.brand, c.env, got, c.want)
+		}
+	}
+}

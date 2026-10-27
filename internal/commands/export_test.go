@@ -1,6 +1,9 @@
 package commands
 
 import (
+	"context"
+
+	"github.com/Kenttleton/orbiter/internal/integrations"
 	"github.com/Kenttleton/orbiter/internal/output"
 	"github.com/Kenttleton/orbiter/internal/starchart"
 	"github.com/spf13/cobra"
@@ -38,7 +41,11 @@ func NewRootCommandForTestWithRenderer(sc *starchart.StarChart, r output.Rendere
 	return root
 }
 
-// ShellScriptFor exposes shell selection for tests.
-func ShellScriptFor(env map[string]string, self string) (string, error) {
-	return shellScriptFor(env, self)
+// ShellInit is the exported face of shellInit for tests.
+type ShellInit struct{ s shellInit }
+
+func NewShellInit(sc *starchart.StarChart, reg *integrations.Registry, dir string, env map[string]string, self string, load func() error) ShellInit {
+	return ShellInit{shellInit{sc: sc, reg: reg, dir: dir, env: env, self: self, load: load}}
 }
+
+func (i ShellInit) Script(ctx context.Context) (string, error) { return i.s.script(ctx) }

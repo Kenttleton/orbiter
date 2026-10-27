@@ -28,11 +28,38 @@ fn write_state(report: StateReport) {
     host::write_output(&bytes);
 }
 
+/// What Orbiter tells every integration that is asked "is this environment yours?"
+#[derive(Deserialize, Default)]
+struct DetectContext {
+    #[serde(default)]
+    env: HashMap<String, String>,
+}
+
+/// True if the final path component of `path` (either separator, optional .exe) is one of `names`.
+fn is_executable_named(path: &str, names: &[&str]) -> bool {
+    let base = path.rsplit(|c| c == '/' || c == '\\').next().unwrap_or(path);
+    let base = base.strip_suffix(".exe").unwrap_or(base);
+    names.contains(&base)
+}
+
+/// This integration decides whether it is the active shell; Orbiter only asks. The shell
+/// announces itself through FISH_VERSION when something has exported it (shells keep their own
+/// version variable to themselves by default), and the login shell ($SHELL) names it.
 #[no_mangle]
 pub extern "C" fn detect() {
-    host::write_output(
-        b"{\"detected\":true,\"resources\":[{\"role\":\"shell\",\"brand\":\"fish\"}]}",
-    );
+    let input = host::read_input();
+    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or_default();
+    let active = ctx.env.contains_key("FISH_VERSION")
+        || ctx
+            .env
+            .get("SHELL")
+            .map_or(false, |shell| is_executable_named(shell, &["fish"]));
+    let out = if active {
+        "{\"detected\":true,\"resources\":[{\"role\":\"shell\",\"brand\":\"fish\"}]}"
+    } else {
+        "{\"detected\":false}"
+    };
+    host::write_output(out.as_bytes());
 }
 
 fn check_fish() {

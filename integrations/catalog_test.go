@@ -165,3 +165,23 @@ func TestLoadInstalled_AfterExtract(t *testing.T) {
 		}
 	}
 }
+
+// A command that needs only some integrations loads only those: compiling every installed
+// module on every invocation is slow, and a shell integration is loaded on each new terminal.
+func TestLoadInstalled_OnlyTheRequestedRoles(t *testing.T) {
+	dir := t.TempDir()
+	if err := integrations.ExtractSelected(integrations.CatalogEntries(), dir); err != nil {
+		t.Fatal(err)
+	}
+	reg := core.NewRegistry(nil)
+	approve := func(_, _ string) bool { return true }
+	if err := integrations.LoadInstalled(dir, reg, wasm.Prompts{Approve: approve, AlwaysAllow: approve}, "shell"); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(reg.AllForRole("shell")); got < 4 {
+		t.Errorf("shell-role integrations loaded = %d, want at least the 4 bundled shells", got)
+	}
+	if got := len(reg.AllForRole("tool")); got != 0 {
+		t.Errorf("tool-role integrations loaded = %d, want 0 when only the shell role was asked for", got)
+	}
+}

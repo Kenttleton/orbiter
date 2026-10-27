@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 
 	"github.com/BurntSushi/toml"
 	core "github.com/Kenttleton/orbiter/internal/integrations"
@@ -128,7 +129,9 @@ func InstallSelected(entries []CatalogEntry, registry *core.Registry, prompts wa
 // prompts are passed to each loaded WASMIntegration; nil fields read the terminal.
 // This is used to load third-party integrations the Captain has installed,
 // and is called at startup for every command that opens the StarChart.
-func LoadInstalled(dir string, registry *core.Registry, prompts wasm.Prompts) error {
+// With roles, only integrations that operate in one of those roles are loaded (compiling
+// every installed module is slow, so a command that needs a few asks for just those).
+func LoadInstalled(dir string, registry *core.Registry, prompts wasm.Prompts, roles ...string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -151,6 +154,9 @@ func LoadInstalled(dir string, registry *core.Registry, prompts wasm.Prompts) er
 		var manifest core.Manifest
 		if _, err := toml.Decode(string(manifestBytes), &manifest); err != nil {
 			log.Printf("orbiter: parse manifest %s: %v", manifestPath, err)
+			continue
+		}
+		if len(roles) > 0 && !slices.ContainsFunc(manifest.Integration.Roles, func(r string) bool { return slices.Contains(roles, r) }) {
 			continue
 		}
 
@@ -337,6 +343,17 @@ func ExtractSelected(entries []CatalogEntry, dir string) error {
 		}
 		if err := os.WriteFile(filepath.Join(destDir, brand+".wasm"), wasmBytes, 0644); err != nil {
 			return fmt.Errorf("write wasm for %s: %w", brand, err)
+		}
+		// Files the manifest declares travel with the integration, so Orbiter can delegate
+		// to it later from the install directory alone.
+		if hook := manifest.Shell.HookFile(); hook != "" {
+			hookBytes, err := bundleFS.ReadFile(path.Join(name, hook))
+			if err != nil {
+				return fmt.Errorf("read hook %s for %s: %w", hook, brand, err)
+			}
+			if err := os.WriteFile(filepath.Join(destDir, hook), hookBytes, 0644); err != nil {
+				return fmt.Errorf("write hook for %s: %w", brand, err)
+			}
 		}
 		wanted[brand] = false // mark as written
 	}

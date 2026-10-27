@@ -130,6 +130,14 @@ envs  = ["HOMEBREW_PREFIX"] # exact env var names
 - **Files, dirs, envs.** Declared in the manifest and carried in the context (`ctx.files`, `ctx.dirs`, `ctx.envs`), but not yet requested or persisted by the lifecycle; they are reserved for the first integration that needs them.
 - **Shell integrations** implement `FIND_BINARY`, `FIND_FILE`, `FIND_DIR` and `FIND_ENV` in their hook script. Each takes a transaction ID first and pipes one JSON object to `orbiter relay --txn=<id>`. How a shell searches is its own choice.
 
+## Operating as a shell
+
+An integration whose manifest lists the `shell` role operates as a shell. Orbiter does not know any shell by name; it only knows the role.
+
+- **Detection.** `detect` receives the environment Orbiter has (`DetectContext.Env`) and answers whether this environment is the integration's own (`detected`). Each shell integration decides for itself, for example from `$SHELL` or an exported version variable.
+- **Registration.** When Orbiter has no record of a shell, it asks every registered shell integration to `detect`, records the one that answers yes as a `shell` resource on the vessel, and delegates to it. When a shell is already recorded, Orbiter uses its own record and asks no one. The Captain can swap the recorded shell later.
+- **The hook.** The manifest declares the hook script (`[shell] exports = [{ hook = "hook.zsh", ... }]`). Installing the integration installs that file beside the manifest, and `orbiter shell init` prints it with `::ORBITER::` replaced by the path to the binary.
+
 ## Guest ABI
 
 The WASM module communicates with the host through three imported functions in the `orbiter` module namespace:

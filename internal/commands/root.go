@@ -33,6 +33,32 @@ type deps struct {
 	interactive bool
 }
 
+// openStarChart opens the star chart (ORBITER_STARCHART, or ~/.orbiter/starchart.db).
+func (d *deps) openStarChart() error {
+	chartPath := os.Getenv("ORBITER_STARCHART")
+	if chartPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("resolve home directory: %w", err)
+		}
+		chartPath = home + "/.orbiter/starchart.db"
+	}
+	sc, err := starchart.Open(chartPath)
+	if err != nil {
+		return fmt.Errorf("open star chart: %w", err)
+	}
+	d.sc = sc
+	d.resolver = resolver.New(sc)
+	return nil
+}
+
+// prepareLight is the pre-run for commands that need output and the star chart but must not
+// load every installed integration (a command run in every new terminal, for one).
+func (d *deps) prepareLight() error {
+	d.setupOutput()
+	return d.openStarChart()
+}
+
 // setupOutput resolves the output format and flags (flag, then environment, then
 // default) and builds the renderer. Every command runs it, including the ones that
 // skip the star chart, so every command can speak JSON.
@@ -105,24 +131,9 @@ and environment orchestration platform for freelance and contract engineers.`,
 			// the requested format.
 			d.setupOutput()
 
-			// Resolve Star Chart path.
-			chartPath := os.Getenv("ORBITER_STARCHART")
-			if chartPath == "" {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return fmt.Errorf("resolve home directory: %w", err)
-				}
-				chartPath = home + "/.orbiter/starchart.db"
+			if err := d.openStarChart(); err != nil {
+				return err
 			}
-
-			// Open Star Chart.
-			sc, err := starchart.Open(chartPath)
-			if err != nil {
-				return fmt.Errorf("open star chart: %w", err)
-			}
-			d.sc = sc
-
-			d.resolver = resolver.New(sc)
 
 			// Load integrations installed to disk into the Default registry.
 			// Non-fatal: a missing integrations dir is silently skipped (LoadInstalled handles it).
@@ -144,8 +155,8 @@ and environment orchestration platform for freelance and contract engineers.`,
 
 	// Register all subcommands.
 	root.AddCommand(
-		newInitCmd(),
-		newShellCmd(),
+		newInitCmd(&d),
+		newShellCmd(&d),
 		newSurveyCmd(&d),
 		newChartCmd(&d),
 		newJumpCmd(&d),

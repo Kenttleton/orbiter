@@ -33,11 +33,21 @@ stdout '"op":"FIND_BINARY","key":"git"'
 capture SESSION '"session":"([0-9a-z]+)"'
 capture TXN '"txn":"([0-9a-z]+)","op":"FIND_BINARY"'
 
-step the client plays the shell: the real shell hook answers FIND_BINARY and relays the result
-# Not a stub: this is the user's own shell (the flow's $FLOW_SHELL, the host login shell, zsh
-# on a Mac) loading the integration Orbiter auto-detects for it, then calling its
-# FIND_BINARY function, which walks the flow's PATH and relays the JSON answer.
+step the client plays the shell: Orbiter does not know this shell, so it asks the shell integrations
+# Not a stub. This is the user's own shell (the flow's $FLOW_SHELL, the host login shell, zsh on
+# a Mac) loading its profile line. Orbiter has no record of a shell yet, so it goes out to the
+# registered shell integrations, one of them answers that this environment is its own, and
+# Orbiter records that and hands back that integration's hook. Orbiter names no shell anywhere.
 exec $FLOW_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" git'
+stderr 'registered .* as this vessel.s shell'
+
+step Orbiter now has the shell on record
+exec orbiter --output json survey vessel -v
+stdout '"role":"shell"'
+
+step the next terminal needs no detection: Orbiter uses its own record
+exec $FLOW_SHELL -c 'orbiter shell init > /dev/null'
+! stderr 'registered'
 
 step continue the run: uplink records the path and calibrates again
 client -- uplink --session=$SESSION

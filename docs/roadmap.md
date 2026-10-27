@@ -33,7 +33,7 @@ Items inside a phase are in dependency order; "needs:" names a prerequisite.
 - [x] JSON `scan` and `calibrate` results leaked export values (tokens); they now name exports and redact the values.
 - [x] Flow harness and flow 1 (register a project and calibrate git, nine steps, real integration, real shell): `docs/testing.md`.
 - [x] "Always allow this exact command?" goes through the transaction flow (sync with `-i`, async with `relay`), sharing one session with the approval prompt.
-- [x] Shell auto-detection works in a real shell. It relied on `BASH_VERSION` and `ZSH_VERSION`, which shells do not export, so `orbiter shell init` found nothing; it now falls back to the login shell (`$SHELL`).
+- [x] Shell selection is out, in, out, with no shell named in Orbiter. With no record of a shell, Orbiter asks each registered shell-role integration to `detect` (it was a constant "yes" in all four, and detection by the manifests' `BASH_VERSION`/`ZSH_VERSION` rules could never match because shells do not export them), registers the one that answers as a shell resource on the vessel, and delegates to its hook. After that Orbiter uses its own record. Installing an integration now also installs the files its manifest declares (the hook), and `LoadInstalled` can load just the roles a command needs.
 
 ## Phase 1: Prove the core works end to end
 
@@ -82,7 +82,7 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [ ] Schema version and compatibility policy for the contract, since third parties will build on it.
 - [ ] `hook` and `jump` have no event form (they emit the shell line protocol). Decide whether a client that wants shell state needs one.
 - [ ] fish and PowerShell hooks: never run (neither shell is installed on the dev machine).
-- [ ] Shell detection falls back to `$SHELL`, the login shell, which is wrong when another shell runs inside it. Decide whether to detect the parent process instead.
+- [ ] Commands to swap the recorded shell (the Captain changes shells; Orbiter's record is what `shell init` uses).
 
 ## Phase 6: Deferred FIND review minors
 
@@ -114,6 +114,13 @@ Direction, not yet specified: Wails shell, Vue/Quasar UI, Pixi.js for the 2D orb
 - **Two kinds of binary path.** In a manifest, `binary_path` is the expected (theoretical) location for a local install; only a manager can supersede it. The path FIND returns is the actual one. Orbiter reconciles the two for security and pushes the Captain toward rectifying a mismatch. This reconciliation is not built yet (Phase 3).
 - **`in_path` is informational.** It tells a user whether the command can be run by name instead of by passing the binary path each time. It does not decide Reachable.
 - **Present and Reachable are the integration's report.** Orbiter stores them and does not stat binaries.
+
+## Where shell and executable names still appear in Orbiter (not changed; decide)
+
+Orbiter should name no integration or shell. These remain and are not detection logic:
+- `internal/wasm/host.go`: the list of executables an integration may never run (shells, `rm`, `sudo`, `su`, ...). A security policy, but it names executables inside Orbiter.
+- `internal/commands/completions.go`: `orbiter completions bash|zsh|fish|powershell` is Cobra's built-in completion generators, not an integration.
+- Help text and comments that show profile lines or mention Git Bash.
 
 ## How the 2026-10-26 audit was done
 

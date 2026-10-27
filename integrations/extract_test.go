@@ -3,9 +3,12 @@ package integrations_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/Kenttleton/orbiter/integrations"
+	core "github.com/Kenttleton/orbiter/internal/integrations"
 )
 
 func TestExtractSelected_CreatesFiles(t *testing.T) {
@@ -113,6 +116,43 @@ func TestCatalogEntriesWithState_AfterExtract(t *testing.T) {
 		}
 		if !s.ChecksumMatches {
 			t.Errorf("brand %q checksum should match bundled after fresh extract", s.Brand)
+		}
+	}
+}
+
+// An installed integration carries every file its manifest declares, so Orbiter can
+// delegate to it later from the install directory alone: a shell integration's hook
+// script is declared in its manifest and must be installed beside it.
+func TestExtractSelected_InstallsFilesTheManifestDeclares(t *testing.T) {
+	dir := t.TempDir()
+	var shells []integrations.CatalogEntry
+	for _, e := range integrations.CatalogEntries() {
+		if slices.Contains(e.Roles, "shell") {
+			shells = append(shells, e)
+		}
+	}
+	if len(shells) == 0 {
+		t.Skip("no shell integrations in the catalog")
+	}
+	if err := integrations.ExtractSelected(shells, dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range shells {
+		manifestBytes, err := os.ReadFile(filepath.Join(dir, e.Brand, "manifest.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m core.Manifest
+		if _, err := toml.Decode(string(manifestBytes), &m); err != nil {
+			t.Fatal(err)
+		}
+		hook := m.Shell.HookFile()
+		if hook == "" {
+			t.Errorf("%s declares no hook", e.Brand)
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, e.Brand, hook)); err != nil {
+			t.Errorf("%s: declared hook %s was not installed: %v", e.Brand, hook, err)
 		}
 	}
 }

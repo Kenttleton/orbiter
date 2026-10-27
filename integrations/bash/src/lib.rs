@@ -30,11 +30,38 @@ fn write_state(report: StateReport) {
 
 // detect() is called only when BASH_VERSION is in the env (manifest pre-filter).
 // We are running inside bash — suggest the shell/bash resource.
+/// What Orbiter tells every integration that is asked "is this environment yours?"
+#[derive(Deserialize, Default)]
+struct DetectContext {
+    #[serde(default)]
+    env: HashMap<String, String>,
+}
+
+/// True if the final path component of `path` (either separator, optional .exe) is one of `names`.
+fn is_executable_named(path: &str, names: &[&str]) -> bool {
+    let base = path.rsplit(|c| c == '/' || c == '\\').next().unwrap_or(path);
+    let base = base.strip_suffix(".exe").unwrap_or(base);
+    names.contains(&base)
+}
+
+/// This integration decides whether it is the active shell; Orbiter only asks. The shell
+/// announces itself through BASH_VERSION when something has exported it (shells keep their own
+/// version variable to themselves by default), and the login shell ($SHELL) names it.
 #[no_mangle]
 pub extern "C" fn detect() {
-    host::write_output(
-        b"{\"detected\":true,\"resources\":[{\"role\":\"shell\",\"brand\":\"bash\"}]}",
-    );
+    let input = host::read_input();
+    let ctx: DetectContext = serde_json::from_slice(&input).unwrap_or_default();
+    let active = ctx.env.contains_key("BASH_VERSION")
+        || ctx
+            .env
+            .get("SHELL")
+            .map_or(false, |shell| is_executable_named(shell, &["bash"]));
+    let out = if active {
+        "{\"detected\":true,\"resources\":[{\"role\":\"shell\",\"brand\":\"bash\"}]}"
+    } else {
+        "{\"detected\":false}"
+    };
+    host::write_output(out.as_bytes());
 }
 
 fn check_bash() {
