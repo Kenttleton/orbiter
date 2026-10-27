@@ -1153,3 +1153,30 @@ func TestBundledShellIntegrations_DecideForThemselves(t *testing.T) {
 		}
 	}
 }
+
+// A shell integration checks its own health by running the shell, and its manifest declares
+// that command like any tool's does. Run for real against the shells on this machine: the scan
+// must find the shell healthy and must not get the integration quarantined.
+func TestBundledShellIntegrations_ScanHealthyUsingTheirDeclaredCommands(t *testing.T) {
+	for _, tc := range []struct{ brand, binary string }{
+		{"bash", "bash"}, {"zsh", "zsh"}, {"fish", "fish"}, {"powershell", "pwsh"},
+	} {
+		t.Run(tc.brand, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.binary); err != nil {
+				t.Skipf("%s is not installed on this machine", tc.binary)
+			}
+			reg := setupBundleRegistry(t)
+			i, ok := reg.Get("shell", tc.brand)
+			if !ok {
+				t.Fatalf("shell/%s is not registered", tc.brand)
+			}
+			report := i.Scan(resolvedFor(t, i))
+			if reg.IsQuarantined(tc.brand) {
+				t.Fatalf("%s was quarantined by its own health check", tc.brand)
+			}
+			if !report.Present {
+				t.Errorf("%s: present = false (error %q)", tc.brand, report.Error)
+			}
+		})
+	}
+}

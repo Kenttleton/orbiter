@@ -31,6 +31,7 @@ Items inside a phase are in dependency order; "needs:" names a prerequisite.
 - [x] WASM approval flow works in JSON mode, sync (`-i`, answered on stdin) or async (`orbiter relay`).
 - [x] Cleanup: removed the stale `build-integration-local` target, the unused `which` allowlist entries, and `stubs.go`; marked the I/O contract spec implemented.
 - [x] JSON `scan` and `calibrate` results leaked export values (tokens); they now name exports and redact the values.
+- [x] The hard-coded banned list is gone. The policy is transparency: everything is banned except the commands an integration's manifest declares, the Captain approves each run, and straying quarantines the integration. The allowlist is now enforced for every integration (one that declares nothing may run nothing; before, it was only enforced when something was declared). The four shell manifests declare their health command (`bash --version` and the like) and shells scan healthy; git's declared `chmod` is no longer blocked by a list that named it. Flow 2 runs to the end.
 - [x] Shell drift: a scan flags the vessel's shell when its integration folder is gone or the shell is not where it was recorded; `calibrate` finds shells through the integrations (discovery asks every integration, and the shell suggestions are used), shows what was found and what is missing, and the Captain chooses, sync or async (`needs_decision`, answered with `relay` then `uplink`). The chosen shell is registered and the drifted one retired. FIND looks for a recorded shell first. Flow 2 covers it up to the shell's health check (see Phase 3).
 - [x] `retro` retires the thing it was asked to retire. On a resource attached to its parent (a planet, the vessel) it printed "retired" but left the resource in the tree; the target is now always retired. It only touches the star chart, never an integration's folder.
 - [x] A warning is a `warning` event on stdout in JSON mode; `uplink`'s error lines no longer go to stderr.
@@ -64,7 +65,6 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [ ] **Design the expected path.** The manifest declares only binary names today. Decide how a manifest states the expected location for a local install and how a manager supplies its override (see Design notes).
 - [ ] **FIND before the first scan.** A resource with no recorded binary is scanned first, so the integration asks the Captain to approve running a bare command name (`git --version`), which executes whatever is first on `PATH`. Decide the binary before anything runs, so approvals name the resolved path. Found by flow 1.
 - [ ] **Expected vs actual.** Compare the expected location (local install) or the manager's override against the path FIND found, and ask the Captain to rectify a mismatch. *needs: the design item.*
-- [ ] **Shell health checks versus the banned list.** A shell integration's scan runs its own shell (for example `bash --version`), and the manifests declare no `[commands]` at all. The host applies a hard-coded banned list (which names `bash`, `zsh`, `fish`, `pwsh`, `sh` and others) before it reads the manifest allowlist and quarantines the integration, so a shell can never scan healthy. Proposed: each shell manifest declares its health commands in `[commands]`, and the banned list stops naming shells so the manifest allowlist and the Captain's approval decide. Security decision, not changed. Found by flow 2.
 - [ ] **Honor `sensitive`.** `shell.exports[].sensitive` (the github manifest sets it) is read by nothing; redact those values wherever exports are logged or shown.
 
 ## Phase 4: The integration contract
@@ -125,7 +125,6 @@ Direction, not yet specified: Wails shell, Vue/Quasar UI, Pixi.js for the 2D orb
 ## Where shell and executable names still appear in Orbiter (not changed; decide)
 
 Orbiter should name no integration or shell. These remain and are not detection logic:
-- `internal/wasm/host.go`: the list of executables an integration may never run (shells, `rm`, `sudo`, `su`, ...). A security policy, but it names executables inside Orbiter.
 - `internal/commands/completions.go`: `orbiter completions bash|zsh|fish|powershell` is Cobra's built-in completion generators, not an integration.
 - Help text and comments that show profile lines or mention Git Bash.
 

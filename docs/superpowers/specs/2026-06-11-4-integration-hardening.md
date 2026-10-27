@@ -22,6 +22,8 @@ Integrations execute commands on the Captain's machine. This is intentional — 
 
 ### Command banlist
 
+> **Superseded (2026-10-26):** the hard-coded banlist was removed. The policy is transparency: everything is banned except the commands an integration's manifest declares, and an integration that runs anything else is quarantined. The allowlist is enforced for every integration, and an integration that declares nothing may run nothing. This section describes the earlier design.
+
 The host maintains a hardcoded banlist of commands that are rejected regardless of the manifest allowlist. Ban reason is included in the audit log.
 
 **Shell interpreters** (execute arbitrary code; WASM logic should handle conditionals instead):

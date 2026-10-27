@@ -28,15 +28,6 @@ type callState struct {
 	registry    *integrations.Registry
 }
 
-// bannedCommands is a hardcoded list of executables that can never run regardless
-// of manifest declarations. Attempting to run any of these auto-quarantines the
-// integration.
-var bannedCommands = []string{
-	"bash", "sh", "zsh", "fish", "dash", "csh", "tcsh", "ksh",
-	"pwsh", "powershell", "cmd.exe", "rm", "sudo", "su",
-	"chmod", "chown", "dd", "mkfs", "fdisk",
-}
-
 // newRuntime creates a wazero Runtime with WASI support and the "orbiter" host
 // module pre-instantiated. The returned runtime is ready to compile guest modules.
 func newRuntime(ctx context.Context) (wazero.Runtime, error) {
@@ -128,14 +119,16 @@ func writeOutputFn(ctx context.Context, mod api.Module, stack []uint64) {
 }
 
 // runCommandFn implements orbiter.run_command(specPtr, specLen, outPtr, max) -> n.
-// Applies a six-stage security gate before executing any host command:
+// Applies a five-stage security gate before executing any host command. The policy is
+// transparency: everything is banned except the commands the integration's human-readable
+// manifest declares, so there is no list of forbidden names.
 //
 //  1. Quarantine check — blocked integrations return immediately
-//  2. Banlist check   — hardcoded dangerous executables are always denied
-//  3. Allowlist check — command must appear in manifest.Commands.Allowed (if set)
-//  4. Trust check     — previously always-allowed commands run without a prompt
-//  5. Captain prompt  — interactive approval for untrusted commands
-//  6. Execute         — run with optional timeout; write output to guest memory
+//  2. Allowlist check  — the command must be in manifest.Commands.Allowed; an integration that
+//     declares nothing may run nothing, and one that strays is quarantined
+//  3. Trust check      — previously always-allowed commands run without a prompt
+//  4. Captain prompt   — approval for commands not yet trusted
+//  5. Execute          — run with optional timeout; write output to guest memory
 func runCommandFn(ctx context.Context, mod api.Module, stack []uint64) {
 	specPtr := uint32(stack[0])
 	specLen := uint32(stack[1])
@@ -199,23 +192,8 @@ func runGate(ctx context.Context, cs *callState, fullCmd, executable string, arg
 		return nil, 1
 	}
 
-	// Stage 2: Banlist check
-	if slices.Contains(bannedCommands, executableBase) {
-		AuditLog(AuditEntry{
-			At:      time.Now().UTC(),
-			Brand:   cs.brand,
-			Command: fullCmd,
-			Outcome: "quarantined",
-			Reason:  "executable on banlist: " + executableBase,
-		})
-		if cs.registry != nil {
-			_ = cs.registry.QuarantineBrand(cs.brand, "attempted banned command: "+executableBase)
-		}
-		return nil, 1
-	}
-
-	// Stage 3: Allowlist check (only enforced when manifest declares allowed commands)
-	if len(cs.allowed) > 0 && !slices.Contains(cs.allowed, executableBase) {
+	// Stage 2: Allowlist check. Only what the manifest declares may run.
+	if !slices.Contains(cs.allowed, executableBase) {
 		AuditLog(AuditEntry{
 			At:      time.Now().UTC(),
 			Brand:   cs.brand,
@@ -229,7 +207,7 @@ func runGate(ctx context.Context, cs *callState, fullCmd, executable string, arg
 		return nil, 1
 	}
 
-	// Stage 4: Trust check — already always-allowed, skip prompt
+	// Stage 3: Trust check — already always-allowed, skip prompt
 	if cs.settings != nil && cs.settings.IsAllowed(cs.brand, fullCmd) {
 		AuditLog(AuditEntry{
 			At:      time.Now().UTC(),
@@ -240,7 +218,7 @@ func runGate(ctx context.Context, cs *callState, fullCmd, executable string, arg
 		return execute(ctx, cs, executable, args)
 	}
 
-	// Stage 5: Captain prompt
+	// Stage 4: Captain prompt
 	approveFn := cs.approve
 	if approveFn == nil {
 		approveFn = StdinApproveFunc
@@ -272,7 +250,7 @@ func runGate(ctx context.Context, cs *callState, fullCmd, executable string, arg
 		}
 	}
 
-	// Stage 6: Execute
+	// Stage 5: Execute
 	return execute(ctx, cs, executable, args)
 }
 
@@ -293,4 +271,3 @@ func execute(ctx context.Context, cs *callState, executable string, args []strin
 	}
 	return out, 0
 }
-

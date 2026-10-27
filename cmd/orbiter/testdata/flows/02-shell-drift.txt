@@ -50,11 +50,8 @@ step the terminal of the Captain now runs the shell Orbiter has on record, and a
 exec $FLOW_OTHER_SHELL -c 'eval "$(orbiter shell init)"; FIND_BINARY "$TXN" '$FLOW_OTHER_SHELL
 
 step uplink records the location and the shell of the vessel is healthy
-# Blocked: the shell integration's health check runs its own shell (for example `bash --version`),
-# and the host's hard-coded banned list quarantines any integration that runs a shell by name,
-# before it reads the manifest. So a shell can never scan healthy. Roadmap Phase 3.
-finding a shell integration is quarantined when it scans: the host bans running shells by name, ahead of the manifest allowlist (roadmap Phase 3)
-skip 'blocked by roadmap Phase 3: remove this line and the finding above when a shell integration can run its own health check'
+# The shell integration checks its own health with a command its manifest declares, the same
+# way every tool does; the host holds it to that declaration.
 client -- uplink --session=$SESSION
 stdout '"role":"shell"'
 stdout '"action":"healthy"'

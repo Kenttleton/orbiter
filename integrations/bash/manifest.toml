@@ -10,6 +10,12 @@ exports = [
   { hook = "hook.bash", description = "PROMPT_COMMAND hook for directory-change context detection" },
 ]
 
+[commands]
+timeout_seconds = 30
+allowed = [
+  { cmd = "bash", description = "Check that bash is present and report its version (health check)" },
+]
+
 [runtime]
 pool_size = 2
 input_buffer_kb = 8

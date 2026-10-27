@@ -10,6 +10,12 @@ exports = [
   { hook = "hook.fish", description = "PWD variable hook for directory-change context detection" },
 ]
 
+[commands]
+timeout_seconds = 30
+allowed = [
+  { cmd = "fish", description = "Check that fish is present and report its version (health check)" },
+]
+
 [runtime]
 pool_size = 2
 input_buffer_kb = 8

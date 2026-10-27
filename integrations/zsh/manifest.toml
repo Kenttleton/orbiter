@@ -10,6 +10,12 @@ exports = [
   { hook = "hook.zsh", description = "chpwd hook for directory-change context detection" },
 ]
 
+[commands]
+timeout_seconds = 30
+allowed = [
+  { cmd = "zsh", description = "Check that zsh is present and report its version (health check)" },
+]
+
 [runtime]
 pool_size = 2
 input_buffer_kb = 8
