@@ -65,6 +65,8 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 
 ## Phase 4: The integration contract
 
+- [ ] **Shell registration follows the discovery pattern.** The shell is a resource on the vessel like any other. `shell init` currently re-implements discovery inline (loop the shell-role integrations, create, attach); it should reuse the same discover-and-register path as `planet init --discover`, generalized to take the vessel. The four shell manifests still declare detection rules (`BASH_VERSION`, `ZSH_VERSION`, ...) that can never match, and discovery pre-filters on them, so drop them: no rules already means "ask the integration". Swapping a shell needs no new command (retro, add and attach, or discovery again).
+- [ ] **Shell drift.** A scan flags the vessel's shell resource when its integration is gone or the shell is absent (for example a star chart copied to a machine with a different shell). On drift, run discovery among the installed shell integrations and ask the Captain to rectify, like the FIND recovery. Today a missing shell just makes `shell init` fail.
 - [ ] **StateReport config contract.** Plan: `2026-06-18-statereport-config-contract.md`. Drops the named fields (`BinaryPath`, `InstallDir`, `InPath`, `Manager`, `Exports`) from `StateReport` and moves them into `Config`. The plan predates FIND and the design notes below: it lists 20 integrations plus the deleted `local` and misses 8 added since (bash, zsh, fish, powershell, google-auth, google-drive, tmux, json), so 28 integrations exist today. The host acts only on `exports` (`git` and `github` emit it) and `install_dir`; `binary_path`, `in_path` and `manager` are informational. Refresh it before executing; in `Config`, `binary_path` is the actual path an integration reports using, separate from the manifest's expected path. *needs: Phase 3 design.*
 - [ ] **Validate config against the manifest's `[config]` schema.** `ManifestConfigField.Required` and `Fields` are read by nothing, so `resource add --config` is not validated.
 - [ ] **Runtime buffer hints.** `runtime.input_buffer_kb` and `runtime.output_buffer_kb` are ignored; honor them or remove them.
@@ -82,7 +84,6 @@ Flows live in `cmd/orbiter/testdata/flows/` and are not mocked; unit tests are. 
 - [ ] Schema version and compatibility policy for the contract, since third parties will build on it.
 - [ ] `hook` and `jump` have no event form (they emit the shell line protocol). Decide whether a client that wants shell state needs one.
 - [ ] fish and PowerShell hooks: never run (neither shell is installed on the dev machine).
-- [ ] Commands to swap the recorded shell (the Captain changes shells; Orbiter's record is what `shell init` uses).
 
 ## Phase 6: Deferred FIND review minors
 
