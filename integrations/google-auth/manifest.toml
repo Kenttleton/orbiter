@@ -6,6 +6,7 @@ roles = ["agent"]
 binaries = ["gcloud"]
 
 [commands]
+env = ["PATH", "HOME", "USER", "CLOUDSDK_*", "GOOGLE_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "gcloud", description = "Google Cloud SDK authentication operations" },

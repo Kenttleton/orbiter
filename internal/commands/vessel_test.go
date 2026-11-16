@@ -46,12 +46,15 @@ func TestRenderCatalogChecklist_Empty(t *testing.T) {
 	}
 }
 
+// An integration is a folder in the integrations directory. Inspecting one reports what is true of
+// it: quarantined, used (resources in the tree use it), idle (the folder is there and nothing
+// uses it), or missing (there is no such folder, so there is nothing to inspect).
+
 func TestIntegrationInspectInfo_Quarantined(t *testing.T) {
 	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
-	_ = settings.Quarantine("git", "attempted banned command: bash")
-	reg := integrations.NewRegistry(settings)
+	_ = settings.Quarantine("git", "attempted undeclared command: rm")
 
-	info := commands.IntegrationInspectInfo("git", settings, reg)
+	info := commands.IntegrationInspectInfo("git", settings, t.TempDir(), 0)
 	if !info.Quarantined {
 		t.Error("expected Quarantined = true")
 	}
@@ -62,22 +65,33 @@ func TestIntegrationInspectInfo_Quarantined(t *testing.T) {
 
 func TestIntegrationInspectInfo_NotQuarantined(t *testing.T) {
 	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
-	reg := integrations.NewRegistry(settings)
-
-	info := commands.IntegrationInspectInfo("git", settings, reg)
+	info := commands.IntegrationInspectInfo("git", settings, t.TempDir(), 0)
 	if info.Quarantined {
 		t.Error("expected Quarantined = false")
 	}
 }
 
-func TestIntegrationInspectInfo_Registered(t *testing.T) {
+func TestIntegrationInspectInfo_FoundIsTheFolder(t *testing.T) {
 	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
-	reg := integrations.NewRegistry(settings)
-	reg.Register("tool", "git", fakeIntegration{})
+	dir := t.TempDir()
+	if got := commands.IntegrationInspectInfo("git", settings, dir, 0); got.Found {
+		t.Error("no folder, so missing")
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "git", "manifest.toml"), []byte("[integration]\nbrand = \"git\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := commands.IntegrationInspectInfo("git", settings, dir, 0); !got.Found {
+		t.Error("the folder is there, so it is found")
+	}
+}
 
-	info := commands.IntegrationInspectInfo("git", settings, reg)
-	if !info.Registered {
-		t.Error("expected Registered = true when integration is in registry")
+func TestIntegrationInspectInfo_UsedBy(t *testing.T) {
+	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
+	if got := commands.IntegrationInspectInfo("git", settings, t.TempDir(), 3); got.UsedBy != 3 {
+		t.Errorf("UsedBy = %d, want 3", got.UsedBy)
 	}
 }
 
@@ -86,36 +100,41 @@ func TestWriteInspectReport_Quarantined(t *testing.T) {
 	info := commands.IntegrationInspectResult{
 		Brand:            "git",
 		Quarantined:      true,
-		QuarantineReason: "attempted banned command: bash",
+		QuarantineReason: "attempted undeclared command: rm",
 	}
 	commands.WriteInspectReport(&buf, info)
 	out := buf.String()
-	if !strings.Contains(out, "QUARANTINED") {
-		t.Errorf("missing QUARANTINED in output: %s", out)
-	}
-	if !strings.Contains(out, "attempted banned command: bash") {
-		t.Errorf("missing reason in output: %s", out)
-	}
-	if !strings.Contains(out, "orbiter unquarantine git") {
-		t.Errorf("missing restore hint in output: %s", out)
+	for _, want := range []string{"QUARANTINED", "attempted undeclared command: rm", "orbiter unquarantine git"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output: %s", want, out)
+		}
 	}
 }
 
-func TestWriteInspectReport_Active(t *testing.T) {
+func TestWriteInspectReport_InUse(t *testing.T) {
 	var buf bytes.Buffer
-	info := commands.IntegrationInspectResult{Brand: "git", Registered: true}
-	commands.WriteInspectReport(&buf, info)
-	if !strings.Contains(buf.String(), "active") {
-		t.Errorf("expected 'active' in output: %s", buf.String())
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "git", Found: true, UsedBy: 2})
+	if !strings.Contains(buf.String(), "Status:      used") || !strings.Contains(buf.String(), "2") {
+		t.Errorf("expected 'used' and the count: %s", buf.String())
 	}
 }
 
-func TestWriteInspectReport_NotInstalled(t *testing.T) {
+func TestWriteInspectReport_NotUsed(t *testing.T) {
 	var buf bytes.Buffer
-	info := commands.IntegrationInspectResult{Brand: "git"}
-	commands.WriteInspectReport(&buf, info)
-	if !strings.Contains(buf.String(), "not installed") {
-		t.Errorf("expected 'not installed' in output: %s", buf.String())
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "git", Found: true})
+	if !strings.Contains(buf.String(), "Status:      idle") {
+		t.Errorf("expected 'idle': %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "not installed") {
+		t.Errorf("an integration whose folder is there is never 'not installed': %s", buf.String())
+	}
+}
+
+func TestWriteInspectReport_NotFound(t *testing.T) {
+	var buf bytes.Buffer
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "nope"})
+	if !strings.Contains(buf.String(), "Status:      missing") {
+		t.Errorf("expected 'missing': %s", buf.String())
 	}
 }
 
@@ -211,5 +230,91 @@ func TestApplySelections_RemovesDeselected(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, e.Brand)); !os.IsNotExist(err) {
 			t.Errorf("expected %s to be removed after deselect", e.Brand)
 		}
+	}
+}
+
+// The Captain can see which engine an integration declared: the interpreter by default, the
+// compiler when the author asked for it.
+func TestIntegrationInspectInfo_ShowsTheDeclaredEngine(t *testing.T) {
+	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
+	dir := t.TempDir()
+	for brand, body := range map[string]string{
+		"plain":  "[integration]\nbrand = \"plain\"\n",
+		"fast":   "[integration]\nbrand = \"fast\"\n[runtime]\nengine = \"compiler\"\n",
+		"broken": "[integration]\nbrand = \"broken\"\n[runtime]\nengine = \"jit\"\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, brand), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, brand, "manifest.toml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for brand, want := range map[string]string{"plain": "interpreter", "fast": "compiler", "broken": "jit", "absent": ""} {
+		if got := commands.IntegrationInspectInfo(brand, settings, dir, 0).Engine; got != want {
+			t.Errorf("%s: Engine = %q, want %q", brand, got, want)
+		}
+	}
+}
+
+func TestWriteInspectReport_ShowsTheEngine(t *testing.T) {
+	var buf bytes.Buffer
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "git", Found: true, Engine: "compiler"})
+	if !strings.Contains(buf.String(), "Engine:      compiler") {
+		t.Errorf("expected the engine line: %s", buf.String())
+	}
+}
+
+func TestIntegrationInspectInfo_ShowsTheMemoryLimit(t *testing.T) {
+	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
+	dir := t.TempDir()
+	for brand, body := range map[string]string{
+		"plain": "[integration]\nbrand = \"plain\"\n",
+		"big":   "[integration]\nbrand = \"big\"\n[runtime]\nmemory_limit = 268435456\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, brand), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, brand, "manifest.toml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := commands.IntegrationInspectInfo("plain", settings, dir, 0).MemoryBytes; got != integrations.DefaultMemoryLimit {
+		t.Errorf("default MemoryBytes = %d", got)
+	}
+	if got := commands.IntegrationInspectInfo("big", settings, dir, 0).MemoryBytes; got != 268435456 {
+		t.Errorf("declared MemoryBytes = %d", got)
+	}
+	var buf bytes.Buffer
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "big", Found: true, Engine: "interpreter", MemoryBytes: 268435456})
+	if !strings.Contains(buf.String(), "Memory:      268435456 bytes") {
+		t.Errorf("expected the memory line: %s", buf.String())
+	}
+}
+
+// The Captain can read what environment an integration's commands are given.
+func TestIntegrationInspectInfo_ShowsTheEnvironmentClaim(t *testing.T) {
+	settings := integrations.NewSettingsStore(filepath.Join(t.TempDir(), "settings.json"))
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[integration]\nbrand = \"git\"\n[commands]\nenv = [\"HOME\", \"GIT_*\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "git", "manifest.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info := commands.IntegrationInspectInfo("git", settings, dir, 0)
+	if len(info.Env) != 2 || info.Env[0] != "HOME" {
+		t.Errorf("Env = %v", info.Env)
+	}
+	var buf bytes.Buffer
+	commands.WriteInspectReport(&buf, info)
+	if !strings.Contains(buf.String(), "Environment: HOME, GIT_*") {
+		t.Errorf("expected the environment line: %s", buf.String())
+	}
+	buf.Reset()
+	commands.WriteInspectReport(&buf, commands.IntegrationInspectResult{Brand: "x", Found: true, Engine: "interpreter"})
+	if !strings.Contains(buf.String(), "Environment: (none)") {
+		t.Errorf("an integration claiming nothing gets nothing, and says so: %s", buf.String())
 	}
 }

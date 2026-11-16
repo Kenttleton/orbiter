@@ -10,6 +10,7 @@ binaries = ["rustup"]
   runtime = ["rust"]
 
 [commands]
+env = ["PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "rustup", description = "Rust toolchain manager operations" },

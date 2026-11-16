@@ -11,6 +11,7 @@ exports = [
 ]
 
 [commands]
+env = ["PATH", "HOME"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "bash", description = "Check that bash is present and report its version (health check)" },

@@ -1,12 +1,16 @@
 package wasm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -17,25 +21,52 @@ import (
 type callStateKey struct{}
 
 type callState struct {
+	// hostNanos is the time spent inside host functions that wait on something outside the guest
+	// (the Captain, a command); hostSince is when the current host call began, or 0 when the
+	// guest is computing. The guest's compute budget does not count either.
+	hostNanos   atomic.Int64
+	hostSince   atomic.Int64
 	input       []byte
 	output      []byte
 	brand       string
-	allowed     []string // from manifest.Commands.Allowed
-	timeout     int      // manifest.Commands.TimeoutSeconds (0 = no limit)
+	allowed     []string                      // from manifest.Commands.Allowed
+	commands    integrations.ManifestCommands // the manifest's claim, for the child environment
+	timeout     int                           // manifest.Commands.TimeoutSeconds (0 = no limit)
 	approve     ApproveFunc
 	alwaysAllow AlwaysAllowFunc
 	settings    *integrations.SettingsStore
 	registry    *integrations.Registry
 }
 
-// newRuntime creates a wazero Runtime with WASI support and the "orbiter" host
-// module pre-instantiated. The returned runtime is ready to compile guest modules.
-func newRuntime(ctx context.Context) (wazero.Runtime, error) {
-	rt := wazero.NewRuntime(ctx)
+// runtimeConfig is the wazero configuration for an engine.
+func runtimeConfig(engine string, memoryPages uint32) (wazero.RuntimeConfig, error) {
+	switch engine {
+	case integrations.EngineInterpreter:
+		return limited(wazero.NewRuntimeConfigInterpreter(), memoryPages), nil
+	case integrations.EngineCompiler:
+		return limited(wazero.NewRuntimeConfigCompiler(), memoryPages), nil
+	}
+	return nil, fmt.Errorf("unknown runtime engine %q", engine)
+}
+
+// limited applies the limits every engine shares: a ceiling on guest memory, and a guest that stops
+// when its call's context ends (that is how GuestTimeout takes effect).
+func limited(cfg wazero.RuntimeConfig, memoryPages uint32) wazero.RuntimeConfig {
+	return cfg.WithMemoryLimitPages(memoryPages).WithCloseOnContextDone(true)
+}
+
+// newRuntime creates a wazero Runtime for an engine with the "orbiter" host module
+// pre-instantiated. The returned runtime is ready to compile guest modules.
+func newRuntime(ctx context.Context, engine string, memoryPages uint32) (wazero.Runtime, error) {
+	cfg, err := runtimeConfig(engine, memoryPages)
+	if err != nil {
+		return nil, err
+	}
+	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
 
 	// AssemblyScript modules always import env.abort (message, fileName, line, col).
 	// Provide a no-op implementation so AS-compiled guests can be instantiated.
-	_, err := rt.NewHostModuleBuilder("env").
+	_, err = rt.NewHostModuleBuilder("env").
 		NewFunctionBuilder().
 		WithGoModuleFunction(
 			api.GoModuleFunc(func(_ context.Context, _ api.Module, _ []uint64) {}),
@@ -78,6 +109,25 @@ func newRuntime(ctx context.Context) (wazero.Runtime, error) {
 	}
 
 	return rt, nil
+}
+
+func (cs *callState) enterHost() { cs.hostSince.Store(time.Now().UnixNano()) }
+
+func (cs *callState) leaveHost() {
+	if since := cs.hostSince.Swap(0); since != 0 {
+		cs.hostNanos.Add(time.Now().UnixNano() - since)
+	}
+}
+
+// guestElapsed is the time the guest has spent computing in this call: wall time since start,
+// minus the time spent in host functions that waited on someone else.
+func (cs *callState) guestElapsed(start time.Time) time.Duration {
+	now := time.Now().UnixNano()
+	host := cs.hostNanos.Load()
+	if since := cs.hostSince.Load(); since != 0 {
+		host += now - since
+	}
+	return time.Duration(now - start.UnixNano() - host)
 }
 
 // readInputFn implements orbiter.read_input(ptr, max) -> n.
@@ -140,6 +190,8 @@ func runCommandFn(ctx context.Context, mod api.Module, stack []uint64) {
 		stack[0] = 0
 		return
 	}
+	cs.enterHost()
+	defer cs.leaveHost()
 
 	specBytes, ok := mod.Memory().Read(specPtr, specLen)
 	if !ok {
@@ -179,6 +231,11 @@ func runCommandFn(ctx context.Context, mod api.Module, stack []uint64) {
 // without a live wazero module.
 func runGate(ctx context.Context, cs *callState, fullCmd, executable string, args []string) ([]byte, uint32) {
 	executableBase := filepath.Base(executable)
+	// The allowlist names commands, not paths: a path whose last element matches a declared name
+	// is some other program, so it counts as undeclared.
+	if executable != executableBase || strings.ContainsRune(executable, 0) {
+		executableBase = executable
+	}
 
 	// Stage 1: Quarantine check
 	if cs.registry != nil && cs.registry.IsQuarantined(cs.brand) {
@@ -254,20 +311,43 @@ func runGate(ctx context.Context, cs *callState, fullCmd, executable string, arg
 	return execute(ctx, cs, executable, args)
 }
 
-// execute runs executable with args and an optional timeout, returning combined output.
+// execute runs executable with args, returning combined output. A command that runs past its
+// timeout (the manifest's, or DefaultCommandTimeout) or writes more than MaxCommandOutput is killed
+// and counts as a failure.
 func execute(ctx context.Context, cs *callState, executable string, args []string) ([]byte, uint32) {
-	var cmd *exec.Cmd
+	timeout := DefaultCommandTimeout
 	if cs.timeout > 0 {
-		tctx, cancel := context.WithTimeout(ctx, time.Duration(cs.timeout)*time.Second)
-		defer cancel()
-		cmd = exec.CommandContext(tctx, executable, args...)
-	} else {
-		cmd = exec.Command(executable, args...)
+		timeout = time.Duration(cs.timeout) * time.Second
 	}
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, 1
+	cmd := exec.CommandContext(tctx, executable, args...)
+	cmd.Env = cs.commands.ChildEnv(os.Environ()) // exactly what the manifest claims
+	cmd.WaitDelay = time.Second                  // do not wait on a grandchild that keeps the pipe open
+	out := &cappedBuffer{max: MaxCommandOutput, cancel: cancel}
+	cmd.Stdout, cmd.Stderr = out, out
+
+	if err := cmd.Run(); err != nil || out.exceeded {
+		return out.buf.Bytes(), 1
 	}
-	return out, 0
+	return out.buf.Bytes(), 0
+}
+
+// cappedBuffer collects output up to max bytes; past that it stops the command.
+type cappedBuffer struct {
+	buf      bytes.Buffer
+	max      int
+	exceeded bool
+	cancel   context.CancelFunc
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	if room := c.max - c.buf.Len(); len(p) > room {
+		c.buf.Write(p[:max(room, 0)])
+		c.exceeded = true
+		c.cancel()
+		return len(p), nil
+	}
+	return c.buf.Write(p)
 }

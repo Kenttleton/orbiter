@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Kenttleton/orbiter/internal/integrations"
@@ -24,7 +25,7 @@ type ApproveFunc func(brand, fullCmd string) bool
 
 // StdinApproveFunc is the default ApproveFunc, used when running interactively.
 func StdinApproveFunc(brand, fullCmd string) bool {
-	fmt.Fprintf(os.Stderr, "\n  orbiter: integration %q wants to run:\n    %s\n  Allow? [y/N] ", brand, fullCmd)
+	fmt.Fprintf(os.Stderr, "\n  orbiter: integration %q wants to run:\n    %s\n  Allow? [y/N] ", brand, display(fullCmd))
 	var response string
 	fmt.Fscan(os.Stdin, &response)
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
@@ -68,8 +69,24 @@ var ApprovalPollInterval = 200 * time.Millisecond
 func RendererApproveFunc(r output.Renderer, store PromptStore) ApproveFunc {
 	c := &confirmer{r: r, store: store}
 	return func(brand, fullCmd string) bool {
-		return c.ask(fmt.Sprintf("%s wants to run: %s", brand, fullCmd))
+		return c.ask(fmt.Sprintf("%s wants to run: %s", display(brand), display(fullCmd)))
 	}
+}
+
+// display makes text chosen by a guest or a manifest safe to show the Captain: control characters
+// (escape sequences, carriage returns, newlines) are written out as \x1b, \r, \n instead of being
+// sent to the terminal, where they could redraw the prompt to say something else.
+func display(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == 0x7f || (r < 0x20) || (r >= 0x80 && r < 0xa0):
+			fmt.Fprintf(&b, "\\x%02x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // RendererAlwaysAllowFunc returns an AlwaysAllowFunc with the same transaction flow as
@@ -77,7 +94,7 @@ func RendererApproveFunc(r output.Renderer, store PromptStore) ApproveFunc {
 func RendererAlwaysAllowFunc(r output.Renderer, store PromptStore) AlwaysAllowFunc {
 	c := &confirmer{r: r, store: store}
 	return func(brand, fullCmd string) bool {
-		return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", brand, fullCmd))
+		return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", display(brand), display(fullCmd)))
 	}
 }
 
@@ -94,10 +111,10 @@ func RendererPrompts(r output.Renderer, store PromptStore) Prompts {
 	c := &confirmer{r: r, store: store}
 	return Prompts{
 		Approve: func(brand, fullCmd string) bool {
-			return c.ask(fmt.Sprintf("%s wants to run: %s", brand, fullCmd))
+			return c.ask(fmt.Sprintf("%s wants to run: %s", display(brand), display(fullCmd)))
 		},
 		AlwaysAllow: func(brand, fullCmd string) bool {
-			return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", brand, fullCmd))
+			return c.ask(fmt.Sprintf("Always allow this exact command for %q? %s", display(brand), display(fullCmd)))
 		},
 	}
 }
@@ -166,21 +183,25 @@ func StdinAlwaysAllowFunc(brand, fullCmd string) bool {
 	return strings.ToLower(strings.TrimSpace(response)) == "y"
 }
 
-// WASMIntegration wraps a pool of live WASM module instances and implements integrations.Integration.
-// Exported functions (detect, initialize, scan, calibrate) are called Lambda-style: stateless,
-// independently invocable, no restart cost. The channel-based pool allows N concurrent calls
-// where N = manifest.Runtime.PoolSize (defaults to 1).
+// WASMIntegration is a compiled WASM module and implements integrations.Integration. It is
+// stateless and serverless-style: every call (detect, initialize, scan, calibrate) instantiates a
+// fresh module, runs the export and closes the instance, so nothing one call leaves in memory
+// reaches the next. Orbiter is the state manager; an integration keeps nothing. At most
+// manifest.Runtime.PoolSize instances run at once (default 1).
 type WASMIntegration struct {
 	manifest    integrations.Manifest
-	pool        chan api.Module
+	slots       chan struct{} // one token per instance that may be alive at once (manifest pool_size)
+	alive       atomic.Int32
+	rt          wazero.Runtime
+	compiled    wazero.CompiledModule
 	approve     ApproveFunc
 	alwaysAllow AlwaysAllowFunc
 	settings    *integrations.SettingsStore
 	registry    *integrations.Registry
 }
 
-// Load compiles wasmBytes, instantiates the module, and returns a WASMIntegration
-// ready to serve calls. The module stays alive for the lifetime of the integration.
+// Load compiles wasmBytes, checks that the module imports nothing the host does not offer, and
+// returns a WASMIntegration ready to serve calls. No instance is created until a call needs one.
 // A nil field in prompts falls back to reading the terminal.
 func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte, settings *integrations.SettingsStore, registry *integrations.Registry, prompts Prompts) (*WASMIntegration, error) {
 	approve, alwaysAllow := prompts.Approve, prompts.AlwaysAllow
@@ -191,40 +212,41 @@ func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte,
 		alwaysAllow = StdinAlwaysAllowFunc
 	}
 
-	rt := SharedRuntime(ctx)
+	if err := manifest.Runtime.ValidateEngine(); err != nil {
+		return nil, err
+	}
+	if err := manifest.Runtime.ValidateMemory(); err != nil {
+		return nil, err
+	}
+	rt, err := RuntimeFor(ctx, manifest.Runtime.EngineName(), manifest.Runtime.MemoryPages())
+	if err != nil {
+		return nil, err
+	}
 
 	compiled, err := rt.CompileModule(ctx, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("compile wasm module: %w", err)
 	}
 
+	if err := checkImports(compiled); err != nil {
+		compiled.Close(ctx)
+		return nil, err
+	}
+
 	poolSize := manifest.Runtime.PoolSize
 	if poolSize <= 0 {
 		poolSize = 1
 	}
-
-	pool := make(chan api.Module, poolSize)
-	for i := range poolSize {
-		mod, err := rt.InstantiateModule(ctx, compiled,
-			wazero.NewModuleConfig().
-				WithName("").
-				WithStdout(io.Discard).
-				WithStderr(io.Discard),
-		)
-		if err != nil {
-			close(pool)
-			for m := range pool {
-				m.Close(ctx)
-			}
-			compiled.Close(ctx)
-			return nil, fmt.Errorf("instantiate wasm pool[%d]: %w", i, err)
-		}
-		pool <- mod
+	slots := make(chan struct{}, poolSize)
+	for range poolSize {
+		slots <- struct{}{}
 	}
 
 	return &WASMIntegration{
 		manifest:    manifest,
-		pool:        pool,
+		slots:       slots,
+		rt:          rt,
+		compiled:    compiled,
 		approve:     approve,
 		alwaysAllow: alwaysAllow,
 		settings:    settings,
@@ -232,7 +254,50 @@ func Load(ctx context.Context, manifest integrations.Manifest, wasmBytes []byte,
 	}, nil
 }
 
+// instantiate makes one live instance of a compiled module. The guest gets no files, no console
+// and no clock beyond what wazero's defaults give a module with no WASI: only the orbiter host
+// functions.
+func instantiate(ctx context.Context, rt wazero.Runtime, compiled wazero.CompiledModule) (api.Module, error) {
+	return rt.InstantiateModule(ctx, compiled,
+		wazero.NewModuleConfig().
+			WithName("").
+			WithStdout(io.Discard).
+			WithStderr(io.Discard),
+	)
+}
+
+// live is how many instances are alive right now.
+func (w *WASMIntegration) live() int { return int(w.alive.Load()) }
+
+// hostImports is every function a guest may import: the orbiter host functions, and the abort
+// hook AssemblyScript modules always carry. Anything else (WASI, a function that does not exist)
+// is a guest asking for more than it was given.
+var hostImports = map[string]bool{
+	"orbiter.read_input":   true,
+	"orbiter.write_output": true,
+	"orbiter.run_command":  true,
+	"env.abort":            true,
+}
+
+// checkImports rejects a module that imports anything outside hostImports, memories and tables
+// included.
+func checkImports(compiled wazero.CompiledModule) error {
+	for _, f := range compiled.ImportedFunctions() {
+		mod, name, _ := f.Import()
+		if !hostImports[mod+"."+name] {
+			return fmt.Errorf("guest imports %s.%s, which the host does not offer", mod, name)
+		}
+	}
+	if len(compiled.ImportedMemories()) > 0 {
+		return fmt.Errorf("guest imports a memory; a guest owns its own")
+	}
+	return nil
+}
+
 func (w *WASMIntegration) Meta() integrations.Manifest { return w.manifest }
+
+// Engine is the engine this integration's wasm runs on: interpreter or compiler.
+func (w *WASMIntegration) Engine() string { return w.manifest.Runtime.EngineName() }
 
 func (w *WASMIntegration) Detect(ctx integrations.DetectContext) integrations.DetectReport {
 	input, _ := json.Marshal(ctx)
@@ -295,24 +360,28 @@ func (w *WASMIntegration) Calibrate(ctx integrations.ResolvedContext) integratio
 // On error the module is closed and discarded rather than returned to the pool,
 // because a WASM trap may leave the module in a corrupted state.
 func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (_ []byte, retErr error) {
-	var mod api.Module
 	select {
-	case mod = <-w.pool:
+	case <-w.slots:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	defer func() { w.slots <- struct{}{} }()
+
+	mod, err := instantiate(ctx, w.rt, w.compiled)
+	if err != nil {
+		return nil, fmt.Errorf("instantiate: %w", err)
+	}
+	w.alive.Add(1)
 	defer func() {
-		if retErr != nil {
-			mod.Close(ctx) // discard; pool shrinks by 1
-		} else {
-			w.pool <- mod
-		}
+		mod.Close(context.Background())
+		w.alive.Add(-1)
 	}()
 
 	cs := &callState{
 		input:       input,
 		brand:       w.manifest.Integration.Brand,
 		allowed:     w.manifest.Commands.AllowedCmds(),
+		commands:    w.manifest.Commands,
 		timeout:     w.manifest.Commands.TimeoutSeconds,
 		approve:     w.approve,
 		alwaysAllow: w.alwaysAllow,
@@ -321,11 +390,38 @@ func (w *WASMIntegration) invoke(ctx context.Context, fn string, input []byte) (
 	}
 	ctx = context.WithValue(ctx, callStateKey{}, cs)
 
+	// The guest's compute budget: stop the call when the guest has used GuestTimeout of its own time.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	start := time.Now()
+	timedOut := make(chan struct{})
+	go func() {
+		tick := time.NewTicker(max(GuestTimeout/20, time.Millisecond))
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				if cs.guestElapsed(start) > GuestTimeout {
+					close(timedOut)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
 	exported := mod.ExportedFunction(fn)
 	if exported == nil {
 		return nil, fmt.Errorf("function %q not exported by wasm module", fn)
 	}
 	if _, err := exported.Call(ctx); err != nil {
+		select {
+		case <-timedOut:
+			return nil, fmt.Errorf("call %q: guest used more than %s of compute and was stopped", fn, GuestTimeout)
+		default:
+		}
 		return nil, fmt.Errorf("call %q: %w", fn, err)
 	}
 	return cs.output, nil

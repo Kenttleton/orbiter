@@ -9,6 +9,7 @@ binaries = ["asdf"]
 files = [".tool-versions"]
 
 [commands]
+env = ["PATH", "HOME", "ASDF_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "asdf",  description = "Version manager operations" },

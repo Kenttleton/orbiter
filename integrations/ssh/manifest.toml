@@ -6,6 +6,7 @@ roles = ["agent"]
 binaries = ["ssh-agent"]
 
 [commands]
+env = ["PATH", "HOME", "USER", "SSH_AUTH_SOCK", "SSH_AGENT_PID"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 15
 allowed = [
   { cmd = "ssh-agent", description = "Manage the SSH authentication agent process" },

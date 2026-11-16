@@ -13,6 +13,11 @@ exec orbiter --output json planet add api --galaxy acme
 exec orbiter --output json resource add git --role tool --brand git
 exec orbiter --output json attach git api
 
+step the git integration is used now that a resource of that brand is in the tree
+exec orbiter vessel inspect git
+stdout 'Status:      used'
+stdout 'Used by:     1 in the tree'
+
 step survey the planet: everything is registered and nothing is verified yet
 exec orbiter survey api -v
 stdout 'tool/git'

@@ -278,3 +278,111 @@ envs  = ["HOMEBREW_PREFIX"]
 		t.Errorf("Envs = %v", got)
 	}
 }
+
+// An author declares the engine that runs the integration's wasm in [runtime]. The interpreter is
+// the default: it translates nothing at start-up and generates no native code.
+func TestManifestRuntime_EngineDefaultsToTheInterpreter(t *testing.T) {
+	var m integrations.Manifest
+	if _, err := toml.Decode("[integration]\nbrand = \"x\"\n", &m); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Runtime.EngineName(); got != integrations.EngineInterpreter {
+		t.Errorf("EngineName() = %q, want %q", got, integrations.EngineInterpreter)
+	}
+	if err := m.Runtime.ValidateEngine(); err != nil {
+		t.Errorf("an absent engine is the default, not an error: %v", err)
+	}
+}
+
+func TestManifestRuntime_EngineIsDeclared(t *testing.T) {
+	var m integrations.Manifest
+	if _, err := toml.Decode("[runtime]\nengine = \"compiler\"\n", &m); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Runtime.EngineName(); got != integrations.EngineCompiler {
+		t.Errorf("EngineName() = %q, want %q", got, integrations.EngineCompiler)
+	}
+	if err := m.Runtime.ValidateEngine(); err != nil {
+		t.Errorf("compiler is a valid engine: %v", err)
+	}
+}
+
+func TestManifestRuntime_AnUnknownEngineIsRejected(t *testing.T) {
+	var m integrations.Manifest
+	if _, err := toml.Decode("[runtime]\nengine = \"jit\"\n", &m); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Runtime.ValidateEngine(); err == nil {
+		t.Error("an unknown engine must be rejected, not silently run on some default")
+	}
+}
+
+// An author may declare how much memory the guest needs, in bytes; omitted, the host default applies.
+func TestManifestRuntime_MemoryDefaultsAndIsDeclaredInBytes(t *testing.T) {
+	var none, set integrations.Manifest
+	if _, err := toml.Decode("[integration]\nbrand = \"x\"\n", &none); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := toml.Decode("[runtime]\nmemory_limit = 8388608\n", &set); err != nil {
+		t.Fatal(err)
+	}
+	if got := none.Runtime.MemoryLimit(); got != integrations.DefaultMemoryLimit {
+		t.Errorf("default = %d bytes, want %d", got, integrations.DefaultMemoryLimit)
+	}
+	if got := set.Runtime.MemoryLimit(); got != 8388608 {
+		t.Errorf("declared = %d bytes, want 8388608", got)
+	}
+	if got := set.Runtime.MemoryPages(); got != 128 {
+		t.Errorf("8388608 bytes is %d pages, want 128", got)
+	}
+}
+
+// A limit that is not a whole number of 64 KiB pages rounds up: a guest is never given less than it asked for.
+func TestManifestRuntime_MemoryRoundsUpToWholePages(t *testing.T) {
+	if got := (integrations.ManifestRuntime{MemoryBytes: 65537}).MemoryPages(); got != 2 {
+		t.Errorf("65537 bytes is %d pages, want 2", got)
+	}
+}
+
+func TestManifestRuntime_MemoryOutOfRangeIsRejected(t *testing.T) {
+	for _, n := range []int64{-1, 1, 65535, integrations.MaxMemoryLimit + 1} {
+		if err := (integrations.ManifestRuntime{MemoryBytes: n}).ValidateMemory(); err == nil {
+			t.Errorf("%d bytes must be rejected (negative, under one page, or past the ceiling)", n)
+		}
+	}
+	for _, n := range []int64{0, 65536, integrations.MaxMemoryLimit} {
+		if err := (integrations.ManifestRuntime{MemoryBytes: n}).ValidateMemory(); err != nil {
+			t.Errorf("%d bytes is allowed: %v", n, err)
+		}
+	}
+}
+
+// The environment a command receives is exactly what the manifest claims: nothing is implicit,
+// PATH included. A name ending in * claims every variable with that prefix.
+func TestManifestCommands_ChildEnvIsExactlyWhatTheManifestClaims(t *testing.T) {
+	c := integrations.ManifestCommands{Env: []string{"PATH", "HOME", "GIT_*"}}
+	environ := []string{"PATH=/bin", "HOME=/h", "GIT_DIR=/g", "GIT_SSH=ssh", "GITHUB_TOKEN=secret", "AWS_SECRET_ACCESS_KEY=x", "HOMEBREW_PREFIX=/opt"}
+	got := c.ChildEnv(environ)
+	want := map[string]bool{"PATH=/bin": true, "HOME=/h": true, "GIT_DIR=/g": true, "GIT_SSH=ssh": true}
+	if len(got) != len(want) {
+		t.Fatalf("ChildEnv = %v, want exactly %v", got, want)
+	}
+	for _, kv := range got {
+		if !want[kv] {
+			t.Errorf("unclaimed variable passed through: %s", kv)
+		}
+	}
+}
+
+func TestManifestCommands_PathIsNotImplicit(t *testing.T) {
+	got := integrations.ManifestCommands{Env: []string{"HOME"}}.ChildEnv([]string{"PATH=/bin", "HOME=/h"})
+	if len(got) != 1 || got[0] != "HOME=/h" {
+		t.Errorf("ChildEnv = %v: PATH must be claimed like any other variable", got)
+	}
+}
+
+func TestManifestCommands_NoClaimMeansAnEmptyEnvironment(t *testing.T) {
+	if got := (integrations.ManifestCommands{}).ChildEnv([]string{"PATH=/bin", "HOME=/h"}); len(got) != 0 {
+		t.Errorf("ChildEnv = %v, want nothing", got)
+	}
+}

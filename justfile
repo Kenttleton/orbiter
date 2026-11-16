@@ -40,6 +40,16 @@ lint:
 clean:
     rm -f bin/orbiter
 
+# ── Test guests ────────────────────────────────────────────────────────────────
+
+# Assemble the hostile and well-behaved test guests (WAT to wasm) used by the sandbox tests.
+# The tests never assemble anything; they read the committed .wasm files. Needs binaryen's wasm-as.
+build-test-guests:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd internal/wasm/testdata/guests
+    for f in *.wat; do wasm-as "$f" -o "${f%.wat}.wasm"; done
+
 # ── Integration WASM builds ────────────────────────────────────────────────────
 
 # Build all integration WASM plugins

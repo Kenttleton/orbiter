@@ -9,6 +9,7 @@ binaries = ["gh"]
 files = [".git/config"]
 
 [commands]
+env = ["PATH", "HOME", "XDG_CONFIG_HOME", "GH_*", "GITHUB_*", "GIT_*", "SSH_AUTH_SOCK"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 60
 allowed = [
   { cmd = "gh",    description = "GitHub CLI operations (PRs, issues, auth)" },

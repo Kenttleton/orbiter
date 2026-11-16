@@ -156,6 +156,12 @@ func LoadInstalled(dir string, registry *core.Registry, prompts wasm.Prompts, ro
 			log.Printf("orbiter: parse manifest %s: %v", manifestPath, err)
 			continue
 		}
+		// The folder is the integration: trust, quarantine and the audit log key on the brand, so a
+		// folder that claims another brand would inherit that integration's standing.
+		if manifest.Integration.Brand != name {
+			log.Printf("orbiter: skip %s: its manifest declares brand %q, which is not its folder name", name, manifest.Integration.Brand)
+			continue
+		}
 		if len(roles) > 0 && !slices.ContainsFunc(manifest.Integration.Roles, func(r string) bool { return slices.Contains(roles, r) }) {
 			continue
 		}

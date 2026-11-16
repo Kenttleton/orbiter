@@ -6,6 +6,7 @@ roles = ["keychain"]
 binaries = ["security"]
 
 [commands]
+env = ["PATH", "HOME", "USER"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 15
 allowed = [
   { cmd = "security", description = "macOS Keychain credential access" },

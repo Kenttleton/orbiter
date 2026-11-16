@@ -9,6 +9,7 @@ binaries = ["make"]
 files = ["Makefile", "GNUmakefile"]
 
 [commands]
+env = ["PATH", "HOME", "MAKEFLAGS"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "make",  description = "Build tool operations" },

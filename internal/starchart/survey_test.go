@@ -82,3 +82,24 @@ func TestAttachedTo_ListsDirectAttachments(t *testing.T) {
 	assert.Equal(t, "gh", got.Transponders[0].Name)
 	_ = models.EntityTypeGalaxy
 }
+
+// How many things in the tree use an integration: resources and transponders of that brand.
+func TestCountUsing_CountsResourcesAndTranspondersOfABrand(t *testing.T) {
+	ctx := t.Context()
+	sc := testDB(t)
+	_, err := sc.CreateResource(ctx, "a", "tool", "git", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "b", "tool", "git", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.CreateResource(ctx, "c", "runtime", "golang", "[]", "{}")
+	require.NoError(t, err)
+	_, err = sc.CreateTransponder(ctx, "t", "file", "git", "{}")
+	require.NoError(t, err)
+
+	n, err := sc.CountUsing(ctx, "git")
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+	n, err = sc.CountUsing(ctx, "nothing")
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}

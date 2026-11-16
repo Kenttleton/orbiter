@@ -6,6 +6,7 @@ roles = ["manager"]
 binaries = ["brew"]
 
 [commands]
+env = ["PATH", "HOME", "HOMEBREW_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "brew",  description = "Homebrew package manager operations" },

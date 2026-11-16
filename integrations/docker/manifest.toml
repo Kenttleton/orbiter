@@ -9,6 +9,7 @@ binaries = ["docker"]
 files = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
 
 [commands]
+env = ["PATH", "HOME", "XDG_CONFIG_HOME", "DOCKER_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "docker", description = "Container runtime operations" },

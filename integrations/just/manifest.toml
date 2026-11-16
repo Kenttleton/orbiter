@@ -9,6 +9,7 @@ binaries = ["just"]
 files = ["Justfile", "justfile"]
 
 [commands]
+env = ["PATH", "HOME", "JUST_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "just",  description = "Task runner operations" },

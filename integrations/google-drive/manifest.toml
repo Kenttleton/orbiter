@@ -9,6 +9,7 @@ roles = ["remote"]
   agent = ["google-auth"]
 
 [commands]
+env = ["PATH", "HOME"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 15
 allowed = [
   { cmd = "stat",  description = "Check sync folder existence" },

@@ -9,6 +9,7 @@ binaries = ["uv"]
 files = ["uv.lock"]
 
 [commands]
+env = ["PATH", "HOME", "XDG_CONFIG_HOME", "UV_*", "VIRTUAL_ENV"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "uv",    description = "Python package manager operations" },

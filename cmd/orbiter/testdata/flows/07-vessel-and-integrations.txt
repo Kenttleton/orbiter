@@ -29,10 +29,10 @@ stdout 'orbiter'
 step look at an integration
 exec orbiter vessel inspect git
 stdout 'Integration: git'
-stdout 'Status:'
-finding vessel inspect reports "not installed" for an integration whose folder is in the integrations directory: it never loads the integration it reports on (roadmap Phase 4)
+stdout 'Status:      idle'
+! stdout 'not installed'
 exec orbiter vessel inspect unknown-brand
-stdout 'not installed'
+stdout 'Status:      missing'
 
 step quarantine an integration that is misbehaving
 exec orbiter quarantine git

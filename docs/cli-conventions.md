@@ -89,7 +89,7 @@ Types live in `internal/commands/results.go` and `internal/commands/survey.go`.
 | `chart` | `plan` event: `[{action, entity_type, name, description}]` |
 | `retro` | `RetroResult`: `target, retired, nodes: [{name, action}]`. Pass `-y`: a JSON client cannot answer the terminal prompt |
 | `quarantine`, `unquarantine`, `vessel unquarantine` | `QuarantineResult`: `brand, quarantined, changed` |
-| `vessel inspect`, `survey <brand>` | `InspectResult`: `brand, status (quarantined\|active\|not_installed), quarantined, reason?, since?` |
+| `vessel inspect`, `survey <brand>` | `InspectResult`: `brand, status (quarantined\|used\|idle\|missing), used_by, engine?, memory_bytes?, env?, quarantined, reason?, since?` |
 | `vessel init -y` | `VesselInitResult`: `installed, removed` |
 
 ### Survey

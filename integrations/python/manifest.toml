@@ -9,6 +9,7 @@ binaries = ["python3"]
 files = ["pyproject.toml", "requirements.txt", "setup.py"]
 
 [commands]
+env = ["PATH", "HOME", "VIRTUAL_ENV", "PYENV_*", "PYTHON*", "UV_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "python3", description = "Python interpreter version detection" },

@@ -9,6 +9,7 @@ binaries = ["go"]
 files = ["go.mod", "go.sum"]
 
 [commands]
+env = ["PATH", "HOME", "GOPATH", "GOROOT", "GOFLAGS", "GOPROXY", "GOBIN", "GOENV", "GOMODCACHE", "GOCACHE", "GOTOOLCHAIN"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "go",    description = "Go toolchain operations" },

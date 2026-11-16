@@ -6,6 +6,7 @@ roles = ["vault"]
 binaries = ["op"]
 
 [commands]
+env = ["PATH", "HOME", "XDG_CONFIG_HOME", "OP_*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 15
 allowed = [
   { cmd = "op",    description = "1Password CLI credential and vault operations" },

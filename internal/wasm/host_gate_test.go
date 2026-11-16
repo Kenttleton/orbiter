@@ -23,11 +23,11 @@ func gateState(allowed []string, reg *integrations.Registry) *callState {
 	}
 }
 
-// Any executable may be declared, shells included: a shell checking its own version is exactly
+// Any executable may be declared, shells included, by name (a path is not a name: see security_test.go): a shell checking its own version is exactly
 // what its manifest says it does.
 func TestRunGate_AnExecutableTheManifestDeclaresRuns(t *testing.T) {
 	reg := integrations.NewRegistry(nil)
-	out, code := runGate(context.Background(), gateState([]string{"sh"}, reg), "sh -c echo-declared", "/bin/sh", []string{"-c", "echo declared"})
+	out, code := runGate(context.Background(), gateState([]string{"sh"}, reg), "sh -c echo-declared", "sh", []string{"-c", "echo declared"})
 
 	if code != 0 {
 		t.Fatalf("exit code %d, output %q: a declared command must reach the Captain's approval and run", code, out)

@@ -31,6 +31,7 @@ just flows-brief                      # the story: steps, prompts, findings, rep
 just flows                            # full output: every command and its stdout
 just flow 01-register-and-calibrate-git   # one flow, full output
 just unit                             # unit tests only (mocked)
+just build-test-guests                # assemble the hostile/well-behaved wasm test guests (needs binaryen wasm-as)
 ```
 
 Without `-v` (which the recipes pass) a flow only prints when it fails.

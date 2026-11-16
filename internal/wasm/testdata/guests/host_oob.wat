@@ -1,0 +1,16 @@
+;; Hands the host pointers and lengths that point outside its memory, to every host function.
+(module
+  (import "orbiter" "read_input" (func $read_input (param i32 i32) (result i32)))
+  (import "orbiter" "write_output" (func $write_output (param i32 i32)))
+  (import "orbiter" "run_command" (func $run_command (param i32 i32 i32 i32) (result i32)))
+  (memory (export "memory") 1)
+  (func (export "scan")
+    (drop (call $read_input (i32.const 4294967280) (i32.const 65535)))
+    (drop (call $read_input (i32.const 65530) (i32.const 4294967295)))
+    (call $write_output (i32.const 4294967280) (i32.const 100))
+    (call $write_output (i32.const 0) (i32.const 4294967295))
+    (drop (call $run_command (i32.const 4294967280) (i32.const 100) (i32.const 0) (i32.const 10)))
+    (drop (call $run_command (i32.const 0) (i32.const 4294967295) (i32.const 4294967280) (i32.const 4294967295)))
+    (i32.store8 (i32.const 0) (i32.const 79))
+    (i32.store8 (i32.const 1) (i32.const 75))
+    (call $write_output (i32.const 0) (i32.const 2))))

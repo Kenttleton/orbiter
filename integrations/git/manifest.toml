@@ -9,6 +9,7 @@ binaries = ["git"]
 files = [".git/config"]
 
 [commands]
+env = ["PATH", "HOME", "XDG_CONFIG_HOME", "USER", "LOGNAME", "GIT_*", "SSH_AUTH_SOCK", "SSH_AGENT_PID"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "git",        description = "VCS and remote operations" },

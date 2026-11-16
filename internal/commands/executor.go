@@ -132,21 +132,20 @@ func (e *Executor) Hook(ctx context.Context, cwd, currentPlanet string) ([]Direc
 	return directives, nil
 }
 
-// isCatalogBrand returns true if target matches a bundled integration brand.
-func isCatalogBrand(target string) bool {
-	for _, e := range bundle.CatalogEntries() {
-		if e.Brand == target {
-			return true
-		}
-	}
-	return false
+// isIntegrationFolder returns true if target names a folder in the integrations directory.
+func isIntegrationFolder(target string) bool {
+	_, err := os.Stat(filepath.Join(bundle.DefaultIntegrationsDir(), target, "manifest.toml"))
+	return err == nil
 }
 
 // Survey renders the desired state and last beacon for the target entity.
-// If target is a known integration brand, it shows integration state instead.
+// If target is an integration in the integrations folder, it shows integration state instead.
 func (e *Executor) Survey(ctx context.Context, target string, opts SurveyOptions) error {
-	if target != "" && isCatalogBrand(target) {
-		info := IntegrationInspectInfo(target, integrations.DefaultSettings, integrations.Default)
+	if target != "" && isIntegrationFolder(target) {
+		info, err := inspectBrand(ctx, e.sc, target)
+		if err != nil {
+			return err
+		}
 		reportInspect(e.renderer, info)
 		return nil
 	}

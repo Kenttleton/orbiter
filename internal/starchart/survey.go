@@ -140,3 +140,13 @@ func (sc *StarChart) AttachedTo(ctx context.Context, nodeID string) (Attached, e
 	}
 	return out, rows.Err()
 }
+
+// CountUsing returns how many resources and transponders in the tree are of the given brand,
+// that is, how many things use that integration.
+func (sc *StarChart) CountUsing(ctx context.Context, brand string) (int, error) {
+	var n int
+	err := sc.db.QueryRowContext(ctx,
+		`SELECT (SELECT COUNT(*) FROM resources WHERE brand = ?)
+		      + (SELECT COUNT(*) FROM transponders WHERE brand = ?)`, brand, brand).Scan(&n)
+	return n, err
+}

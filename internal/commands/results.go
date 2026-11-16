@@ -110,7 +110,11 @@ type QuarantineResult struct {
 // InspectResult is the JSON result of vessel inspect and survey <brand>.
 type InspectResult struct {
 	Brand       string     `json:"brand"`
-	Status      string     `json:"status"` // quarantined | active | not_installed
+	Status      string     `json:"status"` // quarantined | used | idle | missing
+	UsedBy      int        `json:"used_by"`
+	Engine      string     `json:"engine,omitempty"` // interpreter | compiler
+	MemoryBytes int64      `json:"memory_bytes,omitempty"`
+	Env         []string   `json:"env,omitempty"` // variables claimed for commands; nothing else is passed
 	Quarantined bool       `json:"quarantined"`
 	Reason      string     `json:"reason,omitempty"`
 	Since       *time.Time `json:"since,omitempty"`

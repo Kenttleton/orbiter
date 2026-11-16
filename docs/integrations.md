@@ -31,7 +31,9 @@ Defense is layered:
 
 **WASM sandbox** — The module cannot access the filesystem, network, or OS directly. The only way to interact with the outside world is through the three host-imported functions: `read_input`, `write_output`, and `run_command`. The sandbox eliminates entire attack classes.
 
-**`[commands]` allowlist** — Every executable an integration may pass to `run_command` must be declared in the manifest's `[commands] allowed` list. The host rejects any call for an undeclared executable and returns a zero-length result. The integration cannot silently expand its access beyond what it declared upfront.
+**`[commands]` allowlist** — Every executable an integration may pass to `run_command` must be declared in the manifest's `[commands] allowed` list. The allowlist names commands, not paths: a call for `/tmp/x/git` is not a call for `git`. The host rejects any call for an undeclared executable, quarantines the integration, and returns a zero-length result. The integration cannot silently expand its access beyond what it declared upfront.
+
+**Engine** — `[runtime] engine` is `interpreter` (the default) or `compiler`. Both run the same sandbox; the compiler pays about 0.4 s per process start and only suits a guest that computes heavily. `vessel inspect` shows the declared engine.
 
 **Audit log** — Every `run_command` invocation — allowed or rejected — is written to `~/.orbiter/audit.log` as a JSON line with timestamp, brand, command, arguments, exit code, and duration. Rejected calls include `"rejected": true` and the reason. The audit log is the primary forensic tool.
 
@@ -40,7 +42,11 @@ Defense is layered:
 {"ts":"2026-06-11T14:32:02Z","brand":"gh","cmd":"curl","args":["evil.com"],"exit":-1,"rejected":true,"reason":"not in allowlist"}
 ```
 
-**No ambient environment** — Subprocesses spawned by `run_command` inherit only `PATH`. No secrets, tokens, or session credentials leak via the environment.
+**Environment** — A command receives exactly the variables the manifest claims in `[commands] env` (a trailing `*` claims a prefix); nothing is implicit, `PATH` included. No secrets, tokens, or session credentials reach a command unless the manifest says it needs them, and `vessel inspect` prints the claim.
+
+**Stateless** — Every call runs on a fresh instance that is closed afterward. An integration keeps nothing between calls; Orbiter holds the state.
+
+**Limits** — A guest's compute time, memory, and the run time and output of the commands it starts are capped (`docs/security.md`, "Limits"). `[runtime] memory_limit` (bytes) sets the memory cap (default 67108864).
 
 **Validated shell exports** — Integrations communicate required shell state through `StateReport.Exports`. Every key is validated against the manifest's `[shell] exports` allowlist before Orbiter emits any shell directive. Undeclared keys are dropped and logged. Integrations never write to the Captain's shell directly.
 
@@ -56,6 +62,8 @@ Defense is layered:
 ### Limitations
 
 The `[commands]` allowlist declares capability claims — it does not prevent an allowed command from receiving malicious arguments. For example, an integration that declares `git` in its allowlist could construct a `git` invocation with harmful flags. The audit log surfaces this; detection is the Captain's responsibility.
+
+`docs/security.md` lists the open work (argument validation, shell sandboxing, signing) and the tests that pin it.
 
 **Future work:** WASM module signing and verification, subprocess sandboxing (seccomp/namespaces on Linux, sandbox profiles on macOS).
 

@@ -258,3 +258,25 @@ func TestRendererPrompts_share_one_session(t *testing.T) {
 		t.Errorf("sessions = %d, want 1 shared by both prompts", store.sessions)
 	}
 }
+
+// The Captain approves what the prompt shows. A guest chooses the arguments, so terminal control
+// characters in them (a carriage return, a cursor move, a line clear, a newline) must not reach the
+// terminal, where they could redraw the prompt to read as a harmless command.
+func TestApprovalPrompt_CommandControlCharactersAreShownNotObeyed(t *testing.T) {
+	hostile := "git status\r\x1b[2K\x1b[1Arm -rf ~ # \nOK to run: git status"
+	for name, mk := range map[string]func(r output.Renderer) wasm.ApproveFunc{
+		"approve":         func(r output.Renderer) wasm.ApproveFunc { return wasm.RendererApproveFunc(r, nil) },
+		"prompts approve": func(r output.Renderer) wasm.ApproveFunc { return wasm.RendererPrompts(r, nil).Approve },
+	} {
+		var buf bytes.Buffer
+		mk(output.NewStyledRendererWith(&buf, strings.NewReader("n\n"), false))("evil", hostile)
+		for _, bad := range []string{"\x1b[2K", "\x1b[1A", "\r"} {
+			if strings.Contains(buf.String(), bad) {
+				t.Errorf("%s: control sequence %q reached the terminal: %q", name, bad, buf.String())
+			}
+		}
+		if strings.Contains(buf.String(), "\nOK to run") {
+			t.Errorf("%s: a newline in the command forged a second prompt line: %q", name, buf.String())
+		}
+	}
+}

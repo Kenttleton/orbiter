@@ -9,6 +9,7 @@ binaries = ["rustc"]
 files = ["Cargo.toml"]
 
 [commands]
+env = ["PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME", "RUST*"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "rustc",  description = "Rust compiler version detection" },

@@ -9,6 +9,7 @@ binaries = ["code"]
 files = [".vscode/settings.json", ".vscode/launch.json", ".vscode/extensions.json"]
 
 [commands]
+env = ["PATH", "HOME"]  # every variable the commands need, PATH included; nothing else is passed
 timeout_seconds = 30
 allowed = [
   { cmd = "code",  description = "VS Code editor operations" },
